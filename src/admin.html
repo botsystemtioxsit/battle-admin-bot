@@ -234,7 +234,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Обнаружение дублирующегося токена устройства теперь пишется в Журнал действий.">v2.2</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Кланы: добавлена очередь одобрения никнеймов игроков (заявки из Настроек игры).">v2.3</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -666,6 +666,18 @@
         <div class="section-label" style="margin-top:22px;">Ссылки на чат — на проверке</div>
         <div id="clan-chats-pending-list"></div>
         <div class="admin-empty" id="clan-chats-pending-empty" style="display:none;">Нет ссылок, ожидающих проверки</div>
+
+        <!-- Никнеймы — та же логика/permission (canManageClans), что и
+             ссылки на чат клана выше: одна и та же вкладка "Кланы" в этом
+             админ-панеле уже отвечает за модерацию произвольного текста от
+             игроков (спам/реклама), отдельного permission под это заводить
+             не стали. См. loadNicknameApprovalQueue/approveNickname/
+             rejectNickname в JS — users/<uid>/pendingName пишется игроком
+             в index.html (Настройки → Никнейм), firstName меняется только
+             тут, после одобрения. -->
+        <div class="section-label" style="margin-top:22px;">Никнеймы — на проверке</div>
+        <div id="nicknames-pending-list"></div>
+        <div class="admin-empty" id="nicknames-pending-empty" style="display:none;">Нет никнеймов, ожидающих проверки</div>
       </div>
     </div>
 
@@ -2420,6 +2432,74 @@
     }).catch((err) => {
       console.error('Кланы: загрузка', err);
     });
+    loadNicknameApprovalQueue();
+  }
+
+  // ===== Никнеймы на проверке =====
+  // Игрок отправляет заявку из index.html (Настройки → Никнейм) —
+  // пишет users/<uid>.pendingName/pendingNameStatus напрямую, без похода
+  // сюда. firstName не трогается до одобрения — сам никнейм в игре не
+  // меняется, пока модератор не нажмёт "Одобрить" здесь. Раз это поле
+  // конкретного игрока, а не отдельная коллекция как clans, приходится
+  // читать весь users/ и фильтровать на клиенте — сознательный компромисс
+  // (см. README проекта про принятые здесь допущения по масштабируемости).
+  function loadNicknameApprovalQueue() {
+    db.ref('users').once('value').then((snap) => {
+      const users = snap.val() || {};
+      const pending = Object.entries(users)
+        .filter(([, u]) => u && u.pendingNameStatus === 'pending')
+        .map(([uid, u]) => ({ uid, ...u }));
+      renderNicknameApprovalQueue(pending);
+    }).catch((err) => {
+      console.error('Никнеймы: загрузка', err);
+    });
+  }
+
+  function renderNicknameApprovalQueue(list) {
+    const el = document.getElementById('nicknames-pending-list');
+    const emptyEl = document.getElementById('nicknames-pending-empty');
+    emptyEl.style.display = list.length ? 'none' : 'block';
+    el.innerHTML = list.map((u) => `
+      <div class="nickname-review-card" data-uid="${escapeHtml(u.uid)}" style="background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px;">
+        <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">${escapeHtml(u.uid)} · был: ${escapeHtml(u.firstName || 'Игрок')}</div>
+        <div style="font-size:16px; font-weight:700; margin-bottom:10px;">→ ${escapeHtml(u.pendingName || '')}</div>
+        <textarea class="field-input nickname-reject-reason" placeholder="Причина отказа — увидит игрок" rows="2" style="margin-bottom:8px;"></textarea>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-gold nickname-approve-btn" style="flex:1;">✓ Одобрить</button>
+          <button class="btn btn-live nickname-reject-btn" style="flex:1;">✕ Отклонить</button>
+        </div>
+      </div>
+    `).join('');
+    el.querySelectorAll('.nickname-review-card').forEach((card) => {
+      const uid = card.dataset.uid;
+      card.querySelector('.nickname-approve-btn').addEventListener('click', () => approveNickname(uid));
+      card.querySelector('.nickname-reject-btn').addEventListener('click', () => {
+        const reason = card.querySelector('.nickname-reject-reason').value.trim();
+        if (!reason) { alert('Укажи причину отказа — её увидит игрок'); return; }
+        rejectNickname(uid, reason);
+      });
+    });
+  }
+
+  function approveNickname(uid) {
+    if (!canManageClans()) return; // на случай подделки клика мимо скрытой вкладки
+    db.ref('users/' + uid).once('value').then((snap) => {
+      const u = snap.val() || {};
+      const newName = u.pendingName;
+      if (!newName) return;
+      return db.ref('users/' + uid).update({ firstName: newName, pendingName: null, pendingNameStatus: null, pendingNameRejectionReason: null }).then(() => {
+        logAction('nickname_approved', uid, uid, uid, 'Новый никнейм: ' + newName);
+        loadNicknameApprovalQueue();
+      });
+    }).catch((err) => alert('Не удалось одобрить никнейм: ' + (err.message || err)));
+  }
+
+  function rejectNickname(uid, reason) {
+    if (!canManageClans()) return; // на случай подделки клика мимо скрытой вкладки
+    db.ref('users/' + uid).update({ pendingNameStatus: 'rejected', pendingNameRejectionReason: reason }).then(() => {
+      logAction('nickname_rejected', uid, uid, uid, 'Причина: ' + reason);
+      loadNicknameApprovalQueue();
+    }).catch((err) => alert('Не удалось отклонить никнейм: ' + (err.message || err)));
   }
 
   function renderClanApprovalQueue(list) {

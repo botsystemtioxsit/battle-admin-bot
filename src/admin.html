@@ -234,7 +234,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Добавлен токен входа в карточке игрока — superadmin создаёт код для мгновенного входа в любой аккаунт без обычного approve.">v2.5</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Токен входа из карточки игрока заменён на новую вкладку «Токены доступа»: отдельный, ни к какому аккаунту не привязанный ключ с настраиваемым набором вкладок (включая Бэкапы) и опциональным доступом к игре — входит без approve, отзывается в любой момент.">v2.6</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -270,6 +270,12 @@
       <button class="btn btn-gold" id="login-submit-btn" style="max-width:260px; width:100%;">Запросить вход</button>
       <div class="small" id="login-error" style="display:none; color:var(--live); margin-top:10px;"></div>
       <div class="small" id="login-status" style="display:none; color:var(--gold); margin-top:10px;"></div>
+
+      <div class="small" style="margin:22px 0 10px; color:var(--muted);">— или —</div>
+      <div class="small" style="margin-bottom:10px;">Есть токен доступа от Супердоступа? Он входит сразу, без заявки, и без обычного аккаунта.</div>
+      <input type="text" class="field-input" id="login-token-input" placeholder="токен доступа" autocomplete="off" style="max-width:260px; margin-bottom:12px; text-align:center;">
+      <button class="btn btn-line" id="login-token-submit-btn" style="max-width:260px; width:100%;">Войти по токену</button>
+      <div class="small" id="login-token-error" style="display:none; color:var(--live); margin-top:10px;"></div>
     </div>
   </div>
 
@@ -339,6 +345,17 @@
            либо запись в чужой репозиторий — объединение вкладок тут не
            меняет эффективный доступ. -->
       <div class="tab" data-tab="backups" id="tab-backups">Бэкапы</div>
+      <!-- "Токены доступа" — отдельные, ни к какому существующему игроку
+           или Telegram-аккаунту не привязанные ключи входа (accessTokens/
+           <token> в базе). Создаёт и настраивает только Супердоступ: при
+           создании сам решает, какой именно набор вкладок этот токен
+           открывает, и отдельно — даёт ли он доступ к самой игре
+           (index.html). Вход по токену работает без approve и без
+           аккаунта вообще; отозвать (удалить) токен можно в любой момент,
+           см. renderAccessTokensList/revokeAccessToken. Никогда не
+           делегируется самим токеном — управлять токенами может только
+           настоящий superadmin. -->
+      <div class="tab" data-tab="tokens" id="tab-tokens">Токены доступа</div>
       <!-- "Система" объединяет опасную зону (обслуживание/сброс/аварийный
            режим, право danger) и сырой просмотр всей Firebase RTDB
            деревом ("База данных", только superadmin) — суб-нав внутри
@@ -396,28 +413,6 @@
             <button class="btn btn-line" id="btn-device-token-unlock" style="display:none; flex:1;">Сбросить блокировку</button>
           </div>
           <div class="token-reveal" id="device-token-reveal" style="display:none;"></div>
-        </div>
-
-        <!-- ===== токен входа: прямой обход approve-заявки =====
-             Отдельная штука от "Токена аккаунта" выше (тот — анти-угон
-             для уже существующих admin/superadmin, никогда не
-             показывается). Этот, наоборот, специально показывается и
-             копируется — superadmin создаёт его для ЛЮБОГО аккаунта (не
-             только admin/superadmin) и лично передаёт человеку. Тот
-             вставляет код в единое поле входа в index.html (Настройки →
-             Аккаунт) — это сразу логинит его под этим аккаунтом, без
-             обычного ожидания подтверждения в Сообщество → Запросы,
-             потому что сам факт создания токена здесь superadmin'ом и
-             есть подтверждение. Многоразовый, без срока действия —
-             "Отключить" в любой момент делает старый код нерабочим. -->
-        <div class="r-toggle-row" id="login-token-row" style="display:none;">
-          <div class="r-toggle-label">Токен входа</div>
-          <div id="login-token-status" class="admin-empty" style="padding:4px 0 0;"></div>
-          <div id="login-token-value" style="display:none; font-family:monospace; font-size:14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:8px 0; word-break:break-all; user-select:all;"></div>
-          <div style="display:flex; flex-wrap:wrap; gap:8px;">
-            <button class="btn btn-line" id="btn-login-token-issue" style="flex:1;">Создать токен входа</button>
-            <button class="btn btn-live" id="btn-login-token-revoke" style="display:none; flex:1;">Отключить</button>
-          </div>
         </div>
 
         <div class="r-toggle-row">
@@ -897,6 +892,27 @@
       </div>
     </div>
 
+    <!-- ===== "Токены доступа" — см. комментарий у #tab-tokens. Только
+         superadmin, не делегируется. -->
+    <div class="subview" data-panel="tokens" id="panel-tokens">
+      <div class="section-label">Новый токен</div>
+      <div class="admin-card">
+        <div class="row">
+          <input type="text" class="field-input" id="new-token-label" placeholder="Метка (для себя, необязательно)">
+        </div>
+        <div class="admin-empty" style="text-align:left; padding:4px 0 8px;">Выбери, что этот токен открывает — можно отметить сколько угодно пунктов сразу:</div>
+        <div id="new-token-perm-toggles" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;"></div>
+        <button class="btn btn-gold" id="btn-create-access-token">+ Создать токен</button>
+        <div style="display:none; margin-top:10px;" id="new-token-reveal-wrap">
+          <div class="admin-empty" style="text-align:left; padding:0 0 6px;">Токен создан — скопируй и передай его человеку сейчас, второй раз он не покажется:</div>
+          <div class="token-reveal" id="new-token-reveal"></div>
+        </div>
+      </div>
+
+      <div class="section-label">Выданные токены</div>
+      <div id="access-tokens-list" class="admin-empty">Загрузка…</div>
+    </div>
+
     <!-- ===== "Система" — объединяет "Опасную зону" (сброс перед
          бета-тестом, обслуживание, закрытый бета-тест, аварийный режим —
          название вкладки нарочно нейтральное) и "База данных" (сырой
@@ -1223,6 +1239,17 @@
   let myPermissions = { ...ALL_PERMISSIONS_OFF };
   let foundUserKey = null;
   let badgeDefsCache = {};
+  // ===== вход по токену доступа (accessTokens/<token>) — см. #tab-tokens.
+  // Полностью отдельная сессия: нет ни telegramId, ни users/<uid>, все
+  // права идут прямо из самой записи токена, ни к какому существующему
+  // аккаунту он не привязан. myRole остаётся 'token' — специально НЕ
+  // 'superadmin', так что canManageRoles() (управление ролями, токенами,
+  // сырой базой) для такой сессии никогда не true, даже если сам токен
+  // отмечен как открывающий всё остальное — эти три вещи токен выдать не
+  // может в принципе.
+  let myIsAccessToken = false;
+  let myTokenBackupsAccess = false;
+  let myAccessTokenValue = null;
 
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -1328,10 +1355,53 @@
     });
   }
 
+  function loadAccessTokenAndShowApp(token) {
+    db.ref('accessTokens/' + token).once('value').then((snap) => {
+      const data = snap.val();
+      if (!data) {
+        window.localStorage.removeItem('battleAccessToken');
+        document.getElementById('denied-text').textContent = 'Токен доступа не найден или уже отозван Супердоступом.';
+        showScreen('screen-denied');
+        return;
+      }
+      myTelegramId = null;
+      myRole = 'token';
+      myIsAccessToken = true;
+      myAccessTokenValue = token;
+      const perms = data.permissions || {};
+      myPermissions = { ...ALL_PERMISSIONS_OFF, ...perms };
+      myTokenBackupsAccess = !!perms.backups;
+      window.localStorage.setItem('battleAccessToken', token);
+
+      document.getElementById('me-box').style.display = 'block';
+      document.getElementById('me-name').textContent = data.label ? ('Токен: ' + data.label) : 'Токен доступа';
+      document.getElementById('me-role').textContent = 'Токен доступа';
+      document.getElementById('me-logout-link').style.display = 'inline';
+
+      applyRoleUI();
+      showScreen('screen-app');
+      loadUserList(false);
+      loadBadgeDefs();
+    }).catch((err) => {
+      console.error(err);
+      document.getElementById('denied-text').textContent = 'Не удалось проверить токен доступа: ' + (err.message || err);
+      showScreen('screen-denied');
+    });
+  }
+
   document.getElementById('me-logout-link').addEventListener('click', (e) => {
     e.preventDefault();
     window.localStorage.removeItem('battleTelegramId');
+    window.localStorage.removeItem('battleAccessToken');
     window.location.reload();
+  });
+
+  document.getElementById('login-token-submit-btn')?.addEventListener('click', () => {
+    const raw = document.getElementById('login-token-input').value.trim();
+    const errEl = document.getElementById('login-token-error');
+    errEl.style.display = 'none';
+    if (!raw) { errEl.textContent = 'Впиши токен доступа'; errEl.style.display = 'block'; return; }
+    loadAccessTokenAndShowApp(raw);
   });
 
   const tgUser = tg?.initDataUnsafe?.user;
@@ -1339,11 +1409,15 @@
     loadAccountAndShowApp(String(tgUser.id));
   } else {
     // не из Telegram — либо уже одобренный вход запомнен этим браузером
-    // (localStorage battleTelegramId, см. login-submit-btn ниже), либо
+    // (localStorage battleTelegramId, см. login-submit-btn ниже, или
+    // battleAccessToken, см. login-token-submit-btn выше), либо
     // показываем экран входа
     const savedTelegramId = window.localStorage.getItem('battleTelegramId');
+    const savedAccessToken = window.localStorage.getItem('battleAccessToken');
     if (savedTelegramId) {
       loadAccountAndShowApp(savedTelegramId);
+    } else if (savedAccessToken) {
+      loadAccessTokenAndShowApp(savedAccessToken);
     } else {
       showScreen('screen-login');
     }
@@ -1440,14 +1514,18 @@
       // пока вкладка открыта — снимаем его при уходе на любую другую вкладку,
       // как и с живыми ветками "База данных" выше.
       if (tab.dataset.tab !== 'admins') detachAdminsLiveListener();
+      // "Токены доступа" держит свой живой db.ref('accessTokens').on('value')
+      // только пока вкладка открыта — тот же принцип, что и у "Администрации".
+      if (tab.dataset.tab !== 'tokens') detachAccessTokensListener();
       if (tab.dataset.tab === 'logs') showLogsSection('actions');
       if (tab.dataset.tab === 'event') loadEventsAdminList();
       if (tab.dataset.tab === 'beta') showBetaSection(canManageBeta() ? 'beta' : 'clans');
       if (tab.dataset.tab === 'admins') loadAdminsTab();
       if (tab.dataset.tab === 'stats') loadStatsTab();
       if (tab.dataset.tab === 'backups') { showBackupsSection('list'); loadAllBackupLists(); }
+      if (tab.dataset.tab === 'tokens') loadAccessTokensList();
       if (tab.dataset.tab === 'danger') { showDangerSection('zone'); openDangerZone(); }
-      if (tab.dataset.tab === 'account') db.ref('users/' + myTelegramId).once('value').then((s) => renderAccountTab(s.val() || {}));
+      if (tab.dataset.tab === 'account' && myTelegramId) db.ref('users/' + myTelegramId).once('value').then((s) => renderAccountTab(s.val() || {}));
     });
   });
 
@@ -1702,70 +1780,6 @@
       .catch((err) => { console.error(err); alert('Не удалось снять блокировку: ' + (err.message || err)); });
   });
 
-  // ===== токен входа — см. комментарий у #login-token-row в HTML =====
-  function renderLoginTokenBlock(userKey, user) {
-    const row = document.getElementById('login-token-row');
-    if (!canManageRoles()) { row.style.display = 'none'; return; }
-    row.style.display = 'flex';
-    const statusEl = document.getElementById('login-token-status');
-    const valueEl = document.getElementById('login-token-value');
-    const issueBtn = document.getElementById('btn-login-token-issue');
-    const revokeBtn = document.getElementById('btn-login-token-revoke');
-    if (user.loginToken) {
-      statusEl.textContent = 'Токен активен — передай код человеку, он вставит его в единое поле входа в игре и попадёт в этот аккаунт сразу, без подтверждения.';
-      valueEl.style.display = 'block';
-      valueEl.textContent = user.loginToken;
-      issueBtn.textContent = 'Перевыпустить (старый код перестанет работать)';
-      revokeBtn.style.display = 'block';
-    } else {
-      statusEl.textContent = 'Токена нет — вход по коду для этого аккаунта недоступен.';
-      valueEl.style.display = 'none';
-      issueBtn.textContent = 'Создать токен входа';
-      revokeBtn.style.display = 'none';
-    }
-  }
-  document.getElementById('btn-login-token-issue').addEventListener('click', () => {
-    if (!foundUserKey || !canManageRoles()) return; // на случай подделки клика мимо скрытого UI
-    const uid = foundUserKey;
-    const targetName = document.getElementById('r-name').textContent;
-    const targetPlayerId = document.getElementById('r-id').textContent;
-    db.ref('users/' + uid).once('value').then((snap) => {
-      const oldToken = snap.val()?.loginToken;
-      const newToken = randomToken(16);
-      const updates = {};
-      updates['users/' + uid + '/loginToken'] = newToken;
-      updates['loginTokens/' + newToken] = uid;
-      if (oldToken) updates['loginTokens/' + oldToken] = null;
-      return db.ref().update(updates).then(() => {
-        logAction('login_token_issued', uid, targetName, targetPlayerId, 'Выдан токен входа');
-        return db.ref('users/' + uid).once('value');
-      });
-    }).then((snap) => {
-      const freshUser = snap.val();
-      if (!freshUser) return;
-      renderLoginTokenBlock(uid, freshUser);
-    }).catch((err) => { console.error(err); alert('Не удалось создать токен входа: ' + (err.message || err)); });
-  });
-  document.getElementById('btn-login-token-revoke').addEventListener('click', () => {
-    if (!foundUserKey || !canManageRoles()) return; // на случай подделки клика мимо скрытого UI
-    const uid = foundUserKey;
-    const targetName = document.getElementById('r-name').textContent;
-    const targetPlayerId = document.getElementById('r-id').textContent;
-    db.ref('users/' + uid).once('value').then((snap) => {
-      const token = snap.val()?.loginToken;
-      const updates = { ['users/' + uid + '/loginToken']: null };
-      if (token) updates['loginTokens/' + token] = null;
-      return db.ref().update(updates).then(() => {
-        logAction('login_token_revoked', uid, targetName, targetPlayerId, '');
-        return db.ref('users/' + uid).once('value');
-      });
-    }).then((snap) => {
-      const freshUser = snap.val();
-      if (!freshUser) return;
-      renderLoginTokenBlock(uid, freshUser);
-    }).catch((err) => { console.error(err); alert('Не удалось отключить токен: ' + (err.message || err)); });
-  });
-
   function changeUserRole(userKey, newRole, oldRole) {
     if (!canManageRoles() || newRole === oldRole) return;
     const label = ROLE_LABELS[newRole] || newRole;
@@ -1854,6 +1868,119 @@
     document.querySelector('.tab[data-tab="panel"]').classList.add('active');
   });
 
+  // ===== "Токены доступа" — см. комментарий у #tab-tokens в HTML. =====
+  // Отдельный, ни к какому существующему игроку не привязанный ключ входа
+  // (accessTokens/<token>): superadmin сам решает при создании, какой
+  // именно набор вкладок/возможностей он открывает, включая то, что
+  // обычному делегированному admin в принципе недоступно ("backups") —
+  // это осознанная особенность именно токенов, а не расширение обычных
+  // permissions. "roles"/"admins"/сырая база НИКОГДА не входят в список —
+  // управлять токенами и ролями может только настоящий superadmin (см.
+  // applyRoleUI/canManageRoles).
+  const ACCESS_TOKEN_PERMISSION_DEFS = [
+    ...PERMISSION_DEFS,
+    { id: 'backups', label: 'Бэкапы и восстановление (обычно только у Супердоступа)' },
+    { id: 'game', label: 'Доступ к игре (index.html) — заводит отдельную игровую запись' },
+  ];
+  let newTokenPerms = {};
+  function renderNewTokenToggles() {
+    const el = document.getElementById('new-token-perm-toggles');
+    if (!el) return;
+    el.innerHTML = ACCESS_TOKEN_PERMISSION_DEFS.map((p) => `
+      <div class="toggle-row${newTokenPerms[p.id] ? ' on' : ''}" data-perm="${p.id}">
+        <div class="toggle-check"></div>
+        <div class="toggle-label">${escapeHtml(p.label)}</div>
+      </div>
+    `).join('');
+    el.querySelectorAll('.toggle-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.perm;
+        newTokenPerms[id] = !newTokenPerms[id];
+        renderNewTokenToggles();
+      });
+    });
+  }
+  renderNewTokenToggles();
+
+  document.getElementById('btn-create-access-token')?.addEventListener('click', async () => {
+    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    const btn = document.getElementById('btn-create-access-token');
+    const labelInput = document.getElementById('new-token-label');
+    const label = labelInput.value.trim();
+    btn.disabled = true;
+    try {
+      const token = randomToken(20);
+      await db.ref('accessTokens/' + token).set({
+        label: label || null,
+        createdAt: Date.now(),
+        createdBy: myTelegramId || '—',
+        permissions: { ...newTokenPerms },
+      });
+      const grantedLabels = ACCESS_TOKEN_PERMISSION_DEFS.filter((p) => newTokenPerms[p.id]).map((p) => p.label);
+      logAction('access_token_created', token, label || '—', '—', grantedLabels.join(', ') || 'без прав');
+      document.getElementById('new-token-reveal-wrap').style.display = 'block';
+      document.getElementById('new-token-reveal').textContent = token;
+      labelInput.value = '';
+      newTokenPerms = {};
+      renderNewTokenToggles();
+    } catch (err) {
+      console.error(err);
+      alert('Не удалось создать токен: ' + (err.message || err));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  let accessTokensListRef = null;
+  let accessTokensListCb = null;
+  function detachAccessTokensListener() {
+    if (accessTokensListRef && accessTokensListCb) accessTokensListRef.off('value', accessTokensListCb);
+    accessTokensListRef = null;
+    accessTokensListCb = null;
+  }
+  function loadAccessTokensList() {
+    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    detachAccessTokensListener();
+    accessTokensListRef = db.ref('accessTokens');
+    accessTokensListCb = accessTokensListRef.on('value', (snap) => {
+      renderAccessTokensList(snap.val() || {});
+    });
+  }
+  function renderAccessTokensList(tokens) {
+    const el = document.getElementById('access-tokens-list');
+    if (!el) return;
+    const entries = Object.entries(tokens);
+    if (!entries.length) {
+      el.className = 'admin-empty';
+      el.textContent = 'Пока нет ни одного токена.';
+      return;
+    }
+    el.className = '';
+    el.innerHTML = entries.map(([token, data]) => {
+      const perms = data.permissions || {};
+      const activeLabels = ACCESS_TOKEN_PERMISSION_DEFS.filter((p) => perms[p.id]).map((p) => p.label);
+      const dateStr = data.createdAt ? new Date(data.createdAt).toLocaleString('ru-RU') : '—';
+      return `
+        <div class="admin-card" style="margin-bottom:10px;">
+          <div class="r-name" style="font-size:14px;">${escapeHtml(data.label || 'Без метки')}</div>
+          <div class="token-reveal" style="margin:6px 0;">${escapeHtml(token)}</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 6px;">Создан: ${dateStr}<br>Открывает: ${activeLabels.length ? escapeHtml(activeLabels.join(', ')) : 'ничего (пустой токен)'}</div>
+          <button class="btn btn-live btn-revoke-token" data-token="${escapeHtml(token)}" style="width:100%;">Отозвать (удалить)</button>
+        </div>
+      `;
+    }).join('');
+    el.querySelectorAll('.btn-revoke-token').forEach((btn) => {
+      btn.addEventListener('click', () => revokeAccessToken(btn.dataset.token));
+    });
+  }
+  function revokeAccessToken(token) {
+    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    if (!confirm('Отозвать этот токен доступа? Все, у кого он есть, потеряют вход немедленно.')) return;
+    db.ref('accessTokens/' + token).remove().then(() => {
+      logAction('access_token_revoked', token, '—', '—', '');
+    }).catch((err) => { console.error(err); alert('Не удалось отозвать токен: ' + (err.message || err)); });
+  }
+
   // Кланы — тоже отдельное переключаемое право (canManageClans), а не
   // часть какого-то тира; вкладку для тех, у кого его нет, просто прячем
   // целиком, а не показываем заблокированной — как и с "Ивент" ниже.
@@ -1871,14 +1998,28 @@
     if (betaSubBetaBtn) betaSubBetaBtn.style.display = canManageBeta() ? '' : 'none';
     const betaSubClansBtn = document.getElementById('beta-sub-clans');
     if (betaSubClansBtn) betaSubClansBtn.style.display = canManageClans() ? '' : 'none';
-    // "Администрация" — сводная таблица прав, только superadmin.
+    // "Администрация" — сводная таблица прав, только superadmin. Токен
+    // доступа НИКОГДА не даёт этого права, даже теоретически — myRole у
+    // такой сессии всегда 'token', а не 'superadmin', см. canManageRoles().
     const adminsTab = document.querySelector('.tab[data-tab="admins"]');
     if (adminsTab) adminsTab.style.display = canManageRoles() ? '' : 'none';
-    // "Бэкапы" — объединяет список/бэкап-сейчас и восстановление, обе части
-    // не делегируются, только superadmin (см. CLAUDE.md этого репозитория и
-    // battle-data-admin-bot) — объединение вкладок не меняет эффективный доступ.
+    // "Токены доступа" — управлять токенами (создавать/отзывать) может
+    // только настоящий superadmin, никогда сам токен — иначе токен смог бы
+    // выдавать себе (или кому угодно) новые токены бесконтрольно.
+    const tokensTab = document.querySelector('.tab[data-tab="tokens"]');
+    if (tokensTab) tokensTab.style.display = canManageRoles() ? '' : 'none';
+    // "Аккаунт" — привязка email/заявки на вход — не имеет смысла для
+    // сессии по токену доступа, там нет ни email, ни реального аккаунта.
+    const accountTab = document.querySelector('.tab[data-tab="account"]');
+    if (accountTab) accountTab.style.display = myIsAccessToken ? 'none' : '';
+    // "Бэкапы" — обычному admin/moderator не делегируется (см. CLAUDE.md
+    // этого репозитория и battle-data-admin-bot), только superadmin. Токену
+    // доступа, в отличие от обычного admin, ЭТО право может выдать
+    // superadmin явно при создании токена (см. #tab-tokens/backups в
+    // ACCESS_TOKEN_PERMISSION_DEFS) — сознательное расширение только для
+    // этого механизма, не для делегируемых прав обычных админов.
     const backupsTab = document.querySelector('.tab[data-tab="backups"]');
-    if (backupsTab) backupsTab.style.display = canManageRoles() ? '' : 'none';
+    if (backupsTab) backupsTab.style.display = (canManageRoles() || myTokenBackupsAccess) ? '' : 'none';
     // "Система" — объединяет "Опасную зону" (делегируемое право danger, см.
     // PERMISSION_DEFS) и "База данных" (сырой доступ буквально ко всей базе,
     // включая emailLogins с почтами игроков — только superadmin, без
@@ -2090,7 +2231,6 @@
       `<div class="admin-empty" style="padding:4px 0 0;">Текущий уровень: <strong>${ROLE_LABELS[role] || role}</strong>${canManageRoles() ? '' : '. Менять роли может только Супердоступ.'}</div>`;
     renderRoleManageBlock(userKey, role);
     renderDeviceTokenBlock(userKey, user, role);
-    renderLoginTokenBlock(userKey, user);
 
     const rightsBtn = document.getElementById('btn-open-admin-rights');
     rightsBtn.style.display = (canManageRoles() && role === 'admin') ? 'block' : 'none';
@@ -3450,7 +3590,7 @@
   let backupListsLoadedForToken = null;
 
   async function loadAllBackupLists() {
-    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
     const token = getGithubToken();
     const listIndexEl = document.getElementById('list-code-index');
     const listAdminEl = document.getElementById('list-code-admin');
@@ -3495,7 +3635,7 @@
   document.getElementById('restore-code-repo').addEventListener('change', updateRestoreCodeSelect);
 
   document.getElementById('backup-now-btn').addEventListener('click', async () => {
-    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
     const btn = document.getElementById('backup-now-btn');
     const statusEl = document.getElementById('backup-now-status');
     const token = getGithubToken();
@@ -3521,7 +3661,7 @@
   });
 
   document.getElementById('restore-db-btn').addEventListener('click', async () => {
-    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
     const btn = document.getElementById('restore-db-btn');
     const statusEl = document.getElementById('restore-db-status');
     const date = document.getElementById('restore-db-select').value;
@@ -3549,7 +3689,7 @@
   });
 
   document.getElementById('restore-code-btn').addEventListener('click', async () => {
-    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
     const btn = document.getElementById('restore-code-btn');
     const statusEl = document.getElementById('restore-code-status');
     const repo = document.getElementById('restore-code-repo').value;

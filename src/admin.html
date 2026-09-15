@@ -234,7 +234,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Токен аккаунта теперь обязателен для admin/superadmin — без него вход в панель запрещён (раньше защита просто выключалась).">v2.4</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Добавлен токен входа в карточке игрока — superadmin создаёт код для мгновенного входа в любой аккаунт без обычного approve.">v2.5</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -396,6 +396,28 @@
             <button class="btn btn-line" id="btn-device-token-unlock" style="display:none; flex:1;">Сбросить блокировку</button>
           </div>
           <div class="token-reveal" id="device-token-reveal" style="display:none;"></div>
+        </div>
+
+        <!-- ===== токен входа: прямой обход approve-заявки =====
+             Отдельная штука от "Токена аккаунта" выше (тот — анти-угон
+             для уже существующих admin/superadmin, никогда не
+             показывается). Этот, наоборот, специально показывается и
+             копируется — superadmin создаёт его для ЛЮБОГО аккаунта (не
+             только admin/superadmin) и лично передаёт человеку. Тот
+             вставляет код в единое поле входа в index.html (Настройки →
+             Аккаунт) — это сразу логинит его под этим аккаунтом, без
+             обычного ожидания подтверждения в Сообщество → Запросы,
+             потому что сам факт создания токена здесь superadmin'ом и
+             есть подтверждение. Многоразовый, без срока действия —
+             "Отключить" в любой момент делает старый код нерабочим. -->
+        <div class="r-toggle-row" id="login-token-row" style="display:none;">
+          <div class="r-toggle-label">Токен входа</div>
+          <div id="login-token-status" class="admin-empty" style="padding:4px 0 0;"></div>
+          <div id="login-token-value" style="display:none; font-family:monospace; font-size:14px; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:8px 0; word-break:break-all; user-select:all;"></div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button class="btn btn-line" id="btn-login-token-issue" style="flex:1;">Создать токен входа</button>
+            <button class="btn btn-live" id="btn-login-token-revoke" style="display:none; flex:1;">Отключить</button>
+          </div>
         </div>
 
         <div class="r-toggle-row">
@@ -1680,6 +1702,70 @@
       .catch((err) => { console.error(err); alert('Не удалось снять блокировку: ' + (err.message || err)); });
   });
 
+  // ===== токен входа — см. комментарий у #login-token-row в HTML =====
+  function renderLoginTokenBlock(userKey, user) {
+    const row = document.getElementById('login-token-row');
+    if (!canManageRoles()) { row.style.display = 'none'; return; }
+    row.style.display = 'flex';
+    const statusEl = document.getElementById('login-token-status');
+    const valueEl = document.getElementById('login-token-value');
+    const issueBtn = document.getElementById('btn-login-token-issue');
+    const revokeBtn = document.getElementById('btn-login-token-revoke');
+    if (user.loginToken) {
+      statusEl.textContent = 'Токен активен — передай код человеку, он вставит его в единое поле входа в игре и попадёт в этот аккаунт сразу, без подтверждения.';
+      valueEl.style.display = 'block';
+      valueEl.textContent = user.loginToken;
+      issueBtn.textContent = 'Перевыпустить (старый код перестанет работать)';
+      revokeBtn.style.display = 'block';
+    } else {
+      statusEl.textContent = 'Токена нет — вход по коду для этого аккаунта недоступен.';
+      valueEl.style.display = 'none';
+      issueBtn.textContent = 'Создать токен входа';
+      revokeBtn.style.display = 'none';
+    }
+  }
+  document.getElementById('btn-login-token-issue').addEventListener('click', () => {
+    if (!foundUserKey || !canManageRoles()) return; // на случай подделки клика мимо скрытого UI
+    const uid = foundUserKey;
+    const targetName = document.getElementById('r-name').textContent;
+    const targetPlayerId = document.getElementById('r-id').textContent;
+    db.ref('users/' + uid).once('value').then((snap) => {
+      const oldToken = snap.val()?.loginToken;
+      const newToken = randomToken(16);
+      const updates = {};
+      updates['users/' + uid + '/loginToken'] = newToken;
+      updates['loginTokens/' + newToken] = uid;
+      if (oldToken) updates['loginTokens/' + oldToken] = null;
+      return db.ref().update(updates).then(() => {
+        logAction('login_token_issued', uid, targetName, targetPlayerId, 'Выдан токен входа');
+        return db.ref('users/' + uid).once('value');
+      });
+    }).then((snap) => {
+      const freshUser = snap.val();
+      if (!freshUser) return;
+      renderLoginTokenBlock(uid, freshUser);
+    }).catch((err) => { console.error(err); alert('Не удалось создать токен входа: ' + (err.message || err)); });
+  });
+  document.getElementById('btn-login-token-revoke').addEventListener('click', () => {
+    if (!foundUserKey || !canManageRoles()) return; // на случай подделки клика мимо скрытого UI
+    const uid = foundUserKey;
+    const targetName = document.getElementById('r-name').textContent;
+    const targetPlayerId = document.getElementById('r-id').textContent;
+    db.ref('users/' + uid).once('value').then((snap) => {
+      const token = snap.val()?.loginToken;
+      const updates = { ['users/' + uid + '/loginToken']: null };
+      if (token) updates['loginTokens/' + token] = null;
+      return db.ref().update(updates).then(() => {
+        logAction('login_token_revoked', uid, targetName, targetPlayerId, '');
+        return db.ref('users/' + uid).once('value');
+      });
+    }).then((snap) => {
+      const freshUser = snap.val();
+      if (!freshUser) return;
+      renderLoginTokenBlock(uid, freshUser);
+    }).catch((err) => { console.error(err); alert('Не удалось отключить токен: ' + (err.message || err)); });
+  });
+
   function changeUserRole(userKey, newRole, oldRole) {
     if (!canManageRoles() || newRole === oldRole) return;
     const label = ROLE_LABELS[newRole] || newRole;
@@ -2004,6 +2090,7 @@
       `<div class="admin-empty" style="padding:4px 0 0;">Текущий уровень: <strong>${ROLE_LABELS[role] || role}</strong>${canManageRoles() ? '' : '. Менять роли может только Супердоступ.'}</div>`;
     renderRoleManageBlock(userKey, role);
     renderDeviceTokenBlock(userKey, user, role);
+    renderLoginTokenBlock(userKey, user);
 
     const rightsBtn = document.getElementById('btn-open-admin-rights');
     rightsBtn.style.display = (canManageRoles() && role === 'admin') ? 'block' : 'none';

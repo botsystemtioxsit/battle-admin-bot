@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Десктоп-приложение (Electron) для панели администратора БАТТЛ — окно, которое открывает живую панель без браузера.",
+  "author": {
+    "name": "botsystemtioxsit",
+    "email": "botsystemtioxsit@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/botsystemtioxsit/battle-admin-bot",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

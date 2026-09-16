@@ -234,7 +234,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Ассистент теперь работает через GitHub Actions (без стороннего сайта, но с задержкой 20–60 сек) вместо Vercel — секрет Anthropic хранится в Settings→Secrets репозитория, панель дёргает workflow_dispatch своим GitHub-токеном и слушает ответ в Firebase. Логика вынесена в lib/assistantCore.js, общая для обоих способов запуска.">v2.8</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Ассистент: добавлен выбор модели прямо в чате — Claude или Gemini (бесплатный ключ с aistudio.google.com, без карты). Оба идут через один и тот же GitHub Actions пайплайн; общий код инструментов в lib/assistantCore.js, Gemini-адаптер — lib/geminiCore.js. Модель фиксируется на весь чат, переключается через «Новый чат».">v2.9</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -947,7 +947,7 @@
       </button>
       <div id="assistant-settings-wrap" style="display:none; margin-bottom:14px;">
         <div class="admin-card">
-          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Ответ приходит через GitHub Actions (без стороннего сайта, но с задержкой в 20–60 секунд на запуск). Нужен один fine-grained PAT (GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens) с доступом к репозиторию <code>battle-admin-bot</code> и правом «Actions: Read and write» — и один раз добавленный секрет <code>ANTHROPIC_API_KEY</code> в Settings → Secrets and variables → Actions этого же репозитория (ключ с console.anthropic.com).</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Ответ приходит через GitHub Actions (без стороннего сайта, но с задержкой в 20–60 секунд на запуск). Нужен один fine-grained PAT (GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens) с доступом к репозиторию <code>battle-admin-bot</code> и правом «Actions: Read and write» — и один раз добавленный секрет в Settings → Secrets and variables → Actions этого же репозитория: <code>ANTHROPIC_API_KEY</code> для модели Claude (console.anthropic.com) и/или <code>GEMINI_API_KEY</code> для модели Gemini (бесплатно, без карты — aistudio.google.com). Модель выбирается прямо в чате перед первым сообщением.</div>
           <div class="row">
             <input type="password" class="field-input" id="assistant-github-token-input" placeholder="GitHub-токен (Actions: Read and write)">
           </div>
@@ -958,6 +958,16 @@
       <div id="assistant-chat-log" style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px; max-height:50vh; overflow-y:auto;"></div>
 
       <div class="admin-card" style="display:flex; flex-direction:column; gap:8px;">
+        <!-- Выбор модели фиксируется на весь чат — переключить можно только
+             через "Новый чат" (см. JS): формат хода/ответа у Anthropic и
+             Gemini разный, менять модель посреди диалога не поддерживается. -->
+        <div class="row" style="align-items:center;">
+          <label class="admin-empty" style="padding:0; white-space:nowrap;">Модель:</label>
+          <select class="field-input" id="assistant-provider-select" style="flex:1;">
+            <option value="anthropic">Claude</option>
+            <option value="gemini">Gemini (бесплатно)</option>
+          </select>
+        </div>
         <textarea id="assistant-input" rows="3" placeholder="Например: разбери свежие ошибки за сегодня и забань того, кто явно спамит" style="width:100%; resize:vertical; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px 12px; color:var(--text); font-size:13px; font-family:inherit;"></textarea>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-gold" id="btn-assistant-send" style="flex:1;">Отправить</button>
@@ -2046,6 +2056,10 @@
   let assistantMessages = [];
   let assistantBusy = false;
   let assistantCurrentRequestId = null;
+  // Зафиксирован на весь чат по первому сообщению (см. sendAssistantMessage)
+  // — формат хода у Anthropic ({role, content}) и Gemini ({role, parts})
+  // разный, посреди диалога не переключается.
+  let assistantProvider = 'anthropic';
 
   document.getElementById('btn-toggle-assistant-settings')?.addEventListener('click', () => {
     const wrap = document.getElementById('assistant-settings-wrap');
@@ -2251,7 +2265,12 @@
     if (!text) return;
     const statusEl = document.getElementById('assistant-status');
     const sendBtn = document.getElementById('btn-assistant-send');
-    assistantMessages.push({ role: 'user', content: text });
+    const providerSelect = document.getElementById('assistant-provider-select');
+    if (assistantMessages.length === 0) {
+      assistantProvider = providerSelect.value;
+      providerSelect.disabled = true;
+    }
+    assistantMessages.push(assistantProvider === 'gemini' ? { role: 'user', parts: [{ text }] } : { role: 'user', content: text });
     appendAssistantLogRow('user', text);
     input.value = '';
     assistantBusy = true;
@@ -2263,7 +2282,7 @@
       const requestId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       assistantCurrentRequestId = requestId;
       await db.ref('assistantRequests/' + requestId).set({
-        messages: assistantMessages, decisions: null, status: 'queued', createdAt: Date.now(),
+        messages: assistantMessages, decisions: null, status: 'queued', createdAt: Date.now(), provider: assistantProvider,
       });
       await triggerAssistantWorkflow(requestId);
       sendBtn.textContent = 'Думает…';
@@ -2291,6 +2310,10 @@
     assistantMessages = [];
     assistantPendingDecisions = null;
     assistantCurrentRequestId = null;
+    assistantProvider = 'anthropic';
+    const providerSelect = document.getElementById('assistant-provider-select');
+    providerSelect.disabled = false;
+    providerSelect.value = 'anthropic';
     document.getElementById('assistant-chat-log').innerHTML = '';
     document.getElementById('assistant-status').textContent = '';
   });

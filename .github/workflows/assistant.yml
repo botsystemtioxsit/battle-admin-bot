@@ -25,5 +25,6 @@ jobs:
       - name: Выполнить запрос ассистента
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REQUEST_ID: ${{ inputs.requestId }}
         run: node .github/scripts/run-assistant.js

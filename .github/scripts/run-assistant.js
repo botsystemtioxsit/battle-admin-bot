@@ -9,21 +9,23 @@
 //
 // Обмен с клиентом идёт через саму Firebase RTDB (она и так публично
 // читается/пишется, см. database.rules.json в репозитории index.html):
-// admin.html кладёт запрос в assistantRequests/<requestId> и запускает
-// этот workflow через workflow_dispatch с requestId во входных параметрах;
-// этот скрипт читает запрос оттуда, прогоняет цикл ассистента (общая
-// логика — lib/assistantCore.js, та же, что использует Vercel-вариант в
-// api/claude-assistant.js) и пишет результат обратно в тот же путь —
-// admin.html слушает его через db.ref(...).on('value').
+// admin.html кладёт запрос в assistantRequests/<requestId> (с полем
+// provider: 'anthropic' | 'gemini', выбирается в чате перед первым
+// сообщением) и запускает этот workflow через workflow_dispatch с
+// requestId во входных параметрах; этот скрипт читает запрос оттуда,
+// прогоняет цикл нужного провайдера (общая логика инструментов —
+// lib/assistantCore.js, использует её и Vercel-вариант в
+// api/claude-assistant.js; Gemini-адаптер — lib/geminiCore.js) и пишет
+// результат обратно в тот же путь — admin.html слушает его через
+// db.ref(...).on('value').
 const path = require('path');
 const { dbGet, dbUpdate } = require(path.join(__dirname, '..', '..', 'lib', 'firebaseRest'));
 const { runAssistantLoop } = require(path.join(__dirname, '..', '..', 'lib', 'assistantCore'));
+const { runAssistantLoopGemini } = require(path.join(__dirname, '..', '..', 'lib', 'geminiCore'));
 
 async function main() {
   const requestId = process.env.REQUEST_ID;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!requestId) throw new Error('REQUEST_ID не передан workflow_dispatch (input requestId)');
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY не задан в секретах репозитория (Settings → Secrets and variables → Actions)');
 
   const reqPath = `assistantRequests/${requestId}`;
   const reqDoc = await dbGet(reqPath);
@@ -33,7 +35,18 @@ async function main() {
   const decisions = reqDoc.decisions && typeof reqDoc.decisions === 'object' ? reqDoc.decisions : null;
   if (!messages.length) throw new Error('assistantRequests/' + requestId + '/messages пуст');
 
-  const result = await runAssistantLoop(messages, decisions, apiKey);
+  const provider = reqDoc.provider === 'gemini' ? 'gemini' : 'anthropic';
+  let result;
+  if (provider === 'gemini') {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error('GEMINI_API_KEY не задан в секретах репозитория (Settings → Secrets and variables → Actions) — получить бесплатно на aistudio.google.com');
+    result = await runAssistantLoopGemini(messages, decisions, apiKey);
+  } else {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY не задан в секретах репозитория (Settings → Secrets and variables → Actions)');
+    result = await runAssistantLoop(messages, decisions, apiKey);
+  }
+
   const status = result.awaitingConfirmation ? 'awaiting_confirmation' : 'completed';
   await dbUpdate(reqPath, { status, updatedAt: Date.now(), result });
 }

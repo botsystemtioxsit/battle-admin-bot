@@ -234,7 +234,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Токен входа из карточки игрока заменён на новую вкладку «Токены доступа»: отдельный, ни к какому аккаунту не привязанный ключ с настраиваемым набором вкладок (включая Бэкапы) и опциональным доступом к игре — входит без approve, отзывается в любой момент.">v2.6</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Новая вкладка «Ассистент» (только superadmin) — чат с ИИ-ассистентом на api/claude-assistant.js. Читает базу сам, а каждое изменяющее действие (баны, роли, права, заявки, токены) только предлагает — исполняется лишь после явного «Подтвердить» в чате; сброс базы недоступен ассистенту вообще.">v2.7</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -366,6 +366,20 @@
            перепроверяет role === 'superadmin' на сброс/аварийный режим
            при каждом открытии (см. openDangerZone). -->
       <div class="tab" data-tab="danger" id="tab-danger">Система</div>
+      <!-- "Ассистент" — чат с ИИ-ассистентом (Claude, см. api/claude-assistant.js)
+           над теми же RTDB-действиями, что доступны supердоступу в этой
+           панели — банит/меняет роли/права, одобряет заявки на вход/кланы/
+           ссылки на чаты/никнеймы/бету, выдаёт значки и токены доступа.
+           Читает базу сразу сам, но каждое ИЗМЕНЯЮЩЕЕ действие только
+           ПРЕДЛАГАЕТ — сервер приостанавливает выполнение и ждёт явного
+           клика "Подтвердить"/"Отклонить" здесь в чате на каждое действие
+           отдельно (см. renderAssistantPendingActions ниже), реальная
+           запись в базу происходит только после этого клика. Сбросить базу
+           целиком (config/resetSecret) не может вообще ни при каких
+           обстоятельствах — для этого нет инструмента в самом эндпоинте,
+           только ручное подтверждение во вкладке "Система". Только
+           superadmin, не делегируется. -->
+      <div class="tab" data-tab="assistant" id="tab-assistant">Ассистент</div>
     </div>
 
     <!-- ===== панель управления игроками ===== -->
@@ -911,6 +925,40 @@
 
       <div class="section-label">Выданные токены</div>
       <div id="access-tokens-list" class="admin-empty">Загрузка…</div>
+    </div>
+
+    <!-- ===== "Ассистент" — см. комментарий у #tab-assistant. Только
+         superadmin, не делегируется. -->
+    <div class="subview" data-panel="assistant" id="panel-assistant">
+      <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Читает базу свободно, а любое изменяющее действие (бан, роль, права, заявки, значки, токены) только предлагает — карточкой с кнопками «Подтвердить»/«Отклонить» ниже, реальная запись происходит только после твоего клика. Сбросить базу целиком не может вообще — это только вручную во вкладке «Система».</div>
+
+      <button class="list-toggle" id="btn-toggle-assistant-settings">
+        <span>Настройки подключения</span>
+        <span class="chevron" id="assistant-settings-chevron">⌄</span>
+      </button>
+      <div id="assistant-settings-wrap" style="display:none; margin-bottom:14px;">
+        <div class="admin-card">
+          <div class="row">
+            <input type="text" class="field-input" id="assistant-endpoint-input" placeholder="/api/claude-assistant или https://ваш-проект.vercel.app/api/claude-assistant">
+          </div>
+          <div class="row">
+            <input type="password" class="field-input" id="assistant-secret-input" placeholder="ASSISTANT_SECRET (необязательно)">
+          </div>
+          <button class="btn btn-line" id="btn-save-assistant-settings" style="width:100%;">Сохранить</button>
+          <div class="admin-empty" style="text-align:left; padding:6px 0 0;">Пусто в первом поле — пробуем относительный путь /api/claude-assistant (сработает, если панель открыта с домена Vercel, а не GitHub Pages).</div>
+        </div>
+      </div>
+
+      <div id="assistant-chat-log" style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px; max-height:50vh; overflow-y:auto;"></div>
+
+      <div class="admin-card" style="display:flex; flex-direction:column; gap:8px;">
+        <textarea id="assistant-input" rows="3" placeholder="Например: разбери свежие ошибки за сегодня и забань того, кто явно спамит" style="width:100%; resize:vertical; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px 12px; color:var(--text); font-size:13px; font-family:inherit;"></textarea>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-gold" id="btn-assistant-send" style="flex:1;">Отправить</button>
+          <button class="btn btn-line" id="btn-assistant-clear">Новый чат</button>
+        </div>
+        <div class="status-line" id="assistant-status"></div>
+      </div>
     </div>
 
     <!-- ===== "Система" — объединяет "Опасную зону" (сброс перед
@@ -1524,6 +1572,7 @@
       if (tab.dataset.tab === 'stats') loadStatsTab();
       if (tab.dataset.tab === 'backups') { showBackupsSection('list'); loadAllBackupLists(); }
       if (tab.dataset.tab === 'tokens') loadAccessTokensList();
+      if (tab.dataset.tab === 'assistant') loadAssistantSettingsUI();
       if (tab.dataset.tab === 'danger') { showDangerSection('zone'); openDangerZone(); }
       if (tab.dataset.tab === 'account' && myTelegramId) db.ref('users/' + myTelegramId).once('value').then((s) => renderAccountTab(s.val() || {}));
     });
@@ -1981,6 +2030,212 @@
     }).catch((err) => { console.error(err); alert('Не удалось отозвать токен: ' + (err.message || err)); });
   }
 
+  // ===== "Ассистент" — см. комментарий у #tab-assistant в HTML. =====
+  // Клиент хранит всю историю переписки (формат сообщений Anthropic Messages
+  // API) и шлёт её целиком на каждый запрос — эндпоинт не держит сессий,
+  // это единственный способ остаться без бэкенда/базы данных для истории
+  // чата, тем же принципом, что и остальной проект (без сервера, где можно
+  // обойтись). "Новый чат" просто обнуляет этот массив.
+  let assistantMessages = [];
+  let assistantBusy = false;
+
+  document.getElementById('btn-toggle-assistant-settings')?.addEventListener('click', () => {
+    const wrap = document.getElementById('assistant-settings-wrap');
+    const chevron = document.getElementById('assistant-settings-chevron');
+    const isOpen = wrap.style.display !== 'none';
+    wrap.style.display = isOpen ? 'none' : 'block';
+    chevron.textContent = isOpen ? '⌄' : '⌃';
+  });
+
+  function loadAssistantSettingsUI() {
+    document.getElementById('assistant-endpoint-input').value = window.localStorage.getItem('assistantEndpointUrl') || '';
+    document.getElementById('assistant-secret-input').value = window.localStorage.getItem('assistantSecret') || '';
+  }
+  document.getElementById('btn-save-assistant-settings')?.addEventListener('click', () => {
+    window.localStorage.setItem('assistantEndpointUrl', document.getElementById('assistant-endpoint-input').value.trim());
+    window.localStorage.setItem('assistantSecret', document.getElementById('assistant-secret-input').value.trim());
+    document.getElementById('assistant-status').textContent = 'Сохранено.';
+  });
+
+  function assistantEndpointUrl() {
+    return window.localStorage.getItem('assistantEndpointUrl') || '/api/claude-assistant';
+  }
+
+  function appendAssistantLogRow(role, text) {
+    const log = document.getElementById('assistant-chat-log');
+    const row = document.createElement('div');
+    row.style.cssText = role === 'user'
+      ? 'align-self:flex-end; max-width:85%; background:var(--gold); color:#1a1200; border-radius:12px; padding:8px 12px; font-size:13px; white-space:pre-wrap;'
+      : 'align-self:flex-start; max-width:85%; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:8px 12px; font-size:13px; white-space:pre-wrap;';
+    row.textContent = text;
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+    return row;
+  }
+
+  function appendAssistantActionsRow(actions) {
+    if (!actions || !actions.length) return;
+    const log = document.getElementById('assistant-chat-log');
+    const row = document.createElement('div');
+    row.style.cssText = 'align-self:flex-start; max-width:85%; font-size:11.5px; color:var(--muted); border-left:2px solid var(--line); padding:4px 0 4px 10px;';
+    row.innerHTML = actions.map((a) => {
+      if (a.result && a.result.rejectedByHuman) return `❌ ${escapeHtml(a.tool)} — отклонено оператором`;
+      const ok = a.result && a.result.ok !== false;
+      return `${ok ? '✅' : '⚠️'} ${escapeHtml(a.tool)}(${escapeHtml(JSON.stringify(a.input || {}))})${!ok && a.result?.error ? ' — ' + escapeHtml(a.result.error) : ''}`;
+    }).join('<br>');
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // Каждое изменяющее действие (всё, кроме read_db — см. api/claude-assistant.js
+  // и READ_ONLY_TOOL_NAMES там) сервер только ПРЕДЛАГАЕТ — сюда приходит
+  // список pendingActions, и реально в базу оно уйдёт только после клика
+  // "Подтвердить" здесь, на каждое действие отдельно. Пока не решены ВСЕ
+  // действия одного хода ассистента — запрос на продолжение не уходит,
+  // Anthropic API требует ответ на все tool_use одного хода разом.
+  let assistantPendingDecisions = null;
+  let assistantPendingCount = 0;
+
+  function renderAssistantPendingActions(pendingActions) {
+    if (!pendingActions || !pendingActions.length) return;
+    assistantPendingDecisions = {};
+    assistantPendingCount = pendingActions.length;
+    const log = document.getElementById('assistant-chat-log');
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'align-self:stretch; display:flex; flex-direction:column; gap:8px;';
+    pendingActions.forEach((pa) => {
+      const card = document.createElement('div');
+      card.className = 'admin-card';
+      card.style.padding = '10px 12px';
+      const infoEl = document.createElement('div');
+      infoEl.style.cssText = 'font-size:12.5px; margin-bottom:8px;';
+      infoEl.innerHTML = `<strong>${escapeHtml(pa.tool)}</strong><br><span style="color:var(--muted); word-break:break-all;">${escapeHtml(JSON.stringify(pa.input || {}))}</span>`;
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex; gap:8px;';
+      const approveBtn = document.createElement('button');
+      approveBtn.className = 'btn btn-gold';
+      approveBtn.style.flex = '1';
+      approveBtn.textContent = '✅ Подтвердить';
+      const rejectBtn = document.createElement('button');
+      rejectBtn.className = 'btn btn-line';
+      rejectBtn.style.flex = '1';
+      rejectBtn.textContent = '❌ Отклонить';
+      const decide = (decision) => {
+        assistantPendingDecisions[pa.tool_use_id] = decision;
+        approveBtn.disabled = true;
+        rejectBtn.disabled = true;
+        if (decision === 'approved') { approveBtn.textContent = '✅ Подтверждено'; rejectBtn.style.display = 'none'; }
+        else { rejectBtn.textContent = '❌ Отклонено'; approveBtn.style.display = 'none'; }
+        maybeSubmitAssistantDecisions();
+      };
+      approveBtn.addEventListener('click', () => decide('approved'));
+      rejectBtn.addEventListener('click', () => decide('rejected'));
+      btnRow.appendChild(approveBtn);
+      btnRow.appendChild(rejectBtn);
+      card.appendChild(infoEl);
+      card.appendChild(btnRow);
+      wrap.appendChild(card);
+    });
+    log.appendChild(wrap);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function maybeSubmitAssistantDecisions() {
+    if (!assistantPendingDecisions) return;
+    if (Object.keys(assistantPendingDecisions).length < assistantPendingCount) return;
+    const decisions = assistantPendingDecisions;
+    assistantPendingDecisions = null;
+    submitAssistantDecisions(decisions);
+  }
+
+  function handleAssistantResponse(data) {
+    assistantMessages = data.messages || assistantMessages;
+    appendAssistantActionsRow(data.actions);
+    if (data.reply) appendAssistantLogRow('assistant', data.reply);
+    if (data.awaitingConfirmation) renderAssistantPendingActions(data.pendingActions);
+    else if (!data.reply) appendAssistantLogRow('assistant', '(пустой ответ)');
+  }
+
+  async function submitAssistantDecisions(decisions) {
+    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    const statusEl = document.getElementById('assistant-status');
+    const sendBtn = document.getElementById('btn-assistant-send');
+    assistantBusy = true;
+    sendBtn.disabled = true;
+    statusEl.style.color = 'var(--muted)';
+    statusEl.textContent = 'Выполняю подтверждённые действия…';
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      const secret = window.localStorage.getItem('assistantSecret');
+      if (secret) headers['X-Assistant-Secret'] = secret;
+      const res = await fetch(assistantEndpointUrl(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ messages: assistantMessages, decisions }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      statusEl.textContent = '';
+      handleAssistantResponse(data);
+    } catch (err) {
+      console.error('assistant error:', err);
+      statusEl.style.color = 'var(--live)';
+      statusEl.textContent = 'Ошибка: ' + (err.message || err);
+    } finally {
+      assistantBusy = false;
+      sendBtn.disabled = false;
+    }
+  }
+
+  async function sendAssistantMessage() {
+    if (!canManageRoles() || assistantBusy) return; // на случай подделки клика мимо скрытой вкладки
+    const input = document.getElementById('assistant-input');
+    const text = input.value.trim();
+    if (!text) return;
+    const statusEl = document.getElementById('assistant-status');
+    const sendBtn = document.getElementById('btn-assistant-send');
+    assistantMessages.push({ role: 'user', content: text });
+    appendAssistantLogRow('user', text);
+    input.value = '';
+    assistantBusy = true;
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Думает…';
+    statusEl.style.color = 'var(--muted)';
+    statusEl.textContent = '';
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      const secret = window.localStorage.getItem('assistantSecret');
+      if (secret) headers['X-Assistant-Secret'] = secret;
+      const res = await fetch(assistantEndpointUrl(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ messages: assistantMessages }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      handleAssistantResponse(data);
+    } catch (err) {
+      console.error('assistant error:', err);
+      statusEl.style.color = 'var(--live)';
+      statusEl.textContent = 'Ошибка: ' + (err.message || err);
+    } finally {
+      assistantBusy = false;
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Отправить';
+    }
+  }
+  document.getElementById('btn-assistant-send')?.addEventListener('click', sendAssistantMessage);
+  document.getElementById('assistant-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAssistantMessage(); }
+  });
+  document.getElementById('btn-assistant-clear')?.addEventListener('click', () => {
+    if (assistantBusy) return;
+    assistantMessages = [];
+    assistantPendingDecisions = null;
+    document.getElementById('assistant-chat-log').innerHTML = '';
+    document.getElementById('assistant-status').textContent = '';
+  });
+
   // Кланы — тоже отдельное переключаемое право (canManageClans), а не
   // часть какого-то тира; вкладку для тех, у кого его нет, просто прячем
   // целиком, а не показываем заблокированной — как и с "Ивент" ниже.
@@ -2008,6 +2263,14 @@
     // выдавать себе (или кому угодно) новые токены бесконтрольно.
     const tokensTab = document.querySelector('.tab[data-tab="tokens"]');
     if (tokensTab) tokensTab.style.display = canManageRoles() ? '' : 'none';
+    // "Ассистент" — предлагает те же изменяющие действия, что доступны
+    // superadmin (исполняются только после подтверждения человеком, см.
+    // #tab-assistant), поэтому доступ к самому чату — тоже только
+    // superadmin, никогда через токен доступа (иначе токен получил бы
+    // фактически безграничный доступ руками ассистента в обход своих же
+    // явно выбранных прав).
+    const assistantTab = document.querySelector('.tab[data-tab="assistant"]');
+    if (assistantTab) assistantTab.style.display = canManageRoles() ? '' : 'none';
     // "Аккаунт" — привязка email/заявки на вход — не имеет смысла для
     // сессии по токену доступа, там нет ни email, ни реального аккаунта.
     const accountTab = document.querySelector('.tab[data-tab="account"]');

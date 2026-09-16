@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/claude-assistant.js": {
+      "maxDuration": 60
+    }
+  }
+}

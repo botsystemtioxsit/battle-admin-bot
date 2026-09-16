@@ -69,6 +69,15 @@
     .tab{ border-bottom:none; border-left:2px solid transparent; border-radius:0 var(--radius) var(--radius) 0; padding:10px 12px; }
     .tab.active{ border-bottom-color:transparent; border-left-color:var(--gold); background:var(--panel); }
     .subview{ grid-column:2; }
+    /* третья колонка появляется только когда пик-панель базы данных
+       реально нужна (superadmin, не редактируем базу целиком прямо сейчас)
+       — см. updateDbPeekVisibility() в JS, которая ставит оба класса разом */
+    #screen-app.active.has-db-peek{ grid-template-columns:220px 1fr 280px; }
+    .db-peek-panel.show{
+      display:block; grid-column:3; grid-row:1; position:sticky; top:16px;
+      max-height:calc(100vh - 32px); overflow-y:auto;
+      background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px;
+    }
   }
 
   .center-msg{ min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px 12px; }
@@ -106,6 +115,10 @@
      вращается на 90° через data-open (см. renderDbLevel в JS), у веток —
      иконка папки (открыта/закрыта), у листьев — иконка файла, вложенность
      подчёркивается пунктирной направляющей линией на всю высоту уровня. */
+  /* скрыта по умолчанию — на мобильных нет места на третью колонку, и до
+     первого updateDbPeekVisibility() её вообще не должно быть видно, даже
+     мельком; .show ставится только внутри @media(min-width:900px) выше */
+  .db-peek-panel{ display:none; }
   .db-tree{ font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size:12.5px; line-height:1.9; overflow-x:auto; }
   .db-node{ display:flex; align-items:center; gap:6px; padding:2px 6px; border-radius:5px; white-space:nowrap; }
   .db-node.container{ cursor:pointer; }
@@ -260,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«База данных»: визуальный редизайн под дерево файлов редактора кода — иконки папка/файл, вращающийся шеврон разворота, пунктирные направляющие линии по уровням. Функционал (просмотр/правка/добавление/удаление) не менялся, только вид.">v3.1</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="На десктопе добавлена постоянная третья колонка — «пик» базы данных, только просмотр, видна на любой вкладке для superadmin. Автоматически прячется, как только открыт редактируемый просмотр («Система» → «База данных»), и появляется снова при выходе оттуда — не дублирует одно и то же дерево дважды на экране.">v3.2</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -415,6 +428,21 @@
            ручное подтверждение во вкладке "Система". Только superadmin, не
            делегируется. -->
       <div class="tab" data-tab="assistant" id="tab-assistant">Ассистент</div>
+    </div>
+
+    <!-- ===== "Пик" базы данных — только на десктопе, только superadmin.
+         Третья колонка CSS-грида #screen-app (см. .has-db-peek ниже),
+         живёт НЕЗАВИСИМО от того, какая .subview сейчас активна — видна на
+         любой вкладке (Панель/Журнал/...), кроме одного случая: как только
+         открыт сам редактируемый просмотр ("Система" → "База данных"), эта
+         колонка прячется (см. updateDbPeekVisibility) — незачем показывать
+         то же дерево дважды, а редактируемая версия и так занимает весь
+         экран. Рендерится тем же renderDbTree()/renderDbLevel(), что и
+         редактируемое дерево, просто с editable=false (см. JS) — поэтому
+         тут нет ни ✎, ни +, ни ✕, только просмотр и разворачивание веток. -->
+    <div class="db-peek-panel" id="db-peek-panel">
+      <div class="section-label" style="margin-top:0;">База данных — просмотр</div>
+      <div id="db-peek-tree" class="db-tree"><div class="admin-empty">Загрузка…</div></div>
     </div>
 
     <!-- ===== панель управления игроками ===== -->
@@ -1599,7 +1627,7 @@
       // ушли с "Системы" (которая теперь включает "База данных") на другую
       // вкладку — снимаем все живые слушатели веток, незачем продолжать
       // тянуть трафик за экраном, который никто не видит
-      if (tab.dataset.tab !== 'danger') detachAllDbLiveBranches();
+      if (tab.dataset.tab !== 'danger') detachAllDbLiveBranches(dbTreeState);
       // "Администрация" держит свой живой db.ref('users').on('value') только
       // пока вкладка открыта — снимаем его при уходе на любую другую вкладку,
       // как и с живыми ветками "База данных" выше.
@@ -1617,6 +1645,7 @@
       if (tab.dataset.tab === 'assistant') loadAssistantSettingsUI();
       if (tab.dataset.tab === 'danger') { showDangerSection('zone'); openDangerZone(); }
       if (tab.dataset.tab === 'account' && myTelegramId) db.ref('users/' + myTelegramId).once('value').then((s) => renderAccountTab(s.val() || {}));
+      updateDbPeekVisibility();
     });
   });
 
@@ -1674,8 +1703,12 @@
     document.getElementById('danger-sub-db').className = 'btn ' + (!isZone ? 'btn-gold' : 'btn-line');
     document.getElementById('danger-section-zone').style.display = isZone ? 'block' : 'none';
     document.getElementById('danger-section-db').style.display = isZone ? 'none' : 'block';
-    if (isZone) { detachAllDbLiveBranches(); }
+    if (isZone) { detachAllDbLiveBranches(dbTreeState); }
     else if (canManageRoles()) { loadDatabaseTree(); }
+    // переключение секции внутри "Системы" тоже может открыть/закрыть
+    // редактируемое дерево — обновляем видимость пик-панели тем же путём,
+    // что и при переключении вкладок верхнего уровня
+    updateDbPeekVisibility();
   }
   document.getElementById('danger-sub-zone').addEventListener('click', () => showDangerSection('zone'));
   document.getElementById('danger-sub-db').addEventListener('click', () => showDangerSection('db'));
@@ -2405,6 +2438,7 @@
     // "Статистика" — отчёт "только для чтения", виден всем, у кого вообще
     // есть доступ к панели (moderator/admin/superadmin), без отдельного
     // переключаемого права — намеренно не трогаем её display здесь.
+    updateDbPeekVisibility();
   }
 
   // ===== "Аккаунт" — вход в панель с других устройств/браузеров =====
@@ -3308,13 +3342,25 @@
   // дальше разворачиваются бесплатно из уже загруженного снимка, без
   // повторных запросов. Закрыл ветку — слушатель снимается (off), больше
   // не тратим трафик на то, что админ уже не смотрит.
-  const dbTreeState = {
-    rootKeys: null, // null = ещё не загружено; иначе { key: true|<leaf value> }
-    openPaths: new Set(), // UI-состояние "развёрнуто" для ЛЮБОЙ глубины
-    liveBranches: new Map(), // topKey -> { ref, cb, data, ready }
-    editingPath: null, // путь листа, который сейчас редактируется инлайн (см. #db-tree-root)
-    addingPath: null, // путь ветки, где сейчас открыта форма "добавить поле"
-  };
+  // Состояние дерева вынесено в отдельный объект-фабрику, а не завязано на
+  // единственный набор переменных, потому что дерево теперь рисуется в
+  // ДВУХ независимых местах: редактируемое в "Система" → "База данных"
+  // (dbTreeState, containerId 'db-tree-root', editable=true) и постоянная
+  // пик-панель на десктопе (dbPeekState, 'db-peek-tree', editable=false,
+  // см. #db-peek-panel/updateDbPeekVisibility). У каждого свой набор
+  // открытых веток и живых слушателей — сворачивание одного не трогает
+  // другое.
+  function createDbTreeState() {
+    return {
+      rootKeys: null, // null = ещё не загружено; иначе { key: true|<leaf value> }
+      openPaths: new Set(), // UI-состояние "развёрнуто" для ЛЮБОЙ глубины
+      liveBranches: new Map(), // topKey -> { ref, cb, data, ready }
+      editingPath: null, // путь листа, который сейчас редактируется инлайн (только editable=true)
+      addingPath: null, // путь ветки, где сейчас открыта форма "добавить поле" (только editable=true)
+    };
+  }
+  const dbTreeState = createDbTreeState();
+  const dbPeekState = createDbTreeState();
 
   // Значение сохраняется в том виде, как его понимает JSON: "текст" (в
   // кавычках) станет строкой, 123 — числом, true/false — булевым, null —
@@ -3362,8 +3408,10 @@
   const DB_TREE_CHILD_LIMIT = 200;
 
   // рендер одного уровня детей (используется и для корня — shallowMap с
-  // true/значениями, — и для живых веток — обычный объект с данными)
-  function renderDbLevel(entriesObj, basePath, isShallowRoot, changed) {
+  // true/значениями, — и для живых веток — обычный объект с данными).
+  // editable=false убирает ✎/+/✕ и режимы редактирования целиком — именно
+  // так рисуется пик-панель (dbPeekState), только просмотр.
+  function renderDbLevel(entriesObj, basePath, isShallowRoot, changed, state, editable) {
     const keys = Object.keys(entriesObj);
     const shown = keys.slice(0, DB_TREE_CHILD_LIMIT);
     let html = shown.map((key) => {
@@ -3372,7 +3420,7 @@
       const isContainer = isShallowRoot ? (raw === true) : (raw !== null && typeof raw === 'object');
       const flash = changed && changed.has(path) ? ' flash' : '';
       if (!isContainer) {
-        if (dbTreeState.editingPath === path) {
+        if (editable && state.editingPath === path) {
           return `<div class="db-node editing${flash}" data-db-path="${escapeHtml(path)}">
             <span class="db-toggle"></span>
             <span class="db-icon">📄</span>
@@ -3387,26 +3435,25 @@
           <span class="db-icon">📄</span>
           <span class="db-key">${escapeHtml(key)}</span>:
           <span class="db-val ${dbValueClass(raw)}">${escapeHtml(dbValuePreview(raw))}</span>
-          <button class="db-edit-btn" title="Изменить">✎</button>
-          <button class="db-del-btn" title="Удалить">✕</button>
+          ${editable ? `<button class="db-edit-btn" title="Изменить">✎</button><button class="db-del-btn" title="Удалить">✕</button>` : ''}
         </div>`;
       }
-      const isOpen = dbTreeState.openPaths.has(path);
+      const isOpen = state.openPaths.has(path);
       let childCount = isShallowRoot ? null : Object.keys(raw).length;
       let childrenHtml = '';
       if (isOpen) {
         if (isShallowRoot) {
           // разворачиваем корневую ветку — если для неё уже есть живой
           // слушатель, потомки берём из его данных, иначе покажем "грузим"
-          const live = dbTreeState.liveBranches.get(key);
+          const live = state.liveBranches.get(key);
           if (live && live.ready) {
             childCount = Object.keys(live.data || {}).length;
-            childrenHtml = renderDbLevel(live.data || {}, path, false, changed);
+            childrenHtml = renderDbLevel(live.data || {}, path, false, changed, state, editable);
           } else {
             childrenHtml = '<div class="admin-empty" style="padding:6px 0;">Загрузка…</div>';
           }
         } else {
-          childrenHtml = renderDbLevel(raw, path, false, changed);
+          childrenHtml = renderDbLevel(raw, path, false, changed, state, editable);
         }
       }
       return `<div class="db-node container${flash}" data-db-path="${escapeHtml(path)}" data-open="${isOpen}">
@@ -3414,10 +3461,9 @@
           <span class="db-icon">${isOpen ? '📂' : '📁'}</span>
           <span class="db-key">${escapeHtml(key)}</span>
           ${childCount === null ? '' : `<span class="db-count">{${childCount}}</span>`}
-          <button class="db-add-btn" title="Добавить поле">+</button>
-          <button class="db-del-btn" title="Удалить всю ветку">✕</button>
+          ${editable ? `<button class="db-add-btn" title="Добавить поле">+</button><button class="db-del-btn" title="Удалить всю ветку">✕</button>` : ''}
         </div>
-        ${isOpen ? `<div class="db-children">${childrenHtml}${renderDbAddForm(path)}</div>` : ''}`;
+        ${isOpen ? `<div class="db-children">${childrenHtml}${editable ? renderDbAddForm(path, state) : ''}</div>` : ''}`;
     }).join('');
     if (keys.length > shown.length) {
       html += `<div class="admin-empty" style="padding:4px 0; text-align:left;">… ещё ${keys.length - shown.length}</div>`;
@@ -3426,9 +3472,9 @@
   }
 
   // Форма "добавить поле" внутри открытой ветки path — видна, только пока
-  // dbTreeState.addingPath === path (открывается кнопкой +, см. renderDbTree).
-  function renderDbAddForm(path) {
-    if (dbTreeState.addingPath !== path) return '';
+  // state.addingPath === path (открывается кнопкой +, см. renderDbTree).
+  function renderDbAddForm(path, state) {
+    if (state.addingPath !== path) return '';
     return `<div class="db-node db-add-form" data-db-add-form="${escapeHtml(path)}">
       <span class="db-toggle"></span>
       <span class="db-icon">＋</span>
@@ -3443,33 +3489,38 @@
   // схлопывать/разворачивать саму ветку — она тоже кликабельна на всю
   // строку (см. .db-node.container ниже), поэтому каждый обработчик кнопки
   // сначала помечает событие как обработанное (e.target.closest('button')
-  // в обработчике самой ветки это учитывает).
-  function renderDbTree(changed) {
-    const rootEl = document.getElementById('db-tree-root');
-    if (!dbTreeState.rootKeys) return;
-    rootEl.innerHTML = renderDbLevel(dbTreeState.rootKeys, '', true, changed || null);
+  // в обработчике самой ветки это учитывает). editable=false (пик-панель)
+  // рисует то же дерево вообще без кнопок редактирования — соответствующие
+  // querySelectorAll ниже просто ничего не находят и не вешают лишних
+  // обработчиков.
+  function renderDbTree(state, containerId, editable, changed) {
+    const rootEl = document.getElementById(containerId);
+    if (!rootEl || !state.rootKeys) return;
+    rootEl.innerHTML = renderDbLevel(state.rootKeys, '', true, changed || null, state, editable);
 
     rootEl.querySelectorAll('.db-node.container').forEach((node) => {
       node.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
         e.stopPropagation();
-        toggleDbPath(node.dataset.dbPath);
+        toggleDbPath(node.dataset.dbPath, state, containerId, editable);
       });
     });
+
+    if (!editable) return;
 
     rootEl.querySelectorAll('.db-edit-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        dbTreeState.editingPath = btn.closest('.db-node').dataset.dbPath;
-        dbTreeState.addingPath = null;
-        renderDbTree();
+        state.editingPath = btn.closest('.db-node').dataset.dbPath;
+        state.addingPath = null;
+        renderDbTree(state, containerId, editable);
       });
     });
     rootEl.querySelectorAll('.db-cancel-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        dbTreeState.editingPath = null;
-        renderDbTree();
+        state.editingPath = null;
+        renderDbTree(state, containerId, editable);
       });
     });
     rootEl.querySelectorAll('.db-save-btn').forEach((btn) => {
@@ -3482,8 +3533,8 @@
         try {
           await db.ref(path).set(value);
           logAction('db_tree_edit', path, path, '—', 'новое значение: ' + JSON.stringify(value));
-          dbTreeState.editingPath = null;
-          renderDbTree();
+          state.editingPath = null;
+          renderDbTree(state, containerId, editable);
         } catch (err) {
           alert('Не удалось сохранить: ' + (err.message || err));
         }
@@ -3503,11 +3554,11 @@
           await db.ref(path).remove();
           logAction('db_tree_delete', path, path, '—', '');
           if (isTopLevel) {
-            detachDbLiveBranch(path);
-            dbTreeState.openPaths.delete(path);
-            delete dbTreeState.rootKeys[path];
+            detachDbLiveBranch(path, state);
+            state.openPaths.delete(path);
+            delete state.rootKeys[path];
           }
-          renderDbTree();
+          renderDbTree(state, containerId, editable);
         } catch (err) {
           alert('Не удалось удалить: ' + (err.message || err));
         }
@@ -3517,17 +3568,17 @@
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const path = btn.closest('.db-node').dataset.dbPath;
-        dbTreeState.addingPath = path;
-        dbTreeState.editingPath = null;
-        if (!dbTreeState.openPaths.has(path)) toggleDbPath(path);
-        else renderDbTree();
+        state.addingPath = path;
+        state.editingPath = null;
+        if (!state.openPaths.has(path)) toggleDbPath(path, state, containerId, editable);
+        else renderDbTree(state, containerId, editable);
       });
     });
     rootEl.querySelectorAll('.db-add-cancel-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        dbTreeState.addingPath = null;
-        renderDbTree();
+        state.addingPath = null;
+        renderDbTree(state, containerId, editable);
       });
     });
     rootEl.querySelectorAll('.db-add-save-btn').forEach((btn) => {
@@ -3543,8 +3594,8 @@
         try {
           await db.ref(path + '/' + key).set(value);
           logAction('db_tree_add', path + '/' + key, path + '/' + key, '—', 'значение: ' + JSON.stringify(value));
-          dbTreeState.addingPath = null;
-          renderDbTree();
+          state.addingPath = null;
+          renderDbTree(state, containerId, editable);
         } catch (err) {
           alert('Не удалось добавить: ' + (err.message || err));
         }
@@ -3552,48 +3603,48 @@
     });
   }
 
-  function toggleDbPath(path) {
+  function toggleDbPath(path, state, containerId, editable) {
     const isTopLevel = !path.includes('/');
-    if (dbTreeState.openPaths.has(path)) {
-      dbTreeState.openPaths.delete(path);
-      if (isTopLevel) detachDbLiveBranch(path);
-      renderDbTree();
+    if (state.openPaths.has(path)) {
+      state.openPaths.delete(path);
+      if (isTopLevel) detachDbLiveBranch(path, state);
+      renderDbTree(state, containerId, editable);
       return;
     }
-    dbTreeState.openPaths.add(path);
-    if (isTopLevel && !dbTreeState.liveBranches.has(path)) {
-      attachDbLiveBranch(path);
+    state.openPaths.add(path);
+    if (isTopLevel && !state.liveBranches.has(path)) {
+      attachDbLiveBranch(path, state, containerId, editable);
     }
-    renderDbTree();
+    renderDbTree(state, containerId, editable);
   }
 
-  function attachDbLiveBranch(topKey) {
+  function attachDbLiveBranch(topKey, state, containerId, editable) {
     const branch = { ref: db.ref(topKey), cb: null, data: null, ready: false };
     branch.cb = branch.ref.on('value', (snap) => {
       const newData = snap.val() || {};
       if (!branch.ready) {
         branch.data = newData;
         branch.ready = true;
-        renderDbTree();
+        renderDbTree(state, containerId, editable);
         return;
       }
       const changed = new Set();
       dbCollectChanges(branch.data, newData, topKey, changed);
       branch.data = newData;
-      if (changed.size) renderDbTree(changed);
+      if (changed.size) renderDbTree(state, containerId, editable, changed);
     }, (err) => console.error('База: ветка ' + topKey, err));
-    dbTreeState.liveBranches.set(topKey, branch);
+    state.liveBranches.set(topKey, branch);
   }
 
-  function detachDbLiveBranch(topKey) {
-    const branch = dbTreeState.liveBranches.get(topKey);
+  function detachDbLiveBranch(topKey, state) {
+    const branch = state.liveBranches.get(topKey);
     if (!branch) return;
     branch.ref.off('value', branch.cb);
-    dbTreeState.liveBranches.delete(topKey);
+    state.liveBranches.delete(topKey);
   }
 
-  function detachAllDbLiveBranches() {
-    dbTreeState.liveBranches.forEach((_, topKey) => detachDbLiveBranch(topKey));
+  function detachAllDbLiveBranches(state) {
+    state.liveBranches.forEach((_, topKey) => detachDbLiveBranch(topKey, state));
   }
 
   function loadDatabaseTree() {
@@ -3607,14 +3658,71 @@
         // слушателей, но openPaths (что было развёрнуто) не трогали —
         // переподключаем живые ветки для того, что уже было открыто
         dbTreeState.openPaths.forEach((path) => {
-          if (!path.includes('/') && !dbTreeState.liveBranches.has(path)) attachDbLiveBranch(path);
+          if (!path.includes('/') && !dbTreeState.liveBranches.has(path)) attachDbLiveBranch(path, dbTreeState, 'db-tree-root', true);
         });
-        renderDbTree();
+        renderDbTree(dbTreeState, 'db-tree-root', true);
       })
       .catch((err) => {
         rootEl.innerHTML = '<div class="admin-empty">Не удалось загрузить список веток базы</div>';
         console.error('База: корневой список', err);
       });
+  }
+
+  // ===== Пик-панель базы данных (десктоп, вне вкладок) — см. #db-peek-panel
+  // и комментарий там. Тот же движок дерева, что и в "Система" → "База
+  // данных" (renderDbTree/renderDbLevel), просто editable=false и свой
+  // независимый dbPeekState — сворачивание одного дерева не трогает другое.
+  function loadDbPeekTree() {
+    if (!canManageRoles()) return;
+    const rootEl = document.getElementById('db-peek-tree');
+    fetch(firebaseConfig.databaseURL + '/.json?shallow=true')
+      .then((r) => r.json())
+      .then((data) => {
+        dbPeekState.rootKeys = data || {};
+        dbPeekState.openPaths.forEach((path) => {
+          if (!path.includes('/') && !dbPeekState.liveBranches.has(path)) attachDbLiveBranch(path, dbPeekState, 'db-peek-tree', false);
+        });
+        renderDbTree(dbPeekState, 'db-peek-tree', false);
+      })
+      .catch((err) => {
+        if (rootEl) rootEl.innerHTML = '<div class="admin-empty">Не удалось загрузить</div>';
+        console.error('Пик-панель базы: корневой список', err);
+      });
+  }
+
+  // Ровно один переключатель видимости пик-панели, вызывается после
+  // каждого события, способного изменить, нужна ли она прямо сейчас:
+  // вход в приложение (applyRoleUI), переключение вкладок верхнего уровня,
+  // переключение "Опасная зона"/"База данных" внутри "Система"
+  // (showDangerSection). Условие простое: только superadmin, и не прямо
+  // сейчас смотрим редактируемое дерево — иначе получится одно и то же
+  // дерево дважды на экране, а редактируемая версия и так занимает всю
+  // правую колонку.
+  function isViewingDbEditor() {
+    const dangerTab = document.querySelector('.tab[data-tab="danger"]');
+    if (!dangerTab || !dangerTab.classList.contains('active')) return false;
+    const dbBtn = document.getElementById('danger-sub-db');
+    return !!dbBtn && dbBtn.classList.contains('btn-gold');
+  }
+  function updateDbPeekVisibility() {
+    const panel = document.getElementById('db-peek-panel');
+    const screenApp = document.getElementById('screen-app');
+    if (!panel || !screenApp) return;
+    const show = canManageRoles() && !isViewingDbEditor();
+    panel.classList.toggle('show', show);
+    screenApp.classList.toggle('has-db-peek', show);
+    if (show) {
+      if (!dbPeekState.rootKeys) {
+        loadDbPeekTree();
+      } else {
+        dbPeekState.openPaths.forEach((path) => {
+          if (!path.includes('/') && !dbPeekState.liveBranches.has(path)) attachDbLiveBranch(path, dbPeekState, 'db-peek-tree', false);
+        });
+        renderDbTree(dbPeekState, 'db-peek-tree', false);
+      }
+    } else {
+      detachAllDbLiveBranches(dbPeekState);
+    }
   }
 
   // ===== "Администрация" — сводная таблица прав всех модераторов/админов

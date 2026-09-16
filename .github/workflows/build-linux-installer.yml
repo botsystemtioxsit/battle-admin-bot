@@ -1,4 +1,4 @@
-name: Build Windows installer
+name: Build Linux installer
 
 on:
   workflow_dispatch:
@@ -6,14 +6,14 @@ on:
     branches: [main]
     paths:
       - 'desktop/**'
-      - '.github/workflows/build-windows-installer.yml'
+      - '.github/workflows/build-linux-installer.yml'
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -25,21 +25,23 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build .exe installer (native Windows, no wine needed)
+      - name: Build AppImage + .deb (native Linux, no wine needed)
         working-directory: desktop
-        run: npm run build:win
+        run: npm run build:linux
 
       - name: Read version
         id: ver
-        shell: bash
         run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release with installer attached
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: desktop-windows-latest
-          name: БАТТЛ Админ (Windows) — последняя сборка
-          files: desktop/dist/*.exe
+          tag_name: desktop-linux-latest
+          name: БАТТЛ Админ (Linux) — последняя сборка
+          files: |
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
           body: |
             Версия ${{ steps.ver.outputs.version }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}.
-            Этот релиз всегда переиспользуется под фиксированным тегом `desktop-windows-latest` — ссылка на него не меняется между сборками.
+            AppImage запускается без установки (`chmod +x *.AppImage && ./БАТТЛ*.AppImage`), .deb — обычным `sudo dpkg -i *.deb`.
+            Этот релиз всегда переиспользуется под фиксированным тегом `desktop-linux-latest` — ссылка на него не меняется между сборками.

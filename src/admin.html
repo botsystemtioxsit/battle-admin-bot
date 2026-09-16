@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Новая карточка «Оформление» в «Аккаунт»: 3 цвета (два акцента + фон), вся палитра панели выводится из них через HSL. Хранится только в localStorage этого браузера — личная настройка, не синхронизируется через Firebase.">v3.3</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="В «Ассистент» добавлена карточка «Приложения» — ссылки на Windows/Linux/Android-сборки и сайт, чтобы не логиниться заново на каждом устройстве. Ссылки ведут на фиксированные теги релиза (…-latest), которые CI обновляет автоматически при каждом изменении desktop/ или android/.">v3.4</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1032,6 +1032,29 @@
          superadmin, не делегируется. -->
     <div class="subview" data-panel="assistant" id="panel-assistant">
       <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Читает базу свободно, а любое изменяющее действие (бан, роль, права, заявки, значки, токены) только предлагает — карточкой с кнопками «Подтвердить»/«Отклонить» ниже, реальная запись происходит только после твоего клика. Сбросить базу целиком не может вообще — это только вручную во вкладке «Система».</div>
+
+      <!-- ===== "Приложения" — ссылки на все способы открыть эту же панель,
+           собранные тут, чтобы не логиниться заново на сайте каждый раз:
+           открыл бота в Телеграме → сразу отсюда скачал нужный файл.
+           Все три сборки (.exe/.apk/AppImage+.deb) собираются автоматически
+           в CI при каждом пуше в desktop/ или android/ (см. build-windows-
+           installer.yml, build-android-apk.yml, build-linux-installer.yml)
+           и публикуются под ФИКСИРОВАННЫМИ тегами релиза (…-latest) — то
+           есть ссылки ниже никогда не протухают и не требуют ручного
+           обновления при новой сборке. Открываем через tg.openLink, если
+           панель запущена внутри Telegram Web App (обычный <a target="_blank">
+           там либо не работает, либо открывает не то), иначе обычным
+           window.open — см. openAppLink() в JS. -->
+      <div class="admin-card" style="margin-bottom:14px;">
+        <div class="section-label">Приложения</div>
+        <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Та же панель, без входа заново — на любом устройстве.</div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-windows-latest" style="text-align:left;">🖥️ Windows (.exe)</button>
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-linux-latest" style="text-align:left;">🐧 Linux (AppImage / .deb)</button>
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">📱 Android (.apk)</button>
+          <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">🌐 Открыть на сайте</button>
+        </div>
+      </div>
 
       <button class="list-toggle" id="btn-toggle-assistant-settings">
         <span>Настройки подключения</span>
@@ -2242,6 +2265,15 @@
       logAction('access_token_revoked', token, '—', '—', '');
     }).catch((err) => { console.error(err); alert('Не удалось отозвать токен: ' + (err.message || err)); });
   }
+
+  // ===== "Приложения" — см. комментарий у карточки в HTML. =====
+  function openAppLink(url) {
+    if (tg && typeof tg.openLink === 'function') tg.openLink(url);
+    else window.open(url, '_blank');
+  }
+  document.querySelectorAll('[data-app-link]').forEach((btn) => {
+    btn.addEventListener('click', () => openAppLink(btn.dataset.appLink));
+  });
 
   // ===== "Ассистент" — см. комментарий у #tab-assistant в HTML. =====
   // Клиент хранит всю историю переписки (формат сообщений Anthropic Messages

@@ -2,6 +2,11 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-android-apk.yml'
 
 permissions:
   contents: write
@@ -37,7 +42,9 @@ jobs:
       - name: Publish GitHub Release with APK attached
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-v${{ steps.ver.outputs.version }}-${{ github.run_number }}
-          name: БАТТЛ Админ (Android) v${{ steps.ver.outputs.version }} — build ${{ github.run_number }}
+          tag_name: android-latest
+          name: БАТТЛ Админ (Android) — последняя сборка
           files: android/app/build/outputs/apk/debug/*.apk
-          body: Автосборка Android APK из ${{ github.sha }}.
+          body: |
+            Версия ${{ steps.ver.outputs.version }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}.
+            Этот релиз всегда переиспользуется под фиксированным тегом `android-latest` — ссылка на него не меняется между сборками.

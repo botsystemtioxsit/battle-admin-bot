@@ -16,6 +16,7 @@
   "build": {
     "appId": "com.tioxsit.battleadmin",
     "productName": "БАТТЛ Админ",
+    "publish": null,
     "files": [
       "main.js",
       "package.json"

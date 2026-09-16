@@ -61,12 +61,23 @@ npm run build:linux
 установки (`chmod +x *.AppImage && ./БАТТЛ*.AppImage`), `.deb` — обычным
 `sudo dpkg -i *.deb`.
 
-Windows (позже — потребует свою сборку, см. `build:win` в `package.json`;
-кросс-сборка из-под Linux в электрон-билдере частично работает, но
-надёжнее собирать прямо на Windows или в CI):
+Windows (`.exe`-установщик, NSIS) — собирается кросс-компиляцией прямо
+здесь, из-под Linux, через electron-builder + wine (никакой Windows-машины
+не нужно):
 ```bash
+cd desktop
+npm install
 npm run build:win
 ```
+Если `wine` не установлен, электрон-билдер сам скажет — тогда один раз:
+```bash
+sudo dpkg --add-architecture i386
+sudo apt-get update
+sudo apt-get install -y wine wine64 wine32:i386
+```
+Готовый `БАТТЛ Админ Setup 1.0.0.exe` появится в `desktop/dist/` —
+обычный next-next-finish инсталлятор, ставит окно приложения плюс ярлык
+в меню «Пуск» и на рабочий стол, ничего вручную донастраивать не нужно.
 
 ## Свой значок приложения
 

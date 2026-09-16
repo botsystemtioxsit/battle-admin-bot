@@ -115,6 +115,23 @@
   .db-node .db-val.bool{ color:#569CD6; }
   .db-node .db-val.null{ color:var(--muted); font-style:italic; }
   .db-children{ margin-left:15px; border-left:1px solid var(--line); padding-left:6px; }
+  /* редактирование листов/добавление полей прямо в дереве — см.
+     parseDbEditValue/renderDbAddForm в JS */
+  .db-node .db-edit-btn, .db-node .db-del-btn, .db-node .db-add-btn,
+  .db-node .db-save-btn, .db-node .db-cancel-btn,
+  .db-node .db-add-save-btn, .db-node .db-add-cancel-btn {
+    flex-shrink:0; background:none; border:1px solid var(--line); border-radius:4px;
+    color:var(--muted); font-size:11px; line-height:1.4; padding:1px 5px; cursor:pointer; font-family:inherit;
+  }
+  .db-node .db-edit-btn:hover, .db-node .db-save-btn:hover,
+  .db-node .db-add-btn:hover, .db-node .db-add-save-btn:hover { color:var(--gold); border-color:var(--gold); }
+  .db-node .db-del-btn:hover, .db-node .db-cancel-btn:hover,
+  .db-node .db-add-cancel-btn:hover { color:var(--live); border-color:var(--live); }
+  .db-node.editing .db-edit-input, .db-add-form .db-add-key-input, .db-add-form .db-add-val-input {
+    background:var(--panel-2); border:1px solid var(--gold); border-radius:4px; padding:1px 6px;
+    color:var(--text); font:inherit;
+  }
+  .db-add-form .db-add-key-input{ width:100px; flex-shrink:0; }
   @keyframes dbFlash{
     0%{ background:rgba(62,213,152,0.4); }
     100%{ background:transparent; }
@@ -234,7 +251,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Ассистент: добавлен выбор модели прямо в чате — Claude или Gemini (бесплатный ключ с aistudio.google.com, без карты). Оба идут через один и тот же GitHub Actions пайплайн; общий код инструментов в lib/assistantCore.js, Gemini-адаптер — lib/geminiCore.js. Модель фиксируется на весь чат, переключается через «Новый чат».">v2.9</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Система» → «База данных»: теперь можно не только смотреть дерево, но и редактировать листья (✎), добавлять новые поля (+) и удалять записи (✕) прямо в панели — без захода в консоль Firebase. Пишет напрямую в базу тем же способом, что и остальная панель.">v3.0</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -3286,7 +3303,17 @@
     rootKeys: null, // null = ещё не загружено; иначе { key: true|<leaf value> }
     openPaths: new Set(), // UI-состояние "развёрнуто" для ЛЮБОЙ глубины
     liveBranches: new Map(), // topKey -> { ref, cb, data, ready }
+    editingPath: null, // путь листа, который сейчас редактируется инлайн (см. #db-tree-root)
+    addingPath: null, // путь ветки, где сейчас открыта форма "добавить поле"
   };
+
+  // Значение сохраняется в том виде, как его понимает JSON: "текст" (в
+  // кавычках) станет строкой, 123 — числом, true/false — булевым, null —
+  // null. Если ввод не парсится как JSON (просто текст без кавычек) —
+  // сохраняем как обычную строку "как есть", так проще для большинства правок.
+  function parseDbEditValue(text) {
+    try { return JSON.parse(text); } catch { return text; }
+  }
 
   function dbValueClass(v) {
     if (v === null) return 'null';
@@ -3336,10 +3363,21 @@
       const isContainer = isShallowRoot ? (raw === true) : (raw !== null && typeof raw === 'object');
       const flash = changed && changed.has(path) ? ' flash' : '';
       if (!isContainer) {
+        if (dbTreeState.editingPath === path) {
+          return `<div class="db-node editing${flash}" data-db-path="${escapeHtml(path)}">
+            <span class="db-toggle"></span>
+            <span class="db-key">${escapeHtml(key)}</span>:
+            <input type="text" class="db-edit-input" value="${escapeHtml(JSON.stringify(raw))}" style="flex:1; min-width:80px;">
+            <button class="db-save-btn" title="Сохранить">✓</button>
+            <button class="db-cancel-btn" title="Отмена">✕</button>
+          </div>`;
+        }
         return `<div class="db-node${flash}" data-db-path="${escapeHtml(path)}">
           <span class="db-toggle"></span>
           <span class="db-key">${escapeHtml(key)}</span>:
           <span class="db-val ${dbValueClass(raw)}">${escapeHtml(dbValuePreview(raw))}</span>
+          <button class="db-edit-btn" title="Изменить">✎</button>
+          <button class="db-del-btn" title="Удалить">✕</button>
         </div>`;
       }
       const isOpen = dbTreeState.openPaths.has(path);
@@ -3364,8 +3402,10 @@
           <span class="db-toggle">${isOpen ? '▾' : '▸'}</span>
           <span class="db-key">${escapeHtml(key)}</span>
           ${childCount === null ? '' : `<span class="db-count">{${childCount}}</span>`}
+          <button class="db-add-btn" title="Добавить поле">+</button>
+          <button class="db-del-btn" title="Удалить всю ветку">✕</button>
         </div>
-        ${isOpen ? `<div class="db-children">${childrenHtml}</div>` : ''}`;
+        ${isOpen ? `<div class="db-children">${childrenHtml}${renderDbAddForm(path)}</div>` : ''}`;
     }).join('');
     if (keys.length > shown.length) {
       html += `<div class="admin-empty" style="padding:4px 0; text-align:left;">… ещё ${keys.length - shown.length}</div>`;
@@ -3373,14 +3413,128 @@
     return html;
   }
 
+  // Форма "добавить поле" внутри открытой ветки path — видна, только пока
+  // dbTreeState.addingPath === path (открывается кнопкой +, см. renderDbTree).
+  function renderDbAddForm(path) {
+    if (dbTreeState.addingPath !== path) return '';
+    return `<div class="db-node db-add-form" data-db-add-form="${escapeHtml(path)}">
+      <span class="db-toggle"></span>
+      <input type="text" class="db-add-key-input" placeholder="ключ">:
+      <input type="text" class="db-add-val-input" placeholder='значение: "текст", 123, true, null' style="flex:1; min-width:120px;">
+      <button class="db-add-save-btn" title="Добавить">✓</button>
+      <button class="db-add-cancel-btn" title="Отмена">✕</button>
+    </div>`;
+  }
+
+  // Изменяющие клики (✎/✓/✕ редактирования, +/✕ у веток) должны НЕ
+  // схлопывать/разворачивать саму ветку — она тоже кликабельна на всю
+  // строку (см. .db-node.container ниже), поэтому каждый обработчик кнопки
+  // сначала помечает событие как обработанное (e.target.closest('button')
+  // в обработчике самой ветки это учитывает).
   function renderDbTree(changed) {
     const rootEl = document.getElementById('db-tree-root');
     if (!dbTreeState.rootKeys) return;
     rootEl.innerHTML = renderDbLevel(dbTreeState.rootKeys, '', true, changed || null);
+
     rootEl.querySelectorAll('.db-node.container').forEach((node) => {
       node.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
         e.stopPropagation();
         toggleDbPath(node.dataset.dbPath);
+      });
+    });
+
+    rootEl.querySelectorAll('.db-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dbTreeState.editingPath = btn.closest('.db-node').dataset.dbPath;
+        dbTreeState.addingPath = null;
+        renderDbTree();
+      });
+    });
+    rootEl.querySelectorAll('.db-cancel-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dbTreeState.editingPath = null;
+        renderDbTree();
+      });
+    });
+    rootEl.querySelectorAll('.db-save-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+        const node = btn.closest('.db-node');
+        const path = node.dataset.dbPath;
+        const value = parseDbEditValue(node.querySelector('.db-edit-input').value);
+        try {
+          await db.ref(path).set(value);
+          logAction('db_tree_edit', path, path, '—', 'новое значение: ' + JSON.stringify(value));
+          dbTreeState.editingPath = null;
+          renderDbTree();
+        } catch (err) {
+          alert('Не удалось сохранить: ' + (err.message || err));
+        }
+      });
+    });
+    rootEl.querySelectorAll('.db-del-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+        const path = btn.closest('.db-node').dataset.dbPath;
+        const isTopLevel = !path.includes('/');
+        const msg = isTopLevel
+          ? `Удалить ЦЕЛИКОМ весь раздел "${path}" со всем содержимым? Это не одна запись — там может быть очень много данных. Отменить нельзя.`
+          : `Удалить "${path}" из базы? Отменить нельзя.`;
+        if (!confirm(msg)) return;
+        try {
+          await db.ref(path).remove();
+          logAction('db_tree_delete', path, path, '—', '');
+          if (isTopLevel) {
+            detachDbLiveBranch(path);
+            dbTreeState.openPaths.delete(path);
+            delete dbTreeState.rootKeys[path];
+          }
+          renderDbTree();
+        } catch (err) {
+          alert('Не удалось удалить: ' + (err.message || err));
+        }
+      });
+    });
+    rootEl.querySelectorAll('.db-add-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const path = btn.closest('.db-node').dataset.dbPath;
+        dbTreeState.addingPath = path;
+        dbTreeState.editingPath = null;
+        if (!dbTreeState.openPaths.has(path)) toggleDbPath(path);
+        else renderDbTree();
+      });
+    });
+    rootEl.querySelectorAll('.db-add-cancel-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dbTreeState.addingPath = null;
+        renderDbTree();
+      });
+    });
+    rootEl.querySelectorAll('.db-add-save-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+        const form = btn.closest('.db-add-form');
+        const path = form.dataset.dbAddForm;
+        const key = form.querySelector('.db-add-key-input').value.trim();
+        if (!key) { alert('Впиши ключ'); return; }
+        if (/[.#$\[\]/]/.test(key)) { alert('Ключ не может содержать . # $ [ ] /'); return; }
+        const value = parseDbEditValue(form.querySelector('.db-add-val-input').value);
+        try {
+          await db.ref(path + '/' + key).set(value);
+          logAction('db_tree_add', path + '/' + key, path + '/' + key, '—', 'значение: ' + JSON.stringify(value));
+          dbTreeState.addingPath = null;
+          renderDbTree();
+        } catch (err) {
+          alert('Не удалось добавить: ' + (err.message || err));
+        }
       });
     });
   }

@@ -101,20 +101,29 @@
 
   .admin-empty{ text-align:center; color:var(--muted); font-size:13px; padding:20px 0; }
 
-  /* ===== "База" — дерево Firebase RTDB ===== */
-  .db-tree{ font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size:12px; line-height:1.7; overflow-x:auto; }
-  .db-node{ display:flex; align-items:flex-start; gap:5px; padding:2px 5px; border-radius:4px; white-space:nowrap; }
+  /* ===== "База" — дерево Firebase RTDB =====
+     Оформлено как дерево файлов в редакторе кода: шеврон разворота
+     вращается на 90° через data-open (см. renderDbLevel в JS), у веток —
+     иконка папки (открыта/закрыта), у листьев — иконка файла, вложенность
+     подчёркивается пунктирной направляющей линией на всю высоту уровня. */
+  .db-tree{ font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size:12.5px; line-height:1.9; overflow-x:auto; }
+  .db-node{ display:flex; align-items:center; gap:6px; padding:2px 6px; border-radius:5px; white-space:nowrap; }
   .db-node.container{ cursor:pointer; }
-  .db-node.container:hover{ background:var(--panel-2); }
-  .db-node .db-toggle{ width:12px; flex-shrink:0; color:var(--muted); }
-  .db-node .db-key{ color:var(--gold); flex-shrink:0; }
-  .db-node .db-count{ color:var(--muted); flex-shrink:0; }
+  .db-node:hover{ background:var(--panel-2); }
+  .db-node .db-toggle{
+    width:14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+    color:var(--muted); font-size:10px; transition:transform 150ms ease;
+  }
+  .db-node.container[data-open="true"] > .db-toggle{ transform:rotate(90deg); }
+  .db-node .db-icon{ flex-shrink:0; font-size:12px; line-height:1; opacity:0.9; }
+  .db-node .db-key{ color:var(--gold); flex-shrink:0; font-weight:600; }
+  .db-node .db-count{ color:var(--muted); flex-shrink:0; font-size:10.5px; }
   .db-node .db-val{ color:var(--text); white-space:pre-wrap; word-break:break-all; }
   .db-node .db-val.str{ color:#CE9178; }
   .db-node .db-val.num{ color:#B5CEA8; }
   .db-node .db-val.bool{ color:#569CD6; }
   .db-node .db-val.null{ color:var(--muted); font-style:italic; }
-  .db-children{ margin-left:15px; border-left:1px solid var(--line); padding-left:6px; }
+  .db-children{ margin-left:10px; padding-left:13px; border-left:1px dashed var(--line); }
   /* редактирование листов/добавление полей прямо в дереве — см.
      parseDbEditValue/renderDbAddForm в JS */
   .db-node .db-edit-btn, .db-node .db-del-btn, .db-node .db-add-btn,
@@ -251,7 +260,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Система» → «База данных»: теперь можно не только смотреть дерево, но и редактировать листья (✎), добавлять новые поля (+) и удалять записи (✕) прямо в панели — без захода в консоль Firebase. Пишет напрямую в базу тем же способом, что и остальная панель.">v3.0</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«База данных»: визуальный редизайн под дерево файлов редактора кода — иконки папка/файл, вращающийся шеврон разворота, пунктирные направляющие линии по уровням. Функционал (просмотр/правка/добавление/удаление) не менялся, только вид.">v3.1</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -3366,6 +3375,7 @@
         if (dbTreeState.editingPath === path) {
           return `<div class="db-node editing${flash}" data-db-path="${escapeHtml(path)}">
             <span class="db-toggle"></span>
+            <span class="db-icon">📄</span>
             <span class="db-key">${escapeHtml(key)}</span>:
             <input type="text" class="db-edit-input" value="${escapeHtml(JSON.stringify(raw))}" style="flex:1; min-width:80px;">
             <button class="db-save-btn" title="Сохранить">✓</button>
@@ -3374,6 +3384,7 @@
         }
         return `<div class="db-node${flash}" data-db-path="${escapeHtml(path)}">
           <span class="db-toggle"></span>
+          <span class="db-icon">📄</span>
           <span class="db-key">${escapeHtml(key)}</span>:
           <span class="db-val ${dbValueClass(raw)}">${escapeHtml(dbValuePreview(raw))}</span>
           <button class="db-edit-btn" title="Изменить">✎</button>
@@ -3398,8 +3409,9 @@
           childrenHtml = renderDbLevel(raw, path, false, changed);
         }
       }
-      return `<div class="db-node container${flash}" data-db-path="${escapeHtml(path)}">
-          <span class="db-toggle">${isOpen ? '▾' : '▸'}</span>
+      return `<div class="db-node container${flash}" data-db-path="${escapeHtml(path)}" data-open="${isOpen}">
+          <span class="db-toggle">›</span>
+          <span class="db-icon">${isOpen ? '📂' : '📁'}</span>
           <span class="db-key">${escapeHtml(key)}</span>
           ${childCount === null ? '' : `<span class="db-count">{${childCount}}</span>`}
           <button class="db-add-btn" title="Добавить поле">+</button>
@@ -3419,6 +3431,7 @@
     if (dbTreeState.addingPath !== path) return '';
     return `<div class="db-node db-add-form" data-db-add-form="${escapeHtml(path)}">
       <span class="db-toggle"></span>
+      <span class="db-icon">＋</span>
       <input type="text" class="db-add-key-input" placeholder="ключ">:
       <input type="text" class="db-add-val-input" placeholder='значение: "текст", 123, true, null' style="flex:1; min-width:120px;">
       <button class="db-add-save-btn" title="Добавить">✓</button>

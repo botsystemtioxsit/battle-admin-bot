@@ -1,0 +1,38 @@
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install desktop app dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build .exe installer (native Windows, no wine needed)
+        working-directory: desktop
+        run: npm run build:win
+
+      - name: Read version
+        id: ver
+        shell: bash
+        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release with installer attached
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-windows-v${{ steps.ver.outputs.version }}-${{ github.run_number }}
+          name: БАТТЛ Админ (Windows) v${{ steps.ver.outputs.version }} — build ${{ github.run_number }}
+          files: desktop/dist/*.exe
+          body: Автосборка Windows-установщика десктоп-приложения из ${{ github.sha }}.

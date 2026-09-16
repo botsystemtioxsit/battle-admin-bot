@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="На десктопе добавлена постоянная третья колонка — «пик» базы данных, только просмотр, видна на любой вкладке для superadmin. Автоматически прячется, как только открыт редактируемый просмотр («Система» → «База данных»), и появляется снова при выходе оттуда — не дублирует одно и то же дерево дважды на экране.">v3.2</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Новая карточка «Оформление» в «Аккаунт»: 3 цвета (два акцента + фон), вся палитра панели выводится из них через HSL. Хранится только в localStorage этого браузера — личная настройка, не синхронизируется через Firebase.">v3.3</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -582,6 +582,44 @@
         <div class="section-label">Заявки на вход</div>
         <div id="account-login-requests-list"></div>
         <div class="admin-empty" id="account-login-requests-empty" style="display:none;">Нет заявок на вход</div>
+      </div>
+
+      <!-- ===== "Оформление" — то же самое, что "Тема"/Theme Lab в самой
+           игре (index.html), только сильно проще: тут это цвет акцентов и
+           фона панели, без обоев и без кода для обмена темами с друзьями —
+           тут делиться темой не с кем, это личная настройка одного
+           браузера. Хранится в localStorage (см. applyPanelTheme/
+           savePanelTheme в JS), а не в Firebase — это просто "как выглядит
+           панель у меня", не игровые данные, синхронизировать между
+           устройствами незачем. Видно всем, у кого вообще есть доступ в
+           панель, не только superadmin — это никак не влияет на функции. -->
+      <div class="admin-card">
+        <div class="section-label">Оформление</div>
+        <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Только у тебя в этом браузере — не влияет ни на кого другого.</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+          <div>
+            <div style="font-size:13px; font-weight:600;">Акцент 1</div>
+            <div style="font-size:11.5px; color:var(--muted);">Кнопки, ошибки</div>
+          </div>
+          <input type="color" id="theme-color-live" value="#E5493D" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+          <div>
+            <div style="font-size:13px; font-weight:600;">Акцент 2</div>
+            <div style="font-size:11.5px; color:var(--muted);">Активная вкладка, важные кнопки</div>
+          </div>
+          <input type="color" id="theme-color-gold" value="#4C82F7" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+          <div>
+            <div style="font-size:13px; font-weight:600;">Фон</div>
+            <div style="font-size:11.5px; color:var(--muted);">Общий тон панели</div>
+          </div>
+          <input type="color" id="theme-color-bg" value="#0B0B0D" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-line" id="btn-theme-reset" style="flex:1;">Сбросить</button>
+        </div>
       </div>
     </div>
 
@@ -1254,6 +1292,106 @@
 <!-- только для "Восстановление" (код) — распаковка zip-снимка battle-data-admin-bot в браузере -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
+  // ===== "Оформление" (см. #panel-account) — аналог "Темы"/Theme Lab в
+  // самой игре (index.html), сильно упрощённый: только акцентные цвета и
+  // фон, без обоев и без обмена темами кодом. Хранится в localStorage,
+  // не в Firebase — это личная настройка браузера, а не игровые данные.
+  // Применяется САМЫМ ПЕРВЫМ, до Firebase/Telegram-инициализации ниже —
+  // иначе на экранах входа/проверки доступа мелькали бы цвета по
+  // умолчанию до применения сохранённой темы.
+  const PANEL_THEME_DEFAULTS = { live: '#E5493D', gold: '#4C82F7', bg: '#0B0B0D' };
+
+  function clamp01_100(v) { return Math.max(0, Math.min(100, v)); }
+  function hexToHsl(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    if (!m) return [0, 0, 0];
+    const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0; const l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+    }
+    return [h, s * 100, l * 100];
+  }
+  function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60) [r, g, b] = [c, x, 0];
+    else if (h < 120) [r, g, b] = [x, c, 0];
+    else if (h < 180) [r, g, b] = [0, c, x];
+    else if (h < 240) [r, g, b] = [0, x, c];
+    else if (h < 300) [r, g, b] = [x, 0, c];
+    else [r, g, b] = [c, 0, x];
+    const toHex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0');
+    return '#' + toHex(r) + toHex(g) + toHex(b);
+  }
+  // По одному фону считает всё остальное (панели/линии/текст) — так
+  // светлую или тёмную тему можно выбрать одним цветом, без отдельного
+  // переключателя "тёмная/светлая база", как в index.html.
+  function derivePanelPalette(theme) {
+    const [h, s, l] = hexToHsl(theme.bg);
+    const dir = l < 50 ? 1 : -1;
+    return {
+      bg: theme.bg,
+      panel: hslToHex(h, s, clamp01_100(l + dir * 6)),
+      'panel-2': hslToHex(h, s, clamp01_100(l + dir * 12)),
+      line: hslToHex(h, s, clamp01_100(l + dir * 20)),
+      text: l < 50 ? '#F2F1EE' : '#15151A',
+      muted: l < 50 ? '#8A8A92' : '#6B6B72',
+      live: theme.live,
+      gold: theme.gold,
+    };
+  }
+  function applyPanelTheme(theme) {
+    const palette = derivePanelPalette(theme);
+    const root = document.documentElement.style;
+    Object.entries(palette).forEach(([key, val]) => root.setProperty('--' + key, val));
+  }
+  function loadPanelTheme() {
+    try {
+      const raw = localStorage.getItem('adminPanelTheme');
+      return raw ? { ...PANEL_THEME_DEFAULTS, ...JSON.parse(raw) } : { ...PANEL_THEME_DEFAULTS };
+    } catch { return { ...PANEL_THEME_DEFAULTS }; }
+  }
+  function savePanelTheme(theme) {
+    localStorage.setItem('adminPanelTheme', JSON.stringify(theme));
+    applyPanelTheme(theme);
+  }
+  applyPanelTheme(loadPanelTheme());
+
+  function syncPanelThemeInputs() {
+    const theme = loadPanelTheme();
+    const liveInput = document.getElementById('theme-color-live');
+    const goldInput = document.getElementById('theme-color-gold');
+    const bgInput = document.getElementById('theme-color-bg');
+    if (liveInput) liveInput.value = theme.live;
+    if (goldInput) goldInput.value = theme.gold;
+    if (bgInput) bgInput.value = theme.bg;
+  }
+  syncPanelThemeInputs();
+  ['theme-color-live', 'theme-color-gold', 'theme-color-bg'].forEach((id) => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      savePanelTheme({
+        live: document.getElementById('theme-color-live').value,
+        gold: document.getElementById('theme-color-gold').value,
+        bg: document.getElementById('theme-color-bg').value,
+      });
+    });
+  });
+  document.getElementById('btn-theme-reset')?.addEventListener('click', () => {
+    localStorage.removeItem('adminPanelTheme');
+    applyPanelTheme(PANEL_THEME_DEFAULTS);
+    syncPanelThemeInputs();
+  });
+
   // ===== та же Firebase-база, что и у основного сайта БАТТЛ =====
   // Этот apiKey — публичный клиентский ключ веб-конфига Firebase, не секрет;
   // реальная защита данных — это database.rules.json проекта, а не его тайна.

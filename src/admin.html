@@ -234,7 +234,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Новая вкладка «Ассистент» (только superadmin) — чат с ИИ-ассистентом на api/claude-assistant.js. Читает базу сам, а каждое изменяющее действие (баны, роли, права, заявки, токены) только предлагает — исполняется лишь после явного «Подтвердить» в чате; сброс базы недоступен ассистенту вообще.">v2.7</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Ассистент теперь работает через GitHub Actions (без стороннего сайта, но с задержкой 20–60 сек) вместо Vercel — секрет Anthropic хранится в Settings→Secrets репозитория, панель дёргает workflow_dispatch своим GitHub-токеном и слушает ответ в Firebase. Логика вынесена в lib/assistantCore.js, общая для обоих способов запуска.">v2.8</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -366,19 +366,28 @@
            перепроверяет role === 'superadmin' на сброс/аварийный режим
            при каждом открытии (см. openDangerZone). -->
       <div class="tab" data-tab="danger" id="tab-danger">Система</div>
-      <!-- "Ассистент" — чат с ИИ-ассистентом (Claude, см. api/claude-assistant.js)
-           над теми же RTDB-действиями, что доступны supердоступу в этой
-           панели — банит/меняет роли/права, одобряет заявки на вход/кланы/
-           ссылки на чаты/никнеймы/бету, выдаёт значки и токены доступа.
-           Читает базу сразу сам, но каждое ИЗМЕНЯЮЩЕЕ действие только
-           ПРЕДЛАГАЕТ — сервер приостанавливает выполнение и ждёт явного
-           клика "Подтвердить"/"Отклонить" здесь в чате на каждое действие
+      <!-- "Ассистент" — чат с ИИ-ассистентом (Claude, общая логика в
+           lib/assistantCore.js) над теми же RTDB-действиями, что доступны
+           supердоступу в этой панели — банит/меняет роли/права, одобряет
+           заявки на вход/кланы/ссылки на чаты/никнеймы/бету, выдаёт значки
+           и токены доступа. Работает через GitHub Actions без стороннего
+           сайта (см. .github/workflows/assistant.yml,
+           .github/scripts/run-assistant.js): панель пишет запрос в
+           assistantRequests/<id> в Firebase, запускает workflow через
+           GitHub API (workflow_dispatch — нужен PAT, вводится в "Настройки
+           подключения") и слушает тот же путь в базе на ответ — задержка
+           обычно 20–60 секунд на запуск раннера GitHub, а не мгновенно, как
+           в обычном чате. (Есть и мгновенный вариант — api/claude-assistant.js
+           на Vercel, но он требует заводить отдельный сайт, поэтому не
+           используется по умолчанию.) Читает базу сразу сам, но каждое
+           ИЗМЕНЯЮЩЕЕ действие только ПРЕДЛАГАЕТ — ждёт явного клика
+           "Подтвердить"/"Отклонить" здесь в чате на каждое действие
            отдельно (см. renderAssistantPendingActions ниже), реальная
            запись в базу происходит только после этого клика. Сбросить базу
            целиком (config/resetSecret) не может вообще ни при каких
-           обстоятельствах — для этого нет инструмента в самом эндпоинте,
-           только ручное подтверждение во вкладке "Система". Только
-           superadmin, не делегируется. -->
+           обстоятельствах — для этого нет инструмента вообще, только
+           ручное подтверждение во вкладке "Система". Только superadmin, не
+           делегируется. -->
       <div class="tab" data-tab="assistant" id="tab-assistant">Ассистент</div>
     </div>
 
@@ -938,14 +947,11 @@
       </button>
       <div id="assistant-settings-wrap" style="display:none; margin-bottom:14px;">
         <div class="admin-card">
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Ответ приходит через GitHub Actions (без стороннего сайта, но с задержкой в 20–60 секунд на запуск). Нужен один fine-grained PAT (GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens) с доступом к репозиторию <code>battle-admin-bot</code> и правом «Actions: Read and write» — и один раз добавленный секрет <code>ANTHROPIC_API_KEY</code> в Settings → Secrets and variables → Actions этого же репозитория (ключ с console.anthropic.com).</div>
           <div class="row">
-            <input type="text" class="field-input" id="assistant-endpoint-input" placeholder="/api/claude-assistant или https://ваш-проект.vercel.app/api/claude-assistant">
-          </div>
-          <div class="row">
-            <input type="password" class="field-input" id="assistant-secret-input" placeholder="ASSISTANT_SECRET (необязательно)">
+            <input type="password" class="field-input" id="assistant-github-token-input" placeholder="GitHub-токен (Actions: Read and write)">
           </div>
           <button class="btn btn-line" id="btn-save-assistant-settings" style="width:100%;">Сохранить</button>
-          <div class="admin-empty" style="text-align:left; padding:6px 0 0;">Пусто в первом поле — пробуем относительный путь /api/claude-assistant (сработает, если панель открыта с домена Vercel, а не GitHub Pages).</div>
         </div>
       </div>
 
@@ -2032,12 +2038,14 @@
 
   // ===== "Ассистент" — см. комментарий у #tab-assistant в HTML. =====
   // Клиент хранит всю историю переписки (формат сообщений Anthropic Messages
-  // API) и шлёт её целиком на каждый запрос — эндпоинт не держит сессий,
-  // это единственный способ остаться без бэкенда/базы данных для истории
-  // чата, тем же принципом, что и остальной проект (без сервера, где можно
-  // обойтись). "Новый чат" просто обнуляет этот массив.
+  // API) в assistantMessages и пишет её целиком в assistantRequests/<id>
+  // при каждом запросе — сам GitHub Actions run ничего не помнит между
+  // запусками, вся "сессия" держится либо в этой переменной (пока вкладка
+  // открыта), либо в самой записи в Firebase. "Новый чат" просто обнуляет
+  // этот массив и текущий requestId.
   let assistantMessages = [];
   let assistantBusy = false;
+  let assistantCurrentRequestId = null;
 
   document.getElementById('btn-toggle-assistant-settings')?.addEventListener('click', () => {
     const wrap = document.getElementById('assistant-settings-wrap');
@@ -2048,17 +2056,70 @@
   });
 
   function loadAssistantSettingsUI() {
-    document.getElementById('assistant-endpoint-input').value = window.localStorage.getItem('assistantEndpointUrl') || '';
-    document.getElementById('assistant-secret-input').value = window.localStorage.getItem('assistantSecret') || '';
+    document.getElementById('assistant-github-token-input').value = window.localStorage.getItem('assistantGithubToken') || '';
   }
   document.getElementById('btn-save-assistant-settings')?.addEventListener('click', () => {
-    window.localStorage.setItem('assistantEndpointUrl', document.getElementById('assistant-endpoint-input').value.trim());
-    window.localStorage.setItem('assistantSecret', document.getElementById('assistant-secret-input').value.trim());
+    window.localStorage.setItem('assistantGithubToken', document.getElementById('assistant-github-token-input').value.trim());
     document.getElementById('assistant-status').textContent = 'Сохранено.';
   });
 
-  function assistantEndpointUrl() {
-    return window.localStorage.getItem('assistantEndpointUrl') || '/api/claude-assistant';
+  const ASSISTANT_GH_OWNER = 'botsystemtioxsit';
+  const ASSISTANT_GH_REPO = 'battle-admin-bot';
+  function assistantGithubToken() {
+    return window.localStorage.getItem('assistantGithubToken') || '';
+  }
+
+  // Запускает .github/workflows/assistant.yml через GitHub API — тот же
+  // приём "Сделать бэкап сейчас" из battle-data-admin-bot, только тут
+  // запускает не бэкап, а обработку одного assistantRequests/<requestId>
+  // (см. .github/scripts/run-assistant.js). Ответ придёт не отсюда, а
+  // через db.ref('assistantRequests/'+requestId).on('value', ...), см.
+  // waitForAssistantResult ниже — сам workflow ничего не возвращает по
+  // HTTP, только пишет результат в Firebase.
+  async function triggerAssistantWorkflow(requestId) {
+    const token = assistantGithubToken();
+    if (!token) throw new Error('Впиши GitHub-токен в "Настройки подключения" вкладки.');
+    const res = await fetch(`https://api.github.com/repos/${ASSISTANT_GH_OWNER}/${ASSISTANT_GH_REPO}/actions/workflows/assistant.yml/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ref: 'main', inputs: { requestId } }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`GitHub API ${res.status}: ${text}`);
+    }
+  }
+
+  let assistantWaitRef = null;
+  let assistantWaitCb = null;
+  let assistantWaitTimeout = null;
+  function stopWaitingForAssistant() {
+    if (assistantWaitRef && assistantWaitCb) assistantWaitRef.off('value', assistantWaitCb);
+    if (assistantWaitTimeout) clearTimeout(assistantWaitTimeout);
+    assistantWaitRef = null;
+    assistantWaitCb = null;
+    assistantWaitTimeout = null;
+  }
+  function waitForAssistantResult(requestId) {
+    return new Promise((resolve, reject) => {
+      stopWaitingForAssistant();
+      assistantWaitRef = db.ref('assistantRequests/' + requestId);
+      assistantWaitCb = assistantWaitRef.on('value', (snap) => {
+        const val = snap.val();
+        if (!val || val.status === 'queued') return;
+        stopWaitingForAssistant();
+        if (val.status === 'error') { reject(new Error(val.error || 'Ошибка выполнения ассистента')); return; }
+        resolve(val.result);
+      });
+      assistantWaitTimeout = setTimeout(() => {
+        stopWaitingForAssistant();
+        reject(new Error('Не дождались ответа за 3 минуты — проверь вкладку Actions в репозитории battle-admin-bot: возможно, workflow не запустился (неверный токен/права) или упал с ошибкой.'));
+      }, 3 * 60 * 1000);
+    });
   }
 
   function appendAssistantLogRow(role, text) {
@@ -2157,26 +2218,22 @@
   }
 
   async function submitAssistantDecisions(decisions) {
-    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    if (!canManageRoles() || !assistantCurrentRequestId) return; // на случай подделки клика мимо скрытой вкладки
     const statusEl = document.getElementById('assistant-status');
     const sendBtn = document.getElementById('btn-assistant-send');
     assistantBusy = true;
     sendBtn.disabled = true;
     statusEl.style.color = 'var(--muted)';
-    statusEl.textContent = 'Выполняю подтверждённые действия…';
+    statusEl.textContent = 'Запускаю выполнение подтверждённых действий…';
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const secret = window.localStorage.getItem('assistantSecret');
-      if (secret) headers['X-Assistant-Secret'] = secret;
-      const res = await fetch(assistantEndpointUrl(), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ messages: assistantMessages, decisions }),
+      await db.ref('assistantRequests/' + assistantCurrentRequestId).update({
+        messages: assistantMessages, decisions, status: 'queued', updatedAt: Date.now(),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      await triggerAssistantWorkflow(assistantCurrentRequestId);
+      statusEl.textContent = 'Жду ответа от GitHub Actions (обычно 20–60 секунд)…';
+      const result = await waitForAssistantResult(assistantCurrentRequestId);
       statusEl.textContent = '';
-      handleAssistantResponse(data);
+      handleAssistantResponse(result);
     } catch (err) {
       console.error('assistant error:', err);
       statusEl.style.color = 'var(--live)';
@@ -2199,21 +2256,21 @@
     input.value = '';
     assistantBusy = true;
     sendBtn.disabled = true;
-    sendBtn.textContent = 'Думает…';
+    sendBtn.textContent = 'Запускаю…';
     statusEl.style.color = 'var(--muted)';
     statusEl.textContent = '';
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const secret = window.localStorage.getItem('assistantSecret');
-      if (secret) headers['X-Assistant-Secret'] = secret;
-      const res = await fetch(assistantEndpointUrl(), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ messages: assistantMessages }),
+      const requestId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      assistantCurrentRequestId = requestId;
+      await db.ref('assistantRequests/' + requestId).set({
+        messages: assistantMessages, decisions: null, status: 'queued', createdAt: Date.now(),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      handleAssistantResponse(data);
+      await triggerAssistantWorkflow(requestId);
+      sendBtn.textContent = 'Думает…';
+      statusEl.textContent = 'Жду ответа от GitHub Actions (обычно 20–60 секунд)…';
+      const result = await waitForAssistantResult(requestId);
+      statusEl.textContent = '';
+      handleAssistantResponse(result);
     } catch (err) {
       console.error('assistant error:', err);
       statusEl.style.color = 'var(--live)';
@@ -2230,8 +2287,10 @@
   });
   document.getElementById('btn-assistant-clear')?.addEventListener('click', () => {
     if (assistantBusy) return;
+    stopWaitingForAssistant();
     assistantMessages = [];
     assistantPendingDecisions = null;
+    assistantCurrentRequestId = null;
     document.getElementById('assistant-chat-log').innerHTML = '';
     document.getElementById('assistant-status').textContent = '';
   });

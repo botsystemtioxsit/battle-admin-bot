@@ -5,6 +5,7 @@
 // долетает и сюда, без пересборки и переустановки десктоп-приложения —
 // то же самое, что уже происходит в браузере у всех остальных.
 const { app, BrowserWindow, shell } = require('electron');
+const path = require('path');
 
 // URL, который видно в адресной строке браузера при открытии панели не из
 // Telegram — тот же самый, просто в отдельном окне без браузерных вкладок/
@@ -20,6 +21,7 @@ function createWindow() {
     minWidth: 720,
     minHeight: 560,
     title: 'БАТТЛ · Админ',
+    icon: path.join(__dirname, 'icon.png'), // значок окна/панели задач — тот же файл, что и у ярлыка меню приложений (см. install-launcher.sh) и у собранного AppImage/.deb (package.json → build.*.icon)
     autoHideMenuBar: true, // строка меню (File/Edit/...) панели не нужна — тут её просто прячем, а не убираем совсем, Alt всё ещё её покажет при необходимости
     backgroundColor: '#0b0b0f', // совпадает с тёмным фоном панели — без этого при загрузке на миг мелькает белый экран
     webPreferences: {

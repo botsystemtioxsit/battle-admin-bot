@@ -1,0 +1,36 @@
+{
+  "name": "battle-admin-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Десктоп-приложение (Electron) для панели администратора БАТТЛ — окно, которое открывает живую панель без браузера.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux",
+    "build:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.tioxsit.battleadmin",
+    "productName": "БАТТЛ Админ",
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

@@ -25,26 +25,18 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build AppImage + .deb + .tar.gz (native Linux, no wine needed)
+      # --publish always делает и сборку, и публикацию сам electron-builder:
+      # создаёт/обновляет тот же релиз v<version>, что и Windows-сборка
+      # (см. build.publish в package.json — оба таргета публикуются в ОДИН
+      # и тот же релиз репозитория, это и нужно electron-updater), заливает
+      # AppImage/.deb/.tar.gz и генерирует latest-linux.yml. Автообновление
+      # внутри приложения реально работает только для AppImage (это
+      # единственный официально поддерживаемый electron-updater формат на
+      # Linux) — .deb/.tar.gz как и раньше обновляются вручную, перекачкой
+      # по той же ссылке. GH_TOKEN — автоматический токен раннера с правами
+      # contents:write (см. permissions выше), отдельно заводить не нужно.
+      - name: Build and publish AppImage + .deb + .tar.gz (native Linux, no wine needed)
         working-directory: desktop
-        run: npm run build:linux
-
-      - name: Read version
-        id: ver
-        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Publish GitHub Release with installer attached
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: desktop-linux-latest
-          name: БАТТЛ Админ (Linux) — последняя сборка
-          files: |
-            desktop/dist/*.AppImage
-            desktop/dist/*.deb
-            desktop/dist/*.tar.gz
-          body: |
-            Версия ${{ steps.ver.outputs.version }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}. Три формата — выбирай, какой заведётся на твоей системе (см. README в desktop/ насчёт ChromeOS/Crostini):
-            - **AppImage** — `chmod +x *.AppImage && ./БАТТЛ*.AppImage`. Нужен FUSE (`sudo apt install libfuse2` или `libfuse2t64`, если отсутствует).
-            - **.deb** — `sudo dpkg -i *.deb`. На части свежих ChromeOS-образов больше не ставится.
-            - **.tar.gz** — самый универсальный вариант, ничего не ставит в систему: `tar -xzf battle-admin-desktop-*.tar.gz && cd battle-admin-desktop-*/ && ./battle-admin-desktop`.
-            Этот релиз всегда переиспользуется под фиксированным тегом `desktop-linux-latest` — ссылка на него не меняется между сборками.
+        run: npm run build:linux -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

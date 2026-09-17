@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Инструкция по установке .tar.gz/AppImage дополнена командой на случай ошибки «error while loading shared libraries: libnss3.so...» — .tar.gz не носит с собой системные библиотеки Chromium, их нужно доставить apt-get отдельно (одна команда, см. карточку «Приложения»).">v3.7</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Windows/Linux desktop-приложение теперь умеет обновляться само (electron-updater): Windows и Linux (AppImage) публикуются в общий версионный релиз GitHub, приложение тихо проверяет и ставит новую версию при перезапуске — без похода за файлом вручную. Кнопка «Приложения» ведёт на releases/latest вместо фиксированного тега.">v3.8</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1036,21 +1036,29 @@
       <!-- ===== "Приложения" — ссылки на все способы открыть эту же панель,
            собранные тут, чтобы не логиниться заново на сайте каждый раз:
            открыл бота в Телеграме → сразу отсюда скачал нужный файл.
-           Все три сборки (.exe/.apk/AppImage+.deb+.tar.gz) собираются автоматически
-           в CI при каждом пуше в desktop/ или android/ (см. build-windows-
-           installer.yml, build-android-apk.yml, build-linux-installer.yml)
-           и публикуются под ФИКСИРОВАННЫМИ тегами релиза (…-latest) — то
-           есть ссылки ниже никогда не протухают и не требуют ручного
-           обновления при новой сборке. Открываем через tg.openLink, если
-           панель запущена внутри Telegram Web App (обычный <a target="_blank">
-           там либо не работает, либо открывает не то), иначе обычным
-           window.open — см. openAppLink() в JS. -->
+           Windows и Linux собираются в CI (build-windows-installer.yml,
+           build-linux-installer.yml) и публикуются в ОДИН общий релиз
+           репозитория под тегом v<версия из desktop/package.json> — так
+           нужно electron-updater (см. main.js): оба таргета кладут туда
+           свои файлы обновления (latest.yml / latest-linux.yml), и
+           desktop-приложение само проверяет и тихо ставит новую версию
+           при следующем перезапуске, без похода на GitHub вручную — это
+           касается только самой обёртки (иконка/разрешения/Electron), не
+           содержимого панели, которое и так всегда живое. Ссылка ниже —
+           .../releases/latest, отдаётся самим GitHub и всегда указывает
+           на актуальный релиз без ручного обновления URL. Android собран
+           отдельно (build-android-apk.yml) под своим фиксированным тегом
+           android-latest — WebView-обёртка, никакого electron-updater там
+           нет, обновление .apk только вручную по этой же ссылке. Открываем
+           через tg.openLink, если панель запущена внутри Telegram Web App
+           (обычный <a target="_blank"> там либо не работает, либо
+           открывает не то), иначе обычным window.open — см. openAppLink()
+           в JS. -->
       <div class="admin-card" style="margin-bottom:14px;">
         <div class="section-label">Приложения</div>
-        <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Та же панель, без входа заново — на любом устройстве.</div>
+        <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Та же панель, без входа заново — на любом устройстве. Desktop-версия (Windows/Linux) обновляется сама, без переустановки.</div>
         <div style="display:flex; flex-direction:column; gap:8px;">
-          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-windows-latest" style="text-align:left;">🖥️ Windows (.exe)</button>
-          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-linux-latest" style="text-align:left;">🐧 Linux (AppImage / .deb / .tar.gz)</button>
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/latest" style="text-align:left;">🖥️ Desktop (Windows .exe / Linux AppImage-.deb-.tar.gz)</button>
           <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">📱 Android (.apk)</button>
           <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">🌐 Открыть на сайте</button>
         </div>
@@ -1079,13 +1087,13 @@ sudo apt-get install -y libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libgtk-3
 # если apt ругается на libasound2 (переименован на новых Debian/Ubuntu):
 sudo apt-get install -y libasound2t64</code></pre>
           <div style="font-size:13px; font-weight:600; margin-bottom:4px;">AppImage</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Тоже без установки, но нужен FUSE — если не хватает, поставится одной командой.</div>
-          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>chmod +x "БАТТЛ Админ-1.0.0.AppImage"
-./"БАТТЛ Админ-1.0.0.AppImage"
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Тоже без установки, но нужен FUSE — если не хватает, поставится одной командой. Из трёх форматов только AppImage умеет обновляться сам (autoUpdater поддерживает его на Linux официально).</div>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>chmod +x *.AppImage
+./*.AppImage
 # если ругается на FUSE:
 sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></pre>
           <div style="font-size:13px; font-weight:600; margin-bottom:4px;">.deb (обычная установка)</div>
-          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0;"><code>sudo dpkg -i battle-admin-desktop_1.0.0_amd64.deb</code></pre>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0;"><code>sudo dpkg -i battle-admin-desktop_*_amd64.deb</code></pre>
         </div>
       </div>
 

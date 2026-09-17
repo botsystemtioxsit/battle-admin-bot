@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="В карточке «Приложения» добавлена раскрывающаяся инструкция по установке Linux-сборки прямо в панели (команды для .tar.gz/AppImage/.deb), включая предупреждение про ChromeOS: «Загрузки» ChromeOS и ~/Downloads внутри Linux (Crostini) — разные папки, файл нужно сначала расшарить через «Files → Copy to Linux».">v3.6</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Инструкция по установке .tar.gz/AppImage дополнена командой на случай ошибки «error while loading shared libraries: libnss3.so...» — .tar.gz не носит с собой системные библиотеки Chromium, их нужно доставить apt-get отдельно (одна команда, см. карточку «Приложения»).">v3.7</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1072,7 +1072,12 @@
           <div class="admin-empty" style="text-align:left; padding:0 0 8px; color:var(--live);">На ChromeOS браузер скачивает файл в «Загрузки» самого ChromeOS — это НЕ то же самое, что <code>~/Downloads</code> внутри Linux (Crostini), и по умолчанию Linux эту папку не видит. Если <code>tar</code> пишет «No such file or directory»: открой приложение «Файлы» → «Загрузки» → правый клик по файлу → «Copy to Linux» (или проверь <code>ls /mnt/chromeos/MyFiles/Downloads/*.tar.gz</code>).</div>
           <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>tar -xzf battle-admin-desktop-*.tar.gz
 cd battle-admin-desktop-*/
-./battle-admin-desktop</code></pre>
+./battle-admin-desktop
+# если пишет "error while loading shared libraries: libnss3.so...":
+sudo apt-get update
+sudo apt-get install -y libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libdrm2 libxkbcommon0
+# если apt ругается на libasound2 (переименован на новых Debian/Ubuntu):
+sudo apt-get install -y libasound2t64</code></pre>
           <div style="font-size:13px; font-weight:600; margin-bottom:4px;">AppImage</div>
           <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Тоже без установки, но нужен FUSE — если не хватает, поставится одной командой.</div>
           <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>chmod +x "БАТТЛ Админ-1.0.0.AppImage"

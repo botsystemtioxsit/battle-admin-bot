@@ -60,11 +60,24 @@ Linux-приложений; на Debian/Ubuntu с рабочим столом (G
 пакетного менеджера контейнера вообще.
 
 1. **`.tar.gz` — самый надёжный вариант, если остальное не заводится.**
-   Не ставит ничего в систему, просто распаковывается в папку:
+   Не ставит ничего в систему, просто распаковывается в папку. На
+   ChromeOS браузер скачивает файл в «Загрузки» самого ChromeOS — это
+   НЕ то же самое, что `~/Downloads` внутри Linux (Crostini): откройте
+   приложение «Файлы» → «Загрузки» → правый клик по файлу → **«Copy to
+   Linux»**, только после этого он появится в домашней папке контейнера.
    ```bash
    tar -xzf battle-admin-desktop-*.tar.gz
    cd battle-admin-desktop-*/
    ./battle-admin-desktop
+   ```
+   Если при запуске пишет `error while loading shared libraries:
+   libnss3.so...` — это отдельная нехватка системных библиотек
+   Chromium (сам `.tar.gz` их с собой не носит), лечится один раз:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libdrm2 libxkbcommon0
+   # если apt ругается на libasound2 (переименован на новых Debian/Ubuntu):
+   sudo apt-get install -y libasound2t64
    ```
    Чтобы получить ярлык в меню приложений из этой же папки — тот же
    `install-launcher.sh`, что и ниже, только вместо `battle-admin-gui.sh`

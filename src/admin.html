@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Выдача роли admin/superadmin переехала с клиентского кода на Cloudflare Worker (cloudflare-worker/role-gateway) — секретный ключ теперь нигде не виден в браузере, Worker сам проверяет подпись Telegram и текущую роль запрашивающего.">v4.1</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="role-gateway задеплоен на Cloudflare Workers (battle-role-gateway.tioxsit.workers.dev) — выдача admin/superadmin теперь реально защищена, не только на бумаге.">v4.2</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1480,7 +1480,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // (ROLE_GRANT_KEY) и токен бота хранит только он — сюда попадает только
   // адрес самого Worker'а, вписать после `wrangler deploy`
   // (см. cloudflare-worker/role-gateway/README.md).
-  const ROLE_GATEWAY_URL = 'https://battle-role-gateway.YOUR-SUBDOMAIN.workers.dev/grant-role';
+  const ROLE_GATEWAY_URL = 'https://battle-role-gateway.tioxsit.workers.dev/grant-role';
 
   function emailToKey(email) {
     // Firebase RTDB запрещает "." в ключах — заменяем на "," (та же схема,

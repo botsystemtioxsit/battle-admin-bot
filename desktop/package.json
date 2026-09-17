@@ -29,7 +29,8 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "tar.gz"
       ],
       "category": "Utility",
       "icon": "icon.png"

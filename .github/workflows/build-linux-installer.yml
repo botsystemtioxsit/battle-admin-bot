@@ -25,7 +25,7 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build AppImage + .deb (native Linux, no wine needed)
+      - name: Build AppImage + .deb + .tar.gz (native Linux, no wine needed)
         working-directory: desktop
         run: npm run build:linux
 
@@ -41,7 +41,10 @@ jobs:
           files: |
             desktop/dist/*.AppImage
             desktop/dist/*.deb
+            desktop/dist/*.tar.gz
           body: |
-            Версия ${{ steps.ver.outputs.version }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}.
-            AppImage запускается без установки (`chmod +x *.AppImage && ./БАТТЛ*.AppImage`), .deb — обычным `sudo dpkg -i *.deb`.
+            Версия ${{ steps.ver.outputs.version }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}. Три формата — выбирай, какой заведётся на твоей системе (см. README в desktop/ насчёт ChromeOS/Crostini):
+            - **AppImage** — `chmod +x *.AppImage && ./БАТТЛ*.AppImage`. Нужен FUSE (`sudo apt install libfuse2` или `libfuse2t64`, если отсутствует).
+            - **.deb** — `sudo dpkg -i *.deb`. На части свежих ChromeOS-образов больше не ставится.
+            - **.tar.gz** — самый универсальный вариант, ничего не ставит в систему: `tar -xzf battle-admin-desktop-*.tar.gz && cd battle-admin-desktop-*/ && ./battle-admin-desktop`.
             Этот релиз всегда переиспользуется под фиксированным тегом `desktop-linux-latest` — ссылка на него не меняется между сборками.

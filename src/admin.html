@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Новая иконка desktop/Android-приложения (череп со звездой) — версия обёртки поднята до 1.0.2, обновится автоматически через electron-updater.">v3.9</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Закрыт самогран роли: admin/superadmin через devtools больше нельзя выставить напрямую в базе — database.rules.json теперь требует секретный ключ, который знает только эта панель.">v4.0</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1471,6 +1471,17 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
+  // Ключ, без которого database.rules.json больше не разрешает выставить
+  // роль admin/superadmin ни одному клиенту (см. users/$uid/role и
+  // users/$uid/roleGrantKey в правилах index.html-репозитория) — раньше
+  // любой человек мог в devtools вызвать db.ref('users/<id>/role').set(
+  // 'superadmin') и получить супердоступ без единого клика от живого
+  // админа. Ключ живёт только в тексте самих правил (клиенту никогда не
+  // отдаётся) и здесь — секрет не абсолютный (кто прочтёт исходник
+  // admin.html, тот его увидит), но случайный самогран из игры/devtools
+  // это полностью закрывает: у index.html этого ключа нет вообще.
+  const ROLE_GRANT_KEY = 'bb4daef3a6155f84fb718c7169107ff6be390873b5945b4d514ed276c3a1805f';
+
   function emailToKey(email) {
     // Firebase RTDB запрещает "." в ключах — заменяем на "," (та же схема,
     // что и в index.html, emailLogins там общая на оба проекта)
@@ -2120,7 +2131,16 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // добавлении админа) — если у него уже был свой permissions
       // (например, снова назначили admin после понижения), не затираем его
       if (newRole === 'admin' && !existing.permissions) updates.permissions = { ...ALL_PERMISSIONS_OFF };
+      // admin/superadmin проходит только вместе с ROLE_GRANT_KEY в том же
+      // update() — иначе database.rules.json его отклонит (см. коммент у
+      // ROLE_GRANT_KEY выше). user/moderator ключ не требуют.
+      if (newRole === 'admin' || newRole === 'superadmin') updates.roleGrantKey = ROLE_GRANT_KEY;
       return db.ref('users/' + userKey).update(updates);
+    }).then(() => {
+      // ключ был нужен только чтобы протолкнуть саму запись роли — сразу
+      // убираем его, чтобы не висел в профиле игрока (база всё равно
+      // читается кем угодно, оставлять его там смысла нет)
+      return db.ref('users/' + userKey + '/roleGrantKey').remove();
     }).then(() => {
       const targetName = document.getElementById('r-name').textContent;
       const targetPlayerId = document.getElementById('r-id').textContent;

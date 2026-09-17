@@ -280,7 +280,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="В «Ассистент» добавлена карточка «Приложения» — ссылки на Windows/Linux/Android-сборки и сайт, чтобы не логиниться заново на каждом устройстве. Ссылки ведут на фиксированные теги релиза (…-latest), которые CI обновляет автоматически при каждом изменении desktop/ или android/.">v3.4</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Linux-сборка десктоп-приложения теперь также публикуется как .tar.gz (без установки, не зависит от dpkg/FUSE) — часть свежих образов ChromeOS Crostini больше не ставит .deb. AppImage/.deb остаются, .tar.gz — самый надёжный запасной вариант.">v3.5</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1043,7 +1043,7 @@
       <!-- ===== "Приложения" — ссылки на все способы открыть эту же панель,
            собранные тут, чтобы не логиниться заново на сайте каждый раз:
            открыл бота в Телеграме → сразу отсюда скачал нужный файл.
-           Все три сборки (.exe/.apk/AppImage+.deb) собираются автоматически
+           Все три сборки (.exe/.apk/AppImage+.deb+.tar.gz) собираются автоматически
            в CI при каждом пуше в desktop/ или android/ (см. build-windows-
            installer.yml, build-android-apk.yml, build-linux-installer.yml)
            и публикуются под ФИКСИРОВАННЫМИ тегами релиза (…-latest) — то
@@ -1057,7 +1057,7 @@
         <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Та же панель, без входа заново — на любом устройстве.</div>
         <div style="display:flex; flex-direction:column; gap:8px;">
           <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-windows-latest" style="text-align:left;">🖥️ Windows (.exe)</button>
-          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-linux-latest" style="text-align:left;">🐧 Linux (AppImage / .deb)</button>
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-linux-latest" style="text-align:left;">🐧 Linux (AppImage / .deb / .tar.gz)</button>
           <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">📱 Android (.apk)</button>
           <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">🌐 Открыть на сайте</button>
         </div>

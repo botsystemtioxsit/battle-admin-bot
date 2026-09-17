@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Linux-сборка десктоп-приложения теперь также публикуется как .tar.gz (без установки, не зависит от dpkg/FUSE) — часть свежих образов ChromeOS Crostini больше не ставит .deb. AppImage/.deb остаются, .tar.gz — самый надёжный запасной вариант.">v3.5</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="В карточке «Приложения» добавлена раскрывающаяся инструкция по установке Linux-сборки прямо в панели (команды для .tar.gz/AppImage/.deb), включая предупреждение про ChromeOS: «Загрузки» ChromeOS и ~/Downloads внутри Linux (Crostini) — разные папки, файл нужно сначала расшарить через «Files → Copy to Linux».">v3.6</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1053,6 +1053,34 @@
           <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/desktop-linux-latest" style="text-align:left;">🐧 Linux (AppImage / .deb / .tar.gz)</button>
           <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">📱 Android (.apk)</button>
           <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">🌐 Открыть на сайте</button>
+        </div>
+      </div>
+
+      <!-- ===== инструкция по установке Linux-сборки прямо в приложении —
+           не только в README/тексте релиза на GitHub, чтобы не заставлять
+           уходить с панели за командами. .tar.gz — приоритет, т.к. часть
+           свежих образов ChromeOS Crostini больше не ставит .deb; AppImage
+           не ставит ничего в систему, но требует FUSE. -->
+      <button class="list-toggle" id="btn-toggle-linux-install" style="margin-bottom:14px;">
+        <span>Как установить Linux-версию (в т.ч. ChromeOS)</span>
+        <span class="chevron" id="linux-install-chevron">⌄</span>
+      </button>
+      <div id="linux-install-wrap" style="display:none; margin-bottom:14px;">
+        <div class="admin-card">
+          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">.tar.gz — самый надёжный вариант</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Ничего не ставит в систему — просто распаковка и запуск. Работает даже там, где <code>.deb</code> уже не ставится (часть свежих образов ChromeOS).</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px; color:var(--live);">На ChromeOS браузер скачивает файл в «Загрузки» самого ChromeOS — это НЕ то же самое, что <code>~/Downloads</code> внутри Linux (Crostini), и по умолчанию Linux эту папку не видит. Если <code>tar</code> пишет «No such file or directory»: открой приложение «Файлы» → «Загрузки» → правый клик по файлу → «Copy to Linux» (или проверь <code>ls /mnt/chromeos/MyFiles/Downloads/*.tar.gz</code>).</div>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>tar -xzf battle-admin-desktop-*.tar.gz
+cd battle-admin-desktop-*/
+./battle-admin-desktop</code></pre>
+          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">AppImage</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Тоже без установки, но нужен FUSE — если не хватает, поставится одной командой.</div>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>chmod +x "БАТТЛ Админ-1.0.0.AppImage"
+./"БАТТЛ Админ-1.0.0.AppImage"
+# если ругается на FUSE:
+sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></pre>
+          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">.deb (обычная установка)</div>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0;"><code>sudo dpkg -i battle-admin-desktop_1.0.0_amd64.deb</code></pre>
         </div>
       </div>
 
@@ -2273,6 +2301,13 @@
   }
   document.querySelectorAll('[data-app-link]').forEach((btn) => {
     btn.addEventListener('click', () => openAppLink(btn.dataset.appLink));
+  });
+  document.getElementById('btn-toggle-linux-install')?.addEventListener('click', () => {
+    const wrap = document.getElementById('linux-install-wrap');
+    const chevron = document.getElementById('linux-install-chevron');
+    const isOpen = wrap.style.display !== 'none';
+    wrap.style.display = isOpen ? 'none' : 'block';
+    chevron.textContent = isOpen ? '⌄' : '⌃';
   });
 
   // ===== "Ассистент" — см. комментарий у #tab-assistant в HTML. =====

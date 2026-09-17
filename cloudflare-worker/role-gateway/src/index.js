@@ -89,6 +89,24 @@ async function getRole(userId) {
   return res.json();
 }
 
+// Реальный сквозной тест: пытается провести тестовую учётку через ровно
+// тот же путь, что и настоящая выдача роли (users/$uid/role +
+// roleGrantKey), и сразу убирает её независимо от результата — это не
+// настоящий игрок, ему не место в списке пользователей панели. Отвечает
+// true только если ROLE_GRANT_KEY в этом Worker'е реально совпадает с тем,
+// что сейчас задеплоено в database.rules.json (а не просто "оба заданы,
+// но разъехались" — именно так и ломалась выдача роли раньше).
+async function checkRoleGrantKeyMatchesRules(env) {
+  const testRes = await fetch(`${FIREBASE_DB_URL}/users/_role_gateway_healthcheck_.json`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'admin', roleGrantKey: env.ROLE_GRANT_KEY }),
+  });
+  const matches = testRes.ok;
+  await fetch(`${FIREBASE_DB_URL}/users/_role_gateway_healthcheck_.json`, { method: 'DELETE' }).catch(() => {});
+  return matches;
+}
+
 async function grantRole(env, requesterId, targetUserId, newRole) {
   const patchRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
@@ -112,6 +130,17 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    // Диагностика для админ-панели ("Система" → блок "role-gateway") —
+    // отдаёт только true/false, реальные значения секретов наружу никогда
+    // не попадают.
+    if (url.pathname === '/health' && request.method === 'GET') {
+      const botTokenConfigured = !!env.BOT_TOKEN;
+      const roleGrantKeyConfigured = !!env.ROLE_GRANT_KEY;
+      const roleGrantKeyMatchesRules = roleGrantKeyConfigured ? await checkRoleGrantKeyMatchesRules(env) : false;
+      return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, roleGrantKeyMatchesRules });
+    }
+
     if (url.pathname !== '/grant-role' || request.method !== 'POST') {
       return jsonResponse({ error: 'not found' }, 404);
     }

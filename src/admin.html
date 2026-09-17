@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="role-gateway задеплоен на Cloudflare Workers (battle-role-gateway.tioxsit.workers.dev) — выдача admin/superadmin теперь реально защищена, не только на бумаге.">v4.2</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Система → Опасная зона: добавлена карточка «Проверка ключей (role-gateway)» — показывает, заданы ли на Worker'е BOT_TOKEN/ROLE_GRANT_KEY и совпадает ли ключ с тем, что реально задеплоено в database.rules.json.">v4.3</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1202,6 +1202,30 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       </div>
 
       <div id="danger-allowed" style="display:none;">
+
+        <!-- Диагностика role-gateway (Cloudflare Worker, см.
+             cloudflare-worker/role-gateway) — чисто информационная, ничего
+             не меняет и не удаляет, поэтому идёт первой, ещё раньше
+             рабочих переключателей ниже. Дёргает /health на самом Worker'е
+             — тот отвечает только true/false по каждому пункту, реальные
+             значения секретов (BOT_TOKEN, ROLE_GRANT_KEY) наружу никогда
+             не попадают. Третья проверка не просто "оба секрета заданы",
+             а по-настоящему пробует провести тестовую запись через тот же
+             путь, что и настоящая выдача роли — именно так когда-то
+             ловится ситуация "оба ключа вроде на месте, но не совпадают
+             друг с другом". -->
+        <div class="admin-card">
+          <div class="section-label">Проверка ключей (role-gateway)</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 10px;">
+            Выдача роли admin/superadmin идёт через отдельный Cloudflare
+            Worker — эта кнопка проверяет, что у него на месте оба секрета
+            и что они совпадают с тем, что сейчас задеплоено в
+            database.rules.json. Если что-то красное — выдача роли не
+            заработает, пока не поправишь именно этот пункт.
+          </div>
+          <button class="btn btn-line" id="btn-check-role-gateway" style="width:100%;">Проверить</button>
+          <div id="role-gateway-health-result" style="display:none; margin-top:12px;"></div>
+        </div>
 
         <!-- рабочие переключатели — то, чем пользуются часто и без риска
              необратимо что-то потерять, поэтому идут первыми. Доступны
@@ -4819,6 +4843,34 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       alert('Не удалось выполнить сброс: ' + (err.message || err));
     } finally {
       btn.textContent = 'Подтвердить и сбросить всё';
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('btn-check-role-gateway').addEventListener('click', async () => {
+    if (!dangerZoneVerifiedCanManage) return; // на случай подделки клика мимо скрытого UI
+    const btn = document.getElementById('btn-check-role-gateway');
+    const resultEl = document.getElementById('role-gateway-health-result');
+    const healthUrl = ROLE_GATEWAY_URL.replace(/\/grant-role$/, '/health');
+    btn.disabled = true;
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<div class="admin-empty" style="text-align:left; padding:0;">Проверяю…</div>';
+    try {
+      const res = await fetch(healthUrl);
+      const data = await res.json();
+      const row = (ok, label) => `<div style="display:flex; align-items:center; gap:8px; padding:4px 0;">
+        <span style="color:${ok ? 'var(--gold)' : 'var(--live)'};">${ok ? '✓' : '✗'}</span>
+        <span>${label}</span>
+      </div>`;
+      resultEl.innerHTML = [
+        row(data.botTokenConfigured, 'Токен бота задан на Worker\'е (BOT_TOKEN)'),
+        row(data.roleGrantKeyConfigured, 'Ключ выдачи роли задан на Worker\'е (ROLE_GRANT_KEY)'),
+        row(data.roleGrantKeyMatchesRules, 'Ключ совпадает с тем, что задеплоено в database.rules.json'),
+      ].join('');
+    } catch (err) {
+      console.error(err);
+      resultEl.innerHTML = `<div class="admin-empty" style="text-align:left; padding:0; color:var(--live);">Не удалось достучаться до Worker'а: ${err.message || err}</div>`;
+    } finally {
       btn.disabled = false;
     }
   });

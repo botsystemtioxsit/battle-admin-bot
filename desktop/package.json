@@ -33,7 +33,11 @@
         "tar.gz"
       ],
       "category": "Utility",
-      "icon": "icon.png"
+      "icon": "icon.png",
+      "extraFiles": [
+        { "from": "install-launcher.sh", "to": "install-launcher.sh" },
+        { "from": "icon.png", "to": "icon.png" }
+      ]
     },
     "win": {
       "target": [

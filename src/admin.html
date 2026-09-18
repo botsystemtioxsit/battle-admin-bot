@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бан/разбан/временное ограничение теперь тоже идут через role-gateway Worker (тот же принцип, что и выдача роли) — нужно для новых аккаунтов, у которых есть owners-запись в базе (Anonymous Auth). Работает только из настоящей Telegram-сессии панели.">v4.4</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Добавлен видимый баннер JS-ошибок (window.onerror/unhandledrejection) — если что-то бросит исключение на верхнем уровне скрипта (кнопки/тумблеры вдруг перестают на что-либо реагировать), теперь наверху экрана появится текст ошибки вместо молчания.">v4.5</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1380,6 +1380,43 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 <!-- только для "Восстановление" (код) — распаковка zip-снимка battle-data-admin-bot в браузере -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
+  // ===== Видимый баннер JS-ошибок — диагностика для случаев вроде Android
+  // APK, где нет доступа к DevTools/chrome://inspect (плеер просто видит
+  // "кнопки не работают" и не может прислать консоль). Ловит window.onerror
+  // и unhandledrejection САМЫМ ПЕРВЫМ в файле, до Firebase/Telegram/любой
+  // другой инициализации — если что-то из этого бросит исключение на
+  // верхнем уровне (не внутри обработчика клика), все addEventListener
+  // ниже по файлу просто не зарегистрируются, и без этого баннера это
+  // выглядело бы как "все кнопки разом перестали реагировать" без единой
+  // подсказки почему. Не отправляет ничего никуда — только показывает
+  // текст ошибки на экране, чтобы его можно было сфотографировать/списать.
+  (function () {
+    const errors = [];
+    let banner = null;
+    let collapsed = false;
+    function render() {
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'panel-debug-banner';
+        banner.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:2147483647; background:#3a0000; color:#ffb3b3; font:12px/1.4 monospace; padding:10px 12px; max-height:45vh; overflow:auto; white-space:pre-wrap; border-bottom:2px solid #ff4d4d; cursor:pointer;';
+        banner.addEventListener('click', () => { collapsed = !collapsed; render(); });
+        (document.body || document.documentElement).appendChild(banner);
+      }
+      banner.textContent = collapsed
+        ? `⚠ JS-ошибок: ${errors.length} (тапни, чтобы развернуть)`
+        : `⚠ JS-ошибок: ${errors.length} (тапни, чтобы свернуть)\n\n` + errors.join('\n———\n');
+    }
+    window.addEventListener('error', (e) => {
+      errors.push((e.message || 'Ошибка') + (e.filename ? ` @ ${e.filename}:${e.lineno}:${e.colno}` : '') + (e.error && e.error.stack ? '\n' + e.error.stack : ''));
+      render();
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const reason = e.reason;
+      errors.push('unhandledrejection: ' + (reason && reason.stack ? reason.stack : String(reason)));
+      render();
+    });
+  })();
+
   // ===== "Оформление" (см. #panel-account) — аналог "Темы"/Theme Lab в
   // самой игре (index.html), сильно упрощённый: только акцентные цвета и
   // фон, без обоев и без обмена темами кодом. Хранится в localStorage,

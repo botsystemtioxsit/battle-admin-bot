@@ -24,6 +24,33 @@ const ALLOWED_STATUSES = new Set(['active', 'restricted', 'banned']);
 const STAFF_ROLES = new Set(['moderator', 'admin', 'superadmin']);
 const MAX_INITDATA_AGE_SECONDS = 5 * 60; // initData даётся один раз на открытие — 5 минут более чем достаточно
 
+// Дублирует ELO_K/ELO_BASELINE и стоимость лиг из index.html (LEAGUES,
+// computeEloDelta) — см. комментарий у finishMatch ниже про то, почему это
+// вообще нужно продублировать на сервере, а не просто доверять клиенту.
+// Обе версии названия первых двух лиг (обычная и "чистый режим") ведут на
+// одну и ту же ставку — battle.league хранит то имя, которое было
+// показано именно тому игроку, который встал в очередь, а у него могла
+// быть своя настройка чистого режима.
+const ELO_K = 32;
+const ELO_BASELINE = 1000;
+const REFEREE_STARS_REWARD = 5;
+const LEAGUE_BY_NAME = {};
+function addLeague(names, stake, penalty) {
+  for (const n of names) LEAGUE_BY_NAME[n] = { stake, penalty };
+}
+addLeague(['Сын шлюхи', 'Новичок'], 10, 0);
+addLeague(['Говно из-под коня', 'Слабак'], 25, 25);
+addLeague(['Отброс общества'], 50, 50);
+addLeague(['Шавка подзаборная'], 100, 100);
+addLeague(['Уважаемый тролль'], 200, 200);
+addLeague(['Батя троллей'], 400, 400);
+addLeague(['Рабовладелец'], 800, 800);
+
+function getMonthKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -91,6 +118,25 @@ async function getRole(userId) {
   return res.json();
 }
 
+async function getUser(telegramId) {
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}.json`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+// playerId (вида "PLR-XXXXXX") — внутренний игровой id, отдельный от
+// telegramId/ключа в users/ — вся логика боя (battles/matches, судейство)
+// оперирует именно им, поэтому нужен обратный поиск по нему.
+async function getUserByPlayerId(playerId) {
+  const url = `${FIREBASE_DB_URL}/users.json?orderBy=${encodeURIComponent('"playerId"')}&equalTo=${encodeURIComponent('"' + playerId + '"')}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const keys = Object.keys(data || {});
+  if (!keys.length) return null;
+  return { key: keys[0], user: data[keys[0]] || {} };
+}
+
 // Реальный сквозной тест: пытается провести тестовую учётку через ровно
 // тот же путь, что и настоящая выдача роли (users/$uid/role +
 // roleGrantKey), и сразу убирает её независимо от результата — это не
@@ -143,6 +189,124 @@ async function setStatus(env, targetUserId, newStatus, restrictedUntil) {
   await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/adminActionKey.json`, {
     method: 'DELETE',
   }).catch(() => {});
+}
+
+// Записывает итог боя — раньше это делал напрямую клиент СУДЬИ (см.
+// refereeDeclareWinner/finishMatch в index.html): один клиент пишет
+// points/stats ОБОИМ игрокам плюс себе (награда за судейство) — то есть
+// это ЕДИНСТВЕННЫЙ путь в игре, где один аккаунт напрямую меняет чужие
+// points/starsBalance. Именно поэтому эти поля раньше не были защищены
+// через owners-привязку (см. переписку) — наивная проверка "менять может
+// только владелец" сразу сломала бы начисление очков в каждом бою. Теперь
+// это не наивная проверка: сервер сам проверяет через initData, что
+// пишущий — это действительно назначенный судья этого конкретного боя
+// (battle.refereeId), и сам пересчитывает начисление (лига/ELO) по данным
+// из базы, а не доверяет числам от клиента — иначе судья мог бы просто
+// прислать любые pointsAwarded.
+//
+// Не переносит: сжигание билета-множителя (window.consumeMultiplierTicket
+// в index.html) — если у победителя есть активный билет, здесь он пока не
+// учитывается (множитель всегда 1). Осознанное упрощение первой версии,
+// не критично для защиты — просто чуть менее щедрое начисление в редком
+// случае, а не дыра.
+async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
+  const battleRes = await fetch(`${FIREBASE_DB_URL}/battles/${encodeURIComponent(matchId)}.json`);
+  if (!battleRes.ok) throw new Error(`Firebase GET ${battleRes.status}`);
+  const battle = await battleRes.json();
+  if (!battle) throw new Error('Бой не найден');
+  if (battle.status === 'finished') throw new Error('Бой уже завершён');
+  if (battle.refereeId !== refereePlayerId) throw new Error('Вы не назначены судьёй этого боя');
+
+  const winnerId = winnerSide === 'host' ? battle.hostId : battle.guestId;
+  const loserId = winnerSide === 'host' ? battle.guestId : battle.hostId;
+  if (!winnerId || !loserId) throw new Error('В бою не хватает участника');
+
+  const winnerRec = await getUserByPlayerId(winnerId);
+  const loserRec = await getUserByPlayerId(loserId);
+  if (!winnerRec || !loserRec) throw new Error('Не найден профиль игрока');
+
+  const pointsAwarded = {};
+  if (battle.league && LEAGUE_BY_NAME[battle.league]) {
+    const { stake, penalty } = LEAGUE_BY_NAME[battle.league];
+    pointsAwarded[winnerId] = stake;
+    pointsAwarded[loserId] = -penalty;
+  } else {
+    const winnerRating = Number(winnerRec.user.points ?? ELO_BASELINE);
+    const loserRating = Number(loserRec.user.points ?? ELO_BASELINE);
+    const expectedWinner = 1 / (1 + Math.pow(10, (loserRating - winnerRating) / 400));
+    const delta = Math.round(ELO_K * (1 - expectedWinner));
+    pointsAwarded[winnerId] = delta;
+    pointsAwarded[loserId] = -delta;
+  }
+
+  const likesRes = await fetch(`${FIREBASE_DB_URL}/battles/${encodeURIComponent(matchId)}/audienceLikes.json`);
+  const likes = (await likesRes.json().catch(() => null)) || {};
+  const audienceVotes = {};
+  if (battle.hostId) audienceVotes[battle.hostId] = likes.host || 0;
+  if (battle.guestId) audienceVotes[battle.guestId] = likes.guest || 0;
+
+  const finishedAt = Date.now();
+  const currentMonth = getMonthKey();
+  const update = {
+    [`battles/${matchId}/status`]: 'finished',
+    [`battles/${matchId}/winnerId`]: winnerId,
+    [`battles/${matchId}/loserId`]: loserId,
+    [`battles/${matchId}/pointsAwarded`]: pointsAwarded,
+    [`battles/${matchId}/trophyMultiplier`]: 1,
+    [`matches/${matchId}/status`]: 'finished',
+    [`matches/${matchId}/winnerId`]: winnerId,
+    [`matches/${matchId}/loserId`]: loserId,
+    [`matches/${matchId}/refereeId`]: refereePlayerId,
+    [`matches/${matchId}/pointsAwarded`]: pointsAwarded,
+    [`matches/${matchId}/audienceVotes`]: audienceVotes,
+    [`matches/${matchId}/finishedAt`]: finishedAt,
+  };
+
+  const touchedKeys = [];
+  for (const [playerId, rec] of [[winnerId, winnerRec], [loserId, loserRec]]) {
+    const u = rec.user;
+    const delta = Number(pointsAwarded[playerId] || 0);
+    const likeDelta = Number(audienceVotes[playerId] || 0);
+    const stats = u.stats || {};
+    const monthlyBase = u.monthlyPeriod === currentMonth ? Number(u.monthlyPoints || 0) : 0;
+    update[`users/${rec.key}/points`] = Math.max(0, Number(u.points || 0) + delta);
+    update[`users/${rec.key}/monthlyPoints`] = monthlyBase + delta;
+    update[`users/${rec.key}/monthlyPeriod`] = currentMonth;
+    update[`users/${rec.key}/stats/battles`] = Number(stats.battles || 0) + 1;
+    update[`users/${rec.key}/stats/wins`] = Number(stats.wins || 0) + (winnerId === playerId ? 1 : 0);
+    update[`users/${rec.key}/stats/losses`] = Number(stats.losses || 0) + (loserId === playerId ? 1 : 0);
+    update[`users/${rec.key}/stats/audienceLikes`] = Number(stats.audienceLikes || 0) + likeDelta;
+    update[`users/${rec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
+    touchedKeys.push(rec.key);
+  }
+
+  const refRec = await getUserByPlayerId(refereePlayerId);
+  if (refRec) {
+    const u = refRec.user;
+    update[`users/${refRec.key}/stats/refereeBattles`] = Number(u.stats?.refereeBattles || 0) + 1;
+    update[`users/${refRec.key}/starsBalance`] = Number(u.starsBalance || 0) + REFEREE_STARS_REWARD;
+    update[`users/${refRec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
+    touchedKeys.push(refRec.key);
+  }
+
+  const patchRes = await fetch(`${FIREBASE_DB_URL}/.json`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(update),
+  });
+  if (!patchRes.ok) {
+    throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
+  }
+
+  const cleanup = {};
+  for (const key of touchedKeys) cleanup[`users/${key}/adminActionKey`] = null;
+  await fetch(`${FIREBASE_DB_URL}/.json`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cleanup),
+  }).catch(() => {});
+
+  return { winnerId, loserId, pointsAwarded, audienceVotes, trophyMultiplier: 1 };
 }
 
 export default {
@@ -235,6 +399,37 @@ export default {
       }
 
       return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === '/finish-match' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData, matchId, winnerSide } = body || {};
+      if (!initData || !matchId || (winnerSide !== 'host' && winnerSide !== 'guest')) {
+        return jsonResponse({ error: 'нужны initData, matchId, winnerSide (host|guest)' }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requester = await getUser(verified.userId);
+      if (!requester || !requester.playerId) {
+        return jsonResponse({ error: 'Профиль запрашивающего не найден' }, 403);
+      }
+
+      try {
+        const result = await finishMatch(env, requester.playerId, String(matchId), winnerSide);
+        return jsonResponse({ ok: true, ...result });
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 400);
+      }
     }
 
     return jsonResponse({ error: 'not found' }, 404);

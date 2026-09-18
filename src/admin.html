@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Система → Опасная зона: добавлена карточка «Проверка ключей (role-gateway)» — показывает, заданы ли на Worker'е BOT_TOKEN/ROLE_GRANT_KEY и совпадает ли ключ с тем, что реально задеплоено в database.rules.json.">v4.3</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бан/разбан/временное ограничение теперь тоже идут через role-gateway Worker (тот же принцип, что и выдача роли) — нужно для новых аккаунтов, у которых есть owners-запись в базе (Anonymous Auth). Работает только из настоящей Telegram-сессии панели.">v4.4</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -3099,6 +3099,30 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   });
 
   // ===== бан / ограничения =====
+  // Аккаунты с owners-записью (см. index.html — Anonymous Auth, только
+  // НОВЫЕ аккаунты) database.rules.json больше не даёт банить прямой
+  // записью с чужого auth.uid — нужен adminActionKey, который знает
+  // только role-gateway Worker (тот же принцип, что и у выдачи роли).
+  // Поэтому статус всегда меняем через Worker, а не напрямую — для
+  // аккаунтов БЕЗ owners-записи (все существующие на сегодня) это условие
+  // в правилах и так пропускает запись, так что старое поведение не
+  // страдает, разница только в том, что запрос идёт через один лишний
+  // http-вызов. Работает только из настоящей Telegram-сессии (initData) —
+  // как и у выдачи роли, из desktop/email-входа бан временно не сработает.
+  function setUserStatus(targetUserId, newStatus, restrictedUntil) {
+    const initData = window.Telegram?.WebApp?.initData;
+    if (!initData) {
+      return Promise.reject(new Error('Менять статус можно только из настоящей Telegram-сессии панели (initData недоступна)'));
+    }
+    return fetch(ROLE_GATEWAY_URL.replace(/\/grant-role$/, '/set-status'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData, targetUserId, newStatus, restrictedUntil: restrictedUntil ?? null }),
+    }).then(async (res) => {
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    });
+  }
+
   document.querySelectorAll('.ban-duration-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (!foundUserKey || !canManageBans()) return; // на случай подделки клика мимо скрытого UI
@@ -3106,10 +3130,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const until = Date.now() + hours * 3600000;
       const targetName = document.getElementById('r-name').textContent;
       const targetPlayerId = document.getElementById('r-id').textContent;
-      db.ref('users/' + foundUserKey).update({ status: 'restricted', restrictedUntil: until }).then(() => {
+      setUserStatus(foundUserKey, 'restricted', until).then(() => {
         db.ref('users/' + foundUserKey).once('value').then(snap => renderStatusBadge(snap.val()));
         logAction('ban_temp', foundUserKey, targetName, targetPlayerId, `Ограничение на ${hours} ч.`);
-      });
+      }).catch(err => { console.error(err); alert('Не удалось ограничить: ' + (err.message || err)); });
     });
   });
 
@@ -3117,20 +3141,20 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!foundUserKey || !canManageBans()) return; // на случай подделки клика мимо скрытого UI
     const targetName = document.getElementById('r-name').textContent;
     const targetPlayerId = document.getElementById('r-id').textContent;
-    db.ref('users/' + foundUserKey).update({ status: 'banned', restrictedUntil: null }).then(() => {
+    setUserStatus(foundUserKey, 'banned', null).then(() => {
       db.ref('users/' + foundUserKey).once('value').then(snap => renderStatusBadge(snap.val()));
       logAction('ban_forever', foundUserKey, targetName, targetPlayerId, 'Забанен навсегда');
-    });
+    }).catch(err => { console.error(err); alert('Не удалось забанить: ' + (err.message || err)); });
   });
 
   document.getElementById('btn-unban').addEventListener('click', () => {
     if (!foundUserKey || !canManageBans()) return; // на случай подделки клика мимо скрытого UI
     const targetName = document.getElementById('r-name').textContent;
     const targetPlayerId = document.getElementById('r-id').textContent;
-    db.ref('users/' + foundUserKey).update({ status: 'active', restrictedUntil: null }).then(() => {
+    setUserStatus(foundUserKey, 'active', null).then(() => {
       db.ref('users/' + foundUserKey).once('value').then(snap => renderStatusBadge(snap.val()));
       logAction('unban', foundUserKey, targetName, targetPlayerId, 'Бан/ограничение снято');
-    });
+    }).catch(err => { console.error(err); alert('Не удалось снять бан: ' + (err.message || err)); });
   });
 
   // ===== ивенты на главном экране =====

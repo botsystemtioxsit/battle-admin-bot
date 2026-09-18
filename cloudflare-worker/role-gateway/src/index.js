@@ -20,6 +20,8 @@
 
 const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const ALLOWED_ROLES = new Set(['admin', 'superadmin']);
+const ALLOWED_STATUSES = new Set(['active', 'restricted', 'banned']);
+const STAFF_ROLES = new Set(['moderator', 'admin', 'superadmin']);
 const MAX_INITDATA_AGE_SECONDS = 5 * 60; // initData даётся один раз на открытие — 5 минут более чем достаточно
 
 const CORS_HEADERS = {
@@ -123,6 +125,26 @@ async function grantRole(env, requesterId, targetUserId, newRole) {
   }).catch(() => {});
 }
 
+// Бан/разбан чужого аккаунта — то же самое зеркало, что и grantRole, но
+// для users/$uid/status. Нужен отдельно от прямой записи из admin.html,
+// потому что для аккаунтов с owners-записью (см. index.html, Anonymous
+// Auth) database.rules.json больше не пускает чужой auth.uid менять
+// status без adminActionKey — тот самый секрет, который знает только этот
+// Worker.
+async function setStatus(env, targetUserId, newStatus, restrictedUntil) {
+  const patchRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}.json`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: newStatus, restrictedUntil: restrictedUntil ?? null, adminActionKey: env.ROLE_GRANT_KEY }),
+  });
+  if (!patchRes.ok) {
+    throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
+  }
+  await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/adminActionKey.json`, {
+    method: 'DELETE',
+  }).catch(() => {});
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -141,45 +163,80 @@ export default {
       return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, roleGrantKeyMatchesRules });
     }
 
-    if (url.pathname !== '/grant-role' || request.method !== 'POST') {
-      return jsonResponse({ error: 'not found' }, 404);
-    }
-
     if (!env.BOT_TOKEN || !env.ROLE_GRANT_KEY) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
 
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return jsonResponse({ error: 'битый JSON' }, 400);
+    if (url.pathname === '/grant-role' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData, targetUserId, newRole } = body || {};
+      if (!initData || !targetUserId || !newRole) {
+        return jsonResponse({ error: 'нужны initData, targetUserId, newRole' }, 400);
+      }
+      if (!ALLOWED_ROLES.has(newRole)) {
+        return jsonResponse({ error: `newRole должен быть одним из: ${[...ALLOWED_ROLES].join(', ')}` }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      if (requesterRole !== 'superadmin') {
+        return jsonResponse({ error: 'Выдавать admin/superadmin может только существующий superadmin' }, 403);
+      }
+
+      try {
+        await grantRole(env, verified.userId, String(targetUserId), newRole);
+      } catch (err) {
+        return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
     }
 
-    const { initData, targetUserId, newRole } = body || {};
-    if (!initData || !targetUserId || !newRole) {
-      return jsonResponse({ error: 'нужны initData, targetUserId, newRole' }, 400);
-    }
-    if (!ALLOWED_ROLES.has(newRole)) {
-      return jsonResponse({ error: `newRole должен быть одним из: ${[...ALLOWED_ROLES].join(', ')}` }, 400);
+    if (url.pathname === '/set-status' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData, targetUserId, newStatus, restrictedUntil } = body || {};
+      if (!initData || !targetUserId || !newStatus) {
+        return jsonResponse({ error: 'нужны initData, targetUserId, newStatus' }, 400);
+      }
+      if (!ALLOWED_STATUSES.has(newStatus)) {
+        return jsonResponse({ error: `newStatus должен быть одним из: ${[...ALLOWED_STATUSES].join(', ')}` }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      if (!STAFF_ROLES.has(requesterRole)) {
+        return jsonResponse({ error: 'Менять статус может только модератор/админ/супердоступ' }, 403);
+      }
+
+      try {
+        await setStatus(env, String(targetUserId), newStatus, restrictedUntil ?? null);
+      } catch (err) {
+        return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
     }
 
-    const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
-    if (!verified.ok) {
-      return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
-    }
-
-    const requesterRole = await getRole(verified.userId);
-    if (requesterRole !== 'superadmin') {
-      return jsonResponse({ error: 'Выдавать admin/superadmin может только существующий superadmin' }, 403);
-    }
-
-    try {
-      await grantRole(env, verified.userId, String(targetUserId), newRole);
-    } catch (err) {
-      return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
-    }
-
-    return jsonResponse({ ok: true });
+    return jsonResponse({ error: 'not found' }, 404);
   },
 };

@@ -309,6 +309,63 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
   return { winnerId, loserId, pointsAwarded, audienceVotes, trophyMultiplier: 1 };
 }
 
+// Полное восстановление базы из снимка (battle-data-admin-bot, вкладка
+// «Восстановление» → «Восстановить базу»). Раньше это был прямой
+// db.ref('/').set(data) с клиента — работало, пока database.rules.json не
+// обзавёлся .validate-правилами на users/$uid/role (нужен roleGrantKey для
+// admin/superadmin) и на status/points/starsBalance (нужен adminActionKey
+// для аккаунтов с owners-записью). Снимок этих служебных полей не содержит
+// (они одноразовые и стираются сразу после использования — см. grantRole/
+// setStatus выше), поэтому голый set(data) с любым непустым снимком реальных
+// пользователей стал отклоняться правилами. Чинится тем же приёмом, что и
+// остальной файл: секрет знает только Worker, поэтому restore идёт через
+// него — перед записью подмешивает roleGrantKey/adminActionKey в те записи
+// users/$uid, которым он понадобится, пишет весь снимок одним PUT в корень,
+// затем чистит подмешанные поля отдельным PATCH.
+async function restoreDatabase(env, snapshot) {
+  const payload = snapshot && typeof snapshot === 'object' ? { ...snapshot } : {};
+  const touchedForRole = [];
+  const touchedForAction = [];
+
+  if (payload.users && typeof payload.users === 'object') {
+    const usersCopy = {};
+    for (const [uid, rec] of Object.entries(payload.users)) {
+      if (!rec || typeof rec !== 'object') { usersCopy[uid] = rec; continue; }
+      const u = { ...rec };
+      if (u.role === 'admin' || u.role === 'superadmin') {
+        u.roleGrantKey = env.ROLE_GRANT_KEY;
+        touchedForRole.push(uid);
+      }
+      if (u.status !== undefined || u.points !== undefined || u.starsBalance !== undefined) {
+        u.adminActionKey = env.ROLE_GRANT_KEY;
+        touchedForAction.push(uid);
+      }
+      usersCopy[uid] = u;
+    }
+    payload.users = usersCopy;
+  }
+
+  const putRes = await fetch(`${FIREBASE_DB_URL}/.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!putRes.ok) {
+    throw new Error(`Firebase PUT ${putRes.status}: ${await putRes.text()}`);
+  }
+
+  const cleanup = {};
+  for (const uid of touchedForRole) cleanup[`users/${uid}/roleGrantKey`] = null;
+  for (const uid of touchedForAction) cleanup[`users/${uid}/adminActionKey`] = null;
+  if (Object.keys(cleanup).length) {
+    await fetch(`${FIREBASE_DB_URL}/.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cleanup),
+    }).catch(() => {});
+  }
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -430,6 +487,38 @@ export default {
       } catch (err) {
         return jsonResponse({ error: err.message }, 400);
       }
+    }
+
+    if (url.pathname === '/restore-database' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData, data } = body || {};
+      if (!initData || !data || typeof data !== 'object') {
+        return jsonResponse({ error: 'нужны initData, data (снимок базы)' }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      if (requesterRole !== 'superadmin') {
+        return jsonResponse({ error: 'Восстанавливать базу может только superadmin' }, 403);
+      }
+
+      try {
+        await restoreDatabase(env, data);
+      } catch (err) {
+        return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
     }
 
     return jsonResponse({ error: 'not found' }, 404);

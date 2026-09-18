@@ -37,14 +37,30 @@ jobs:
 
       - name: Read version
         id: ver
-        run: echo "version=$(grep -o 'versionName "[^"]*"' android/app/build.gradle | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "name=$(grep -o 'versionName "[^"]*"' android/app/build.gradle | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+          echo "code=$(grep -o 'versionCode [0-9]*' android/app/build.gradle | grep -o '[0-9]*')" >> "$GITHUB_OUTPUT"
+
+      # Машиночитаемая версия для автообновления внутри самого приложения
+      # (MainActivity.checkForUpdate скачивает именно этот файл и сравнивает
+      # versionCode со своим собственным) — раньше номер версии был только
+      # в тексте релиза, откуда его пришлось бы парсить регулярками.
+      # Публикуется тем же фиксированным тегом android-latest, что и сам
+      # APK, поэтому у него всегда один и тот же стабильный URL.
+      - name: Write version.json
+        run: |
+          cat > android/version.json <<EOF
+          {"versionCode": ${{ steps.ver.outputs.code }}, "versionName": "${{ steps.ver.outputs.name }}"}
+          EOF
 
       - name: Publish GitHub Release with APK attached
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
           name: БАТТЛ Админ (Android) — последняя сборка
-          files: android/app/build/outputs/apk/debug/*.apk
+          files: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/version.json
           body: |
-            Версия ${{ steps.ver.outputs.version }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}.
+            Версия ${{ steps.ver.outputs.name }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}.
             Этот релиз всегда переиспользуется под фиксированным тегом `android-latest` — ссылка на него не меняется между сборками.

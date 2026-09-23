@@ -3,14 +3,16 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Для автообновления (см. MainActivity — checkForUpdate/enqueueApkDownload):
-         сама установка идёт через системный DownloadManager + системный
-         пакетный установщик, это разрешение только даёт приложению право
-         ЗАПРОСИТЬ у пользователя разрешение "Установка неизвестных
-         приложений" именно для этого пакета (Android 8+, отдельно на
-         каждое приложение-источник) — без него системный диалог установки
-         просто откажет молча. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- НЕ добавлять REQUEST_INSTALL_PACKAGES обратно: с ним приложение
+         само скачивало и ставило APK поверх себя (см. MainActivity —
+         checkForUpdate), а Google Play Защита распознаёт именно эту
+         связку (сторонний неизвестный APK + право ставить другие APK) как
+         поведение трояна-дроппера и блокирует установку самого
+         приложения целиком. Обход через Google Play Console/Internal App
+         Sharing стоит денег — этот проект принципиально ничего платного
+         не использует — поэтому checkForUpdate теперь только открывает
+         ссылку на APK в браузере, разрешение на установку пакетов
+         приложению не нужно вообще. -->
 
     <application
         android:allowBackup="true"

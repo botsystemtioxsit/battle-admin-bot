@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Новый способ входа с другого устройства — «Подключить по коду» (экран входа) вместо привязки email: устройство генерирует 6-символьный код и deviceId, владелец аккаунта вводит код в «Аккаунт» → «Подключить устройство по коду». В отличие от входа по email эта привязка отзываемая — «Аккаунт» → «Подключённые устройства» → «Отозвать» выкидывает именно это устройство, остальные способы входа не трогает.">v4.6</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Токен аккаунта» переделан: раньше это была одна строка на весь аккаунт без привязки к устройству, теперь — реально по устройствам (trustedDevices), с любым числом устройств на аккаунт. Вход для admin/superadmin без одобренного устройства теперь сам предлагает «Запросить одобрение», а не просто блокирует с просьбой идти к Супердоступу — тот одобряет запросы одним кликом в «Администрация» → «Запросы на устройства», без похода в карточку игрока. Старые аккаунты (с прежним deviceToken) не пострадают — их текущее устройство зачислится автоматически.">v4.7</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -352,25 +352,43 @@
     </div>
   </div>
 
-  <!-- ===== защита от угона доступа: каждому admin/superadmin вручную
-       выдаётся персональный токен аккаунта (users/<uid>/deviceToken, см.
-       блок "Токен аккаунта" в карточке игрока, видимый только
-       Супердоступу — кнопка "Создать токен вручную"). Токен никогда
-       никому не показывают и не просят ввести — ни на первом входе, ни
-       на новом устройстве/браузере. Без токена вход в панель для
-       admin/superadmin вообще запрещён (см. protectedRoles-проверку в
-       коде входа в панель, ниже по файлу) — это единственная в проекте
-       граница доступа, не завязанная просто
-       на значение поля role, которое иначе можно прописать себе напрямую
-       мимо приложения (нет Firebase Auth). Если токен есть — вторая
-       проверка: не появился ли этот же токен ещё и на ДРУГОМ аккаунте
-       (см. checkTokenNotDuplicated); если да — блокируются все совпавшие
-       аккаунты (users/<uid>/panelLocked), пока Супердоступ не снимет
-       блокировку вручную (та же карточка). -->
-  <div class="screen" id="screen-device-locked">
-    <div class="center-msg denied">
-      <div class="big">🔒 ДОСТУП ЗАБЛОКИРОВАН</div>
-      <div class="small">Токен аккаунта обнаружен сразу на двух разных аккаунтах — доступ закрыт до ручного сброса Супердоступом.</div>
+  <!-- ===== защита от угона доступа, v2 — реально привязана к устройству.
+       Раньше (deviceToken) это была одна строка на весь аккаунт: любое
+       устройство под этим Telegram-аккаунтом проходило, если токен вообще
+       был выдан и не совпадал ни с чьим ещё — то есть не пропуск
+       конкретного устройства, а просто печать "этот аккаунт настоящий".
+       Теперь у каждого admin/superadmin аккаунта — свой набор
+       users/<uid>/trustedDevices/<deviceId> (тот же механизм, что и
+       опциональный "Подключить по коду" на screen-login, см. комментарий
+       у getOrCreateDeviceId), и вход БЕЗ УСЛОВИЙ (даже из настоящего
+       Telegram) требует, чтобы ИМЕННО deviceId текущего устройства
+       (localStorage.battleDeviceId) был в этом списке — так подделанный
+       через devtools role:'admin' на левом аккаунте не пройдёт: у него
+       неоткуда взяться записи trustedDevices с deviceId именно этого
+       браузера, а получить её можно только запросом (см.
+       screen-device-trust ниже) с одобрением существующего Супердоступа
+       (вкладка "Администрация" → "Запросы на устройства"), либо это
+       устройство уже когда-то было одобрено. Один аккаунт может иметь
+       сколько угодно доверенных устройств одновременно (человеку нужно
+       управлять с нескольких) — каждое просят и одобряют отдельно, и
+       отозвать можно тоже по одному (см. "Аккаунт" → "Подключённые
+       устройства" — свои, и блок в карточке игрока — чужие, только
+       Супердоступу).
+
+       Совместимость: аккаунты, уже работавшие по старой схеме
+       (users/<uid>/deviceToken выдан, но trustedDevices ещё пустой) —
+       текущее устройство один раз молча зачисляется в доверенные при
+       следующем входе (см. protectedRoles-проверку в коде входа, ниже по
+       файлу), чтобы никого не выкинуло разом при появлении этой версии.
+       Новым устройствам того же аккаунта это не помогает — они всё равно
+       проходят обычный запрос. -->
+  <div class="screen" id="screen-device-trust">
+    <div class="center-msg">
+      <div class="big">🔒 УСТРОЙСТВО НЕ ПОДТВЕРЖДЕНО</div>
+      <div class="small" style="margin-bottom:18px;">У аккаунта есть роль администратора, но именно это устройство ещё не одобрено — отдельно от самого Telegram-входа. Запроси одобрение, любой Супердоступ подтвердит его в панели («Администрация» → «Запросы на устройства»).</div>
+      <button class="btn btn-gold" id="device-trust-request-btn" style="max-width:280px; width:100%;">Запросить одобрение для этого устройства</button>
+      <div class="small" id="device-trust-status" style="display:none; color:var(--gold); margin-top:14px;"></div>
+      <div class="small" id="device-trust-error" style="display:none; color:var(--live); margin-top:10px;"></div>
     </div>
   </div>
 
@@ -503,16 +521,16 @@
           <button class="btn btn-line" id="btn-open-admin-rights" style="display:none; width:100%; margin-top:10px;">⚙️ Настроить права администратора</button>
         </div>
 
-        <!-- защита от угона доступа (см. комментарий у #screen-device-locked) —
-             видна только Супердоступу, и только у admin/superadmin -->
+        <!-- защита от угона доступа (см. комментарий у #screen-device-trust) —
+             видна только Супердоступу, и только у admin/superadmin. Сами
+             запросы на новое устройство одобряются не тут, а в
+             "Администрация" → "Запросы на устройства" (общий список на
+             все аккаунты сразу) — этот блок только для просмотра уже
+             одобренных устройств ЭТОГО конкретного игрока и их отзыва. -->
         <div class="r-toggle-row" id="device-token-row" style="display:none;">
-          <div class="r-toggle-label">Токен аккаунта</div>
+          <div class="r-toggle-label">Доверенные устройства</div>
           <div id="device-token-status" class="admin-empty" style="padding:4px 0 0;"></div>
-          <div style="display:flex; flex-wrap:wrap; gap:8px;">
-            <button class="btn btn-line" id="btn-device-token-issue" style="flex:1;">Выдать токен доступа</button>
-            <button class="btn btn-line" id="btn-device-token-unlock" style="display:none; flex:1;">Сбросить блокировку</button>
-          </div>
-          <div class="token-reveal" id="device-token-reveal" style="display:none;"></div>
+          <div id="device-token-list"></div>
         </div>
 
         <div class="r-toggle-row">
@@ -942,6 +960,19 @@
          зовут тот же setAdminPermission(uid, key, value), что и карточка
          (см. toggleAdminPermission), так что путь записи один и тот же. -->
     <div class="subview" data-panel="admins" id="panel-admins">
+      <!-- ===== запросы на доверенное устройство (deviceTrustRequests) —
+           см. комментарий у #screen-device-trust. Глобальный список, не
+           привязан ни к какому конкретному uid заранее (в отличие от
+           "Заявок на вход" в "Аккаунт", которые уже знают, к кому идут) —
+           потому что любой существующий Супердоступ может одобрить любое
+           устройство любого admin/superadmin аккаунта, а не только своего
+           собственного. -->
+      <div class="admin-card">
+        <div class="section-label" id="device-trust-requests-title">Запросы на устройства</div>
+        <div id="device-trust-requests-list"></div>
+        <div class="admin-empty" id="device-trust-requests-empty" style="display:none;">Нет запросов на подтверждение устройств</div>
+      </div>
+
       <div class="section-label" id="admins-title">Модераторы и админы</div>
       <div id="admins-table-list"></div>
       <div class="admin-empty" id="admins-table-empty" style="display:none;">Пока нет ни одного модератора/админа</div>
@@ -1601,22 +1632,22 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     return email.trim().toLowerCase().replace(/\./g, ',');
   }
 
-  // ===== токен аккаунта (защита от угона доступа) — см. CLAUDE.md /
-  // комментарий у #screen-device-locked. Полностью пассивный и молчаливый:
-  // каждый admin/superadmin автоматически получает его в базе при первом
-  // входе, никто никогда не видит его и не вводит вручную.
   function randomToken(bytes) {
     const arr = new Uint8Array(bytes);
     crypto.getRandomValues(arr);
     return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // ===== подключение устройства по коду (devicePairings/<код>) — см.
-  // комментарий у #pairing-start-btn на screen-login. deviceId создаётся
-  // ЛЕНИВО, только когда реально жмут "Подключить по коду" — не при
-  // каждом открытии экрана входа, иначе браузеры, которые всегда входили
-  // по email, вдруг обзавелись бы localStorage.battleDeviceId и попали бы
-  // под проверку доверенных устройств ниже по файлу без необходимости.
+  // ===== deviceId этого браузера — общий для двух независимых мест:
+  // опционального "Подключить по коду" на screen-login (devicePairings) и
+  // ОБЯЗАТЕЛЬНОЙ проверки доверенных устройств для admin/superadmin (см.
+  // protectedRoles-ветку в loadAccountAndShowApp, ниже по файлу, и
+  // комментарий у #screen-device-trust). Создаётся лениво (только когда
+  // реально понадобился) — для обычных пользователей это происходит
+  // только при нажатии "Подключить по коду", так что браузеры, всегда
+  // входившие по email, никогда не обзаводятся battleDeviceId и под
+  // проверку доверенных устройств не попадают вообще (та ветка есть
+  // только у protectedRoles).
   function getOrCreateDeviceId() {
     let id = window.localStorage.getItem('battleDeviceId');
     if (!id) {
@@ -1638,34 +1669,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /Linux/.test(ua) ? 'Linux' : 'ОС неизвестна';
     return browser + ' / ' + os;
   }
-  // Реальная проверка "угона": не "занят ли слот", а "не появился ли
-  // этот же токен на ДРУГОМ аккаунте". Один аккаунт свободно работает с
-  // любого числа вкладок/устройств/браузеров — эксклюзивности сессий тут
-  // нет и никогда не было привязки к конкретному устройству. Это разовая
-  // проверка при каждом открытии панели.
-  function checkTokenNotDuplicated(uid, token) {
-    return db.ref('users').orderByChild('deviceToken').equalTo(token).once('value').then((snap) => {
-      const matches = snap.val() || {};
-      const otherUids = Object.keys(matches).filter((otherUid) => otherUid !== uid);
-      if (otherUids.length === 0) {
-        return true;
-      }
-      // тот же токен стоит ещё хотя бы у одного другого аккаунта —
-      // блокируем ВСЕ аккаунты, у которых он сейчас совпадает (включая
-      // текущий), это признак утечки/дублирования, а не "кто первый".
-      const updates = {};
-      Object.keys(matches).forEach((matchUid) => { updates[matchUid + '/panelLocked'] = true; });
-      return db.ref('users').update(updates).then(() => {
-        const involved = Object.keys(matches).map((matchUid) => {
-          const m = matches[matchUid] || {};
-          return `${m.firstName || 'Игрок'} (${m.playerId || matchUid})`;
-        }).join(', ');
-        logAction('token_collision_detected', uid, null, null, `Совпадение deviceToken у аккаунтов: ${involved}`);
-        return false;
-      });
-    });
-  }
-
   const tg = window.Telegram?.WebApp;
   tg?.ready();
   tg?.expand();
@@ -1711,6 +1714,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   let myPermissions = { ...ALL_PERMISSIONS_OFF };
   let foundUserKey = null;
   let badgeDefsCache = {};
+  // uid, для которого сейчас показан screen-device-trust — нужен кнопке
+  // "Запросить одобрение" вне замыкания loadAccountAndShowApp, см. её
+  // обработчик ниже по файлу.
+  let pendingDeviceTrustUid = null;
   // ===== вход по токену доступа (accessTokens/<token>) — см. #tab-tokens.
   // Полностью отдельная сессия: нет ни telegramId, ни users/<uid>, все
   // права идут прямо из самой записи токена, ни к какому существующему
@@ -1779,40 +1786,55 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
           }
         }
 
-        // защита от угона доступа — см. комментарий у #screen-device-locked.
+        // защита от угона доступа — см. комментарий у #screen-device-trust.
         //
-        // Токен аккаунта теперь ОБЯЗАТЕЛЕН для admin/superadmin — без него
-        // вход запрещён, а не просто "защита выключена", как было раньше.
-        // Причина: users/$uid/role открыт для прямой записи мимо
-        // приложения (в проекте нет Firebase Auth) — значит, кто угодно
-        // мог сам себе прописать role:'admin' через devtools и спокойно
-        // зайти в панель, пока проверка токена включалась только когда
-        // токен уже есть. Теперь такой самопровозглашённый "админ" не
-        // пройдёт: токену (users/$uid/deviceToken) неоткуда взяться — он
-        // выдаётся только вручную кнопкой в карточке игрока (см.
-        // renderDeviceTokenBlock/btn-device-token-issue), доступной лишь
-        // существующему superadmin. Это единственная в проекте граница
-        // доступа, не завязанная просто на значение поля role.
+        // users/$uid/role открыт для прямой записи мимо приложения (в
+        // проекте нет Firebase Auth) — значит, кто угодно мог сам себе
+        // прописать role:'admin' через devtools и просто зайти. Поэтому
+        // для protectedRoles одной роли недостаточно: нужна ЕЩЁ запись
+        // users/$uid/trustedDevices/<deviceId именно этого браузера> —
+        // взяться ей неоткуда, кроме как через запрос+одобрение
+        // существующим Супердоступом (см. #device-trust-request-btn ниже
+        // и "Администрация" → "Запросы на устройства").
         const protectedRoles = ['admin', 'superadmin'];
-        if (user.panelLocked && protectedRoles.includes(role)) {
-          showScreen('screen-device-locked');
-          return;
-        }
         if (protectedRoles.includes(role)) {
-          if (!user.deviceToken) {
-            document.getElementById('denied-text').textContent = 'У аккаунта есть роль "' + (ROLE_LABELS[role] || role) + '", но не выдан токен аккаунта — доступ запрещён. Обратись к Супердоступу, чтобы токен выдали вручную.';
-            showScreen('screen-denied');
-            return;
-          }
-          checkTokenNotDuplicated(myTelegramId, user.deviceToken).then((ok) => {
-            if (!ok) {
-              showScreen('screen-device-locked');
+          const deviceId = getOrCreateDeviceId();
+          db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceId).once('value').then((trustSnap) => {
+            if (trustSnap.exists()) {
+              proceedToApp();
               return;
             }
-            proceedToApp();
+            // совместимость со старой схемой (единый deviceToken на
+            // аккаунт, без привязки к устройству) — зачисляем ТЕКУЩЕЕ
+            // устройство доверенным один-единственный раз, только если у
+            // аккаунта ещё вообще нет ни одного trustedDevices записи (то
+            // есть он ни разу не проходил через новую схему). Любое
+            // следующее устройство того же аккаунта под грандфазер уже не
+            // попадёт — trustedDevices к тому моменту не пустой.
+            if (user.deviceToken) {
+              db.ref('users/' + myTelegramId + '/trustedDevices').once('value').then((allSnap) => {
+                if (allSnap.exists()) {
+                  pendingDeviceTrustUid = myTelegramId;
+                  showScreen('screen-device-trust');
+                  return;
+                }
+                db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceId).set({
+                  label: currentDeviceLabel(),
+                  pairedAt: Date.now(),
+                  grandfathered: true,
+                }).then(proceedToApp).catch((err) => {
+                  console.error('device grandfather failed:', err);
+                  pendingDeviceTrustUid = myTelegramId;
+                  showScreen('screen-device-trust');
+                });
+              });
+              return;
+            }
+            pendingDeviceTrustUid = myTelegramId;
+            showScreen('screen-device-trust');
           }).catch((err) => {
-            console.error('account-token check failed:', err);
-            document.getElementById('denied-text').textContent = 'Не удалось проверить токен аккаунта: ' + (err.message || err);
+            console.error('trusted-device check failed:', err);
+            document.getElementById('denied-text').textContent = 'Не удалось проверить доверенные устройства: ' + (err.message || err);
             showScreen('screen-denied');
           });
           return;
@@ -1944,6 +1966,86 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       });
   });
 
+  // ===== запрос доверия для этого устройства (screen-device-trust) — см.
+  // комментарий там же и protectedRoles-ветку в loadAccountAndShowApp
+  // выше. В отличие от парного кода это ГЛОБАЛЬНЫЙ список
+  // (deviceTrustRequests, без привязки к конкретному uid заранее) — его
+  // видит и одобряет ЛЮБОЙ существующий Супердоступ, а не обязательно
+  // владелец этого же аккаунта (тот, скорее всего, сейчас и есть человек
+  // за этим самым непройденным устройством).
+  let deviceTrustReqPath = null;
+  let deviceTrustReqCb = null;
+  let deviceTrustReqTimeoutId = null;
+  function stopWaitingForDeviceTrust() {
+    if (deviceTrustReqPath && deviceTrustReqCb) db.ref(deviceTrustReqPath).off('value', deviceTrustReqCb);
+    if (deviceTrustReqTimeoutId) clearTimeout(deviceTrustReqTimeoutId);
+    deviceTrustReqPath = null;
+    deviceTrustReqCb = null;
+    deviceTrustReqTimeoutId = null;
+  }
+  document.getElementById('device-trust-request-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('device-trust-request-btn');
+    const statusEl = document.getElementById('device-trust-status');
+    const errEl = document.getElementById('device-trust-error');
+    errEl.style.display = 'none';
+    if (!pendingDeviceTrustUid) return;
+    stopWaitingForDeviceTrust();
+    const deviceId = getOrCreateDeviceId();
+    btn.disabled = true;
+    btn.textContent = 'Отправляем запрос…';
+    try {
+      const userSnap = await db.ref('users/' + pendingDeviceTrustUid).once('value');
+      const u = userSnap.val() || {};
+      const reqRef = db.ref('deviceTrustRequests').push();
+      await reqRef.set({
+        uid: pendingDeviceTrustUid,
+        deviceId,
+        device: currentDeviceLabel(),
+        firstName: u.firstName || null,
+        playerId: u.playerId || null,
+        requestedAt: Date.now(),
+        status: 'pending',
+      });
+      const reqPath = 'deviceTrustRequests/' + reqRef.key;
+      statusEl.textContent = '⏳ Запрос отправлен — жди подтверждения от любого Супердоступа («Администрация» → «Запросы на устройства»).';
+      statusEl.style.display = 'block';
+      btn.textContent = 'Ждём подтверждения…';
+      deviceTrustReqPath = reqPath;
+      deviceTrustReqCb = db.ref(reqPath).on('value', (snap) => {
+        const val = snap.val();
+        if (!val || val.status === 'pending') return;
+        if (val.status === 'approved') {
+          db.ref(reqPath).remove();
+          stopWaitingForDeviceTrust();
+          statusEl.textContent = '✅ Устройство одобрено, открываем панель…';
+          loadAccountAndShowApp(pendingDeviceTrustUid);
+        } else if (val.status === 'denied') {
+          db.ref(reqPath).remove();
+          stopWaitingForDeviceTrust();
+          statusEl.style.display = 'none';
+          errEl.textContent = 'Запрос отклонён.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Запросить одобрение для этого устройства';
+        }
+      });
+      deviceTrustReqTimeoutId = setTimeout(() => {
+        db.ref(reqPath).once('value').then((s) => { if (s.val()?.status === 'pending') db.ref(reqPath).remove(); });
+        stopWaitingForDeviceTrust();
+        statusEl.style.display = 'none';
+        errEl.textContent = 'Время ожидания истекло, попробуй ещё раз.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Запросить одобрение для этого устройства';
+      }, 5 * 60 * 1000);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Запросить одобрение для этого устройства';
+      errEl.textContent = 'Не удалось отправить запрос: ' + (err.message || err);
+      errEl.style.display = 'block';
+    }
+  });
+
   const tgUser = tg?.initDataUnsafe?.user;
   if (tgUser) {
     loadAccountAndShowApp(String(tgUser.id));
@@ -2072,14 +2174,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // "Администрация" держит свой живой db.ref('users').on('value') только
       // пока вкладка открыта — снимаем его при уходе на любую другую вкладку,
       // как и с живыми ветками "База данных" выше.
-      if (tab.dataset.tab !== 'admins') detachAdminsLiveListener();
+      if (tab.dataset.tab !== 'admins') { detachAdminsLiveListener(); detachDeviceTrustRequestsListener(); }
       // "Токены доступа" держит свой живой db.ref('accessTokens').on('value')
       // только пока вкладка открыта — тот же принцип, что и у "Администрации".
       if (tab.dataset.tab !== 'tokens') detachAccessTokensListener();
       if (tab.dataset.tab === 'logs') showLogsSection('actions');
       if (tab.dataset.tab === 'event') loadEventsAdminList();
       if (tab.dataset.tab === 'beta') showBetaSection(canManageBeta() ? 'beta' : 'clans');
-      if (tab.dataset.tab === 'admins') loadAdminsTab();
+      if (tab.dataset.tab === 'admins') { loadAdminsTab(); loadDeviceTrustRequests(); }
       if (tab.dataset.tab === 'stats') loadStatsTab();
       if (tab.dataset.tab === 'backups') { showBackupsSection('list'); loadAllBackupLists(); }
       if (tab.dataset.tab === 'tokens') loadAccessTokensList();
@@ -2275,75 +2377,56 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
 
   // защита от угона доступа — видна только Супердоступу, и только у
-  // admin/superadmin (см. #screen-device-locked). Управляется здесь же, из
-  // карточки игрока, теми же кнопками, что и её выдача/сброс блокировки.
+  // admin/superadmin (см. #screen-device-trust). Одобрение НОВЫХ устройств
+  // идёт не отсюда, а из "Администрация" → "Запросы на устройства"
+  // (глобальный список на все аккаунты) — этот блок только просмотр уже
+  // одобренных устройств конкретно этого игрока и их точечный отзыв.
   function renderDeviceTokenBlock(userKey, user, role) {
     const row = document.getElementById('device-token-row');
     const eligible = canManageRoles() && (role === 'admin' || role === 'superadmin');
-    const revealEl = document.getElementById('device-token-reveal');
-    if (!eligible) { row.style.display = 'none'; revealEl.style.display = 'none'; return; }
+    if (!eligible) { row.style.display = 'none'; return; }
     row.style.display = 'flex';
-    revealEl.style.display = 'none';
     const statusEl = document.getElementById('device-token-status');
-    const issueBtn = document.getElementById('btn-device-token-issue');
-    const unlockBtn = document.getElementById('btn-device-token-unlock');
-    if (user.panelLocked) {
-      statusEl.innerHTML = '<strong style="color:var(--live);">🔒 ЗАБЛОКИРОВАН — токен аккаунта обнаружен на двух разных аккаунтах</strong>';
-      issueBtn.textContent = 'Перевыпустить токен';
-      unlockBtn.style.display = 'block';
-    } else if (user.deviceToken) {
-      statusEl.innerHTML = '<strong style="color:var(--gold);">Токен аккаунта выдан ✓</strong><br>Кнопка ниже нужна только чтобы принудительно пересоздать токен (например, если аккаунт заблокирован из-за подозрения на утечку и нужен новый).';
-      issueBtn.textContent = 'Перевыпустить токен';
-      unlockBtn.style.display = 'none';
-    } else {
-      statusEl.innerHTML = '<strong style="color:var(--live);">Токен не выдан — вход в панель для этого аккаунта запрещён</strong>, пока ты не выдашь токен вручную кнопкой ниже.';
-      issueBtn.textContent = 'Создать токен вручную';
-      unlockBtn.style.display = 'none';
+    const listEl = document.getElementById('device-token-list');
+    const devices = user.trustedDevices || {};
+    const keys = Object.keys(devices);
+    if (!keys.length) {
+      statusEl.innerHTML = user.deviceToken
+        ? 'Работает по старой схеме (общий токен на аккаунт, без привязки к устройству) — текущее устройство зачислится в новую схему автоматически при следующем входе.'
+        : '<strong style="color:var(--live);">Нет ни одного доверенного устройства — вход в панель для этого аккаунта запрещён</strong>, пока с него не запросят и не одобрят хотя бы одно (см. «Администрация» → «Запросы на устройства»).';
+      listEl.innerHTML = '';
+      return;
     }
+    statusEl.innerHTML = `<strong style="color:var(--gold);">Доверенных устройств: ${keys.length}</strong>`;
+    listEl.innerHTML = keys.map((deviceId) => {
+      const d = devices[deviceId] || {};
+      const dateStr = d.pairedAt ? new Date(d.pairedAt).toLocaleString('ru-RU') : '—';
+      return `
+      <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-top:8px;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
+          <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr}</div>
+        </div>
+        <button type="button" class="admin-revoke-trusted-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
+      </div>`;
+    }).join('');
+    listEl.querySelectorAll('.admin-revoke-trusted-device').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!canManageRoles()) return;
+        if (!confirm('Отозвать это устройство у игрока? Оно вылетит на экран входа при следующем открытии панели.')) return;
+        db.ref('users/' + userKey + '/trustedDevices/' + btn.dataset.deviceId).remove()
+          .then(() => {
+            logAction('device_trust_revoked', userKey, user.firstName, user.playerId, 'Устройство отозвано администратором');
+            return db.ref('users/' + userKey).once('value');
+          })
+          .then((snap) => {
+            const freshUser = snap.val();
+            if (freshUser) renderDeviceTokenBlock(userKey, freshUser, freshUser.role || role);
+          })
+          .catch((err) => alert('Не удалось отозвать: ' + (err.message || err)));
+      });
+    });
   }
-
-  document.getElementById('btn-device-token-issue').addEventListener('click', () => {
-    if (!foundUserKey || !canManageRoles()) return; // на случай подделки клика мимо скрытого UI
-    const uid = foundUserKey;
-    const targetName = document.getElementById('r-name').textContent;
-    const targetPlayerId = document.getElementById('r-id').textContent;
-    const token = randomToken(16);
-    db.ref('users/' + uid + '/deviceToken').set(token)
-      .then(() => db.ref('users/' + uid + '/panelLocked').remove())
-      .then(() => {
-        logAction('device_token_issued', uid, targetName, targetPlayerId, 'Выдан новый токен аккаунта');
-        return db.ref('users/' + uid).once('value');
-      })
-      .then((snap) => {
-        const freshUser = snap.val();
-        if (!freshUser) return;
-        const role = freshUser.role || (freshUser.isAdmin ? 'admin' : 'user');
-        renderDeviceTokenBlock(uid, freshUser, role);
-        const revealEl = document.getElementById('device-token-reveal');
-        revealEl.innerHTML = 'Токен аккаунта создаётся автоматически — вручную выдавать или передавать его не нужно, показано только для отладки.<br>' + escapeHtml(token);
-        revealEl.style.display = 'block';
-      })
-      .catch((err) => { console.error(err); alert('Не удалось выдать токен: ' + (err.message || err)); });
-  });
-
-  document.getElementById('btn-device-token-unlock').addEventListener('click', () => {
-    if (!foundUserKey || !canManageRoles()) return; // на случай подделки клика мимо скрытого UI
-    const uid = foundUserKey;
-    const targetName = document.getElementById('r-name').textContent;
-    const targetPlayerId = document.getElementById('r-id').textContent;
-    db.ref('users/' + uid + '/panelLocked').remove()
-      .then(() => {
-        logAction('device_token_unlocked', uid, targetName, targetPlayerId, 'Блокировка по токену аккаунта снята');
-        return db.ref('users/' + uid).once('value');
-      })
-      .then((snap) => {
-        const freshUser = snap.val();
-        if (!freshUser) return;
-        const role = freshUser.role || (freshUser.isAdmin ? 'admin' : 'user');
-        renderDeviceTokenBlock(uid, freshUser, role);
-      })
-      .catch((err) => { console.error(err); alert('Не удалось снять блокировку: ' + (err.message || err)); });
-  });
 
   function changeUserRole(userKey, newRole, oldRole) {
     if (!canManageRoles() || newRole === oldRole) return;
@@ -4323,6 +4406,75 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (adminsListRef && adminsListCb) adminsListRef.off('value', adminsListCb);
     adminsListRef = null;
     adminsListCb = null;
+  }
+
+  // ===== "Запросы на устройства" — тот же экран "Администрация", над
+  // таблицей. См. #screen-device-trust: глобальный список (не привязан к
+  // конкретному uid заранее), поэтому одобрить/отклонить запрос может
+  // любой Супердоступ, не обязательно владелец того аккаунта.
+  let deviceTrustRequestsRef = null;
+  let deviceTrustRequestsCb = null;
+
+  function detachDeviceTrustRequestsListener() {
+    if (deviceTrustRequestsRef && deviceTrustRequestsCb) deviceTrustRequestsRef.off('value', deviceTrustRequestsCb);
+    deviceTrustRequestsRef = null;
+    deviceTrustRequestsCb = null;
+  }
+
+  function loadDeviceTrustRequests() {
+    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
+    detachDeviceTrustRequestsListener();
+    deviceTrustRequestsRef = db.ref('deviceTrustRequests');
+    deviceTrustRequestsCb = deviceTrustRequestsRef.on('value', (snap) => {
+      const reqs = snap.val() || {};
+      const pending = Object.entries(reqs).filter(([, r]) => r?.status === 'pending');
+      renderDeviceTrustRequests(pending);
+    }, (err) => console.error('Запросы на устройства', err));
+  }
+
+  function renderDeviceTrustRequests(pending) {
+    const listEl = document.getElementById('device-trust-requests-list');
+    const emptyEl = document.getElementById('device-trust-requests-empty');
+    document.getElementById('device-trust-requests-title').textContent = `Запросы на устройства (${pending.length})`;
+    if (!pending.length) {
+      listEl.innerHTML = '';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    listEl.innerHTML = pending.map(([key, r]) => `
+      <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600;">🔐 ${escapeHtml(r.firstName || 'Игрок')} (${escapeHtml(r.playerId || r.uid)})</div>
+          <div style="font-size:11px; color:var(--muted);">${escapeHtml(r.device || 'Неизвестное устройство')} · ${new Date(r.requestedAt || 0).toLocaleString('ru-RU')}</div>
+        </div>
+        <button type="button" class="device-trust-approve" data-key="${key}" style="background:var(--gold); border:none; color:#0B0B0D; border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">✓ Одобрить</button>
+        <button type="button" class="device-trust-deny" data-key="${key}" style="background:none; border:1px solid var(--line); color:var(--muted); border-radius:100px; width:30px; height:30px; font-size:14px; cursor:pointer; flex-shrink:0;">✕</button>
+      </div>
+    `).join('');
+    listEl.querySelectorAll('.device-trust-approve').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!canManageRoles()) return;
+        const key = btn.dataset.key;
+        db.ref('deviceTrustRequests/' + key).once('value').then((snap) => {
+          const r = snap.val();
+          if (!r) return;
+          return db.ref('deviceTrustRequests/' + key).update({ status: 'approved' })
+            .then(() => db.ref('users/' + r.uid + '/trustedDevices/' + r.deviceId).set({
+              label: r.device || 'Устройство',
+              pairedAt: Date.now(),
+            }))
+            .then(() => logAction('device_trust_approved', r.uid, r.firstName, r.playerId, `Устройство одобрено: ${r.device || r.deviceId}`));
+        }).catch((err) => alert('Не удалось одобрить: ' + (err.message || err)));
+      });
+    });
+    listEl.querySelectorAll('.device-trust-deny').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!canManageRoles()) return;
+        db.ref('deviceTrustRequests/' + btn.dataset.key).update({ status: 'denied' })
+          .catch((err) => alert('Не удалось отклонить: ' + (err.message || err)));
+      });
+    });
   }
 
   function loadAdminsTab() {

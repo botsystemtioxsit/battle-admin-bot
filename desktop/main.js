@@ -19,10 +19,17 @@ const ADMIN_URL = 'https://botsystemtioxsit.github.io/battle-admin-bot/public/ad
 // build.linux.target) — один и тот же код, просто по-разному упакован, и
 // самообновление (см. ниже) реально работает только у AppImage. Человеку
 // со стороны это не видно вообще никак — отсюда и путаница на практике
-// (спросили "что я вообще поставил?"), поэтому формат помечаем прямо в
-// заголовке окна, а не трогаем содержимое самой панели (admin-version в
-// src/admin.html) — та строка общая для браузера/Android/десктопа и не
-// должна знать про то, как именно упакован конкретно этот клиент.
+// (спросили "что я вообще поставил?").
+//
+// Сначала это было в заголовке окна — оказалось ненадёжно: на ChromeOS
+// (Crostini) заголовок Linux-окна либо обрезается краем экрана, либо
+// вообще не показывается в развёрнутом состоянии, и разглядеть его можно
+// только через подсказку в шелфе. Поэтому метку дублируем туда, где её
+// увидят гарантированно — прямо в самой панели, рядом с "v4.5" — но НЕ
+// правкой src/admin.html (та строка общая для браузера/Android/десктопа
+// и не должна знать про упаковку конкретно этого клиента), а вставкой
+// через executeJavaScript уже после загрузки живой страницы, см.
+// createWindow ниже.
 function detectLinuxBuildKind() {
   if (process.platform !== 'linux') return null;
   if (process.env.APPIMAGE) return 'AppImage';
@@ -56,6 +63,28 @@ function createWindow() {
   });
 
   win.loadURL(ADMIN_URL);
+
+  // Значок формата сборки рядом с "v4.5" в шапке панели — см. комментарий
+  // у detectLinuxBuildKind выше про то, почему не в заголовке окна.
+  // did-finish-load, а не once после первого loadURL: панель — SPA, но
+  // мало ли (F5, восстановление после сбоя сети) — на каждую перезагрузку
+  // страницы шапка отрисовывается заново, значок нужно вставлять снова.
+  const buildKind = detectLinuxBuildKind();
+  if (buildKind) {
+    win.webContents.on('did-finish-load', () => {
+      win.webContents.executeJavaScript(`
+        (function () {
+          var v = document.getElementById('admin-version');
+          if (!v || document.getElementById('desktop-build-badge')) return;
+          var badge = document.createElement('span');
+          badge.id = 'desktop-build-badge';
+          badge.textContent = ' · ${buildKind}';
+          badge.style.cssText = 'font-size:11px; opacity:.55; font-weight:400; margin-left:2px;';
+          v.insertAdjacentElement('afterend', badge);
+        })();
+      `).catch(() => {});
+    });
+  }
 
   // Ссылки, которые сама панель захочет открыть в новой вкладке (например,
   // "Политика конфиденциальности" в игре, если на неё где-то сослались),

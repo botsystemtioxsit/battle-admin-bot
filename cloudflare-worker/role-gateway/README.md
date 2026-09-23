@@ -17,6 +17,16 @@ admin/superadmin, используя секретный ключ, зашитый
 3. Если всё сошлось — пишет `role` + `roleGrantKey` в Firebase (ключ нужен
    только чтобы пройти `database.rules.json`, сразу стирается).
 
+`POST /backup-now` с телом `{ initData }` и `POST /restore-code` с телом
+`{ initData, repo, files }` (`repo` — `index.html` или `battle-admin-bot`,
+`files` — `[{ path, base64 }]` из распакованного архива снимка) — та же
+проверка `initData` + `superadmin`, а сам вызов GitHub API идёт с
+`GITHUB_TOKEN` этого Worker'а. Используются панелью `battle-data-admin-bot`
+(`public/index.html`) вместо того, чтобы держать personal access token
+GitHub прямо в браузере оператора (`localStorage`) — раньше было так, и
+токен был виден через DevTools любому, кто физически сидит за тем же
+компьютером; теперь его знает только этот Worker.
+
 ## Разовая настройка (сделать один раз)
 
 Требуется Node.js. `wrangler` ставить отдельно не нужно — `npx` подтянет
@@ -27,6 +37,7 @@ cd cloudflare-worker/role-gateway
 npx wrangler login          # откроет браузер, авторизует Cloudflare-аккаунт
 npx wrangler secret put BOT_TOKEN         # вставить токен бота от @BotFather
 npx wrangler secret put ROLE_GRANT_KEY    # вставить значение из чата с Claude / см. ниже
+npx wrangler secret put GITHUB_TOKEN      # fine-grained PAT, см. ниже
 npx wrangler deploy
 ```
 
@@ -45,6 +56,12 @@ git) и как GitHub Actions secret `ROLE_GRANT_KEY` в репозитории
 плейсхолдер `__ROLE_GRANT_KEY__`. Значения в обоих местах должны
 совпадать один в один — при смене меняешь сразу оба, иначе выдача роли
 перестанет работать у всех.
+
+**`GITHUB_TOKEN`** — fine-grained Personal Access Token
+(github.com → Settings → Developer settings → Fine-grained tokens),
+выданный только на три репозитория: `battle-data-admin-bot` (Actions: Read
+and write), `index.html` и `battle-admin-bot` (оба — Contents: Read and
+write). Никогда не расширяй его scope на "все репозитории".
 
 ## Обновление кода Worker'а
 

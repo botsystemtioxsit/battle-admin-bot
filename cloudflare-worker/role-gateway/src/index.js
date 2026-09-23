@@ -19,6 +19,9 @@
 // Bot API, "Validating data received via the Mini App").
 
 const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
+const GITHUB_OWNER = 'botsystemtioxsit';
+const DATA_REPO = 'battle-data-admin-bot';
+const CODE_REPOS = new Set(['index.html', 'battle-admin-bot']);
 const ALLOWED_ROLES = new Set(['admin', 'superadmin']);
 const ALLOWED_STATUSES = new Set(['active', 'restricted', 'banned']);
 const STAFF_ROLES = new Set(['moderator', 'admin', 'superadmin']);
@@ -366,6 +369,87 @@ async function restoreDatabase(env, snapshot) {
   }
 }
 
+async function ghApi(path, token, options = {}) {
+  const res = await fetch(`https://api.github.com${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`${path} -> ${res.status}: ${body}`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// Запускает оба workflow бэкапа battle-data-admin-bot немедленно (кнопка
+// "Сделать бэкап сейчас"). Раньше это делал клиент напрямую, с GitHub PAT,
+// вставленным в браузере (см. переписку/аудит) — токен лежал в localStorage
+// и был виден через devtools кому угодно, кто физически сидит за тем же
+// компьютером. Теперь токен (GITHUB_TOKEN) — секрет только этого Worker'а,
+// клиент передаёт лишь initData, и Worker сам проверяет superadmin ровно
+// так же, как перед restoreDatabase ниже.
+async function triggerBackupNow(env) {
+  await Promise.all(['code-backup.yml', 'db-snapshot.yml'].map((workflow) =>
+    ghApi(`/repos/${GITHUB_OWNER}/${DATA_REPO}/actions/workflows/${workflow}/dispatches`, env.GITHUB_TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main' }),
+    })
+  ));
+}
+
+// Восстановление кода index.html/battle-admin-bot из снимка
+// (battle-data-admin-bot, вкладка "Восстановление" → "Восстановить код").
+// Клиент по-прежнему сам скачивает zip и распаковывает его через JSZip (это
+// не требует секрета — публичное чтение), но сам git-коммит (blob → tree →
+// commit → перевод ветки main) теперь делает Worker с GITHUB_TOKEN, а не
+// браузер с PAT из localStorage. files — [{ path, base64 }], уже
+// подготовленные клиентом из распакованного архива.
+async function restoreCode(env, repo, files) {
+  if (!CODE_REPOS.has(repo)) throw new Error('Неизвестный репозиторий: ' + repo);
+  if (!Array.isArray(files) || !files.length) throw new Error('Пустой список файлов');
+
+  const refData = await ghApi(`/repos/${GITHUB_OWNER}/${repo}/git/ref/heads/main`, env.GITHUB_TOKEN);
+  const latestCommitSha = refData.object.sha;
+
+  const tree = [];
+  for (const file of files) {
+    if (!file || typeof file.path !== 'string' || typeof file.base64 !== 'string') {
+      throw new Error('Некорректная запись файла в снимке');
+    }
+    const blob = await ghApi(`/repos/${GITHUB_OWNER}/${repo}/git/blobs`, env.GITHUB_TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: file.base64, encoding: 'base64' }),
+    });
+    tree.push({ path: file.path, mode: '100644', type: 'blob', sha: blob.sha });
+  }
+
+  const newTree = await ghApi(`/repos/${GITHUB_OWNER}/${repo}/git/trees`, env.GITHUB_TOKEN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tree }),
+  });
+  const newCommit = await ghApi(`/repos/${GITHUB_OWNER}/${repo}/git/commits`, env.GITHUB_TOKEN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: `Восстановление из бэкапа battle-data-admin-bot`,
+      tree: newTree.sha,
+      parents: [latestCommitSha],
+    }),
+  });
+  await ghApi(`/repos/${GITHUB_OWNER}/${repo}/git/refs/heads/main`, env.GITHUB_TOKEN, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sha: newCommit.sha, force: false }),
+  });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -384,7 +468,8 @@ export default {
       return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, roleGrantKeyMatchesRules });
     }
 
-    if (!env.BOT_TOKEN || !env.ROLE_GRANT_KEY) {
+    const needsGithubToken = url.pathname === '/backup-now' || url.pathname === '/restore-code';
+    if (!env.BOT_TOKEN || !env.ROLE_GRANT_KEY || (needsGithubToken && !env.GITHUB_TOKEN)) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
 
@@ -516,6 +601,70 @@ export default {
         await restoreDatabase(env, data);
       } catch (err) {
         return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === '/backup-now' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData } = body || {};
+      if (!initData) {
+        return jsonResponse({ error: 'нужна initData' }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      if (requesterRole !== 'superadmin') {
+        return jsonResponse({ error: 'Запускать бэкап может только superadmin' }, 403);
+      }
+
+      try {
+        await triggerBackupNow(env);
+      } catch (err) {
+        return jsonResponse({ error: 'GitHub отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === '/restore-code' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData, repo, files } = body || {};
+      if (!initData || !repo || !files) {
+        return jsonResponse({ error: 'нужны initData, repo, files' }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      if (requesterRole !== 'superadmin') {
+        return jsonResponse({ error: 'Восстанавливать код может только superadmin' }, 403);
+      }
+
+      try {
+        await restoreCode(env, repo, files);
+      } catch (err) {
+        return jsonResponse({ error: 'GitHub отказал: ' + err.message }, 502);
       }
 
       return jsonResponse({ ok: true });

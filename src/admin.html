@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Добавлен видимый баннер JS-ошибок (window.onerror/unhandledrejection) — если что-то бросит исключение на верхнем уровне скрипта (кнопки/тумблеры вдруг перестают на что-либо реагировать), теперь наверху экрана появится текст ошибки вместо молчания.">v4.5</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Новый способ входа с другого устройства — «Подключить по коду» (экран входа) вместо привязки email: устройство генерирует 6-символьный код и deviceId, владелец аккаунта вводит код в «Аккаунт» → «Подключить устройство по коду». В отличие от входа по email эта привязка отзываемая — «Аккаунт» → «Подключённые устройства» → «Отозвать» выкидывает именно это устройство, остальные способы входа не трогает.">v4.6</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -315,6 +315,29 @@
       <input type="text" class="field-input" id="login-token-input" placeholder="токен доступа" autocomplete="off" style="max-width:260px; margin-bottom:12px; text-align:center;">
       <button class="btn btn-line" id="login-token-submit-btn" style="max-width:260px; width:100%;">Войти по токену</button>
       <div class="small" id="login-token-error" style="display:none; color:var(--live); margin-top:10px;"></div>
+
+      <!-- ===== парный код устройства — альтернатива запросу по email: не
+           нужно ничего заранее привязывать. Устройство само генерирует
+           6-символьный код и deviceId (localStorage.battleDeviceId, живёт
+           только в этом браузере), владелец аккаунта вводит этот код в
+           "Аккаунт" на СВОЁМ устройстве и подтверждает — тогда именно этот
+           deviceId (и только он) записывается в
+           users/<telegramId>/trustedDevices/<deviceId>. В отличие от входа
+           по email, эта привязка живая и отзываемая: пока
+           trustedDevices/<deviceId> существует — вход работает, стёр его
+           владелец (кнопка "Отозвать" в "Аккаунт") — при следующей загрузке
+           это устройство обратно выкинет на экран входа. См. JS
+           (startDevicePairing/getOrCreateDeviceId) и проверку при чтении
+           localStorage.battleTelegramId ниже по файлу. -->
+      <div class="small" style="margin:22px 0 10px; color:var(--muted);">— или —</div>
+      <div class="small" style="margin-bottom:10px;">Подключи это устройство по коду — без email, но владелец аккаунта сможет отозвать именно это устройство в любой момент.</div>
+      <button class="btn btn-line" id="pairing-start-btn" style="max-width:260px; width:100%;">Подключить по коду</button>
+      <div id="pairing-code-block" style="display:none; margin-top:12px;">
+        <div class="small" style="margin-bottom:6px;">Код устройства — продиктуй или перешли владельцу аккаунта, он вводит его в панели («Аккаунт» → «Подключить устройство по коду»):</div>
+        <div id="pairing-code-display" style="font-size:28px; font-weight:800; letter-spacing:6px; color:var(--gold); margin-bottom:6px;"></div>
+        <div class="small" style="color:var(--muted);">Ждём подтверждения… (код истечёт через 5 минут)</div>
+      </div>
+      <div class="small" id="pairing-error" style="display:none; color:var(--live); margin-top:10px;"></div>
     </div>
   </div>
 
@@ -582,6 +605,35 @@
         <div class="section-label">Заявки на вход</div>
         <div id="account-login-requests-list"></div>
         <div class="admin-empty" id="account-login-requests-empty" style="display:none;">Нет заявок на вход</div>
+      </div>
+
+      <!-- ===== подключение устройства по коду — см. комментарий у
+           #pairing-start-btn на screen-login. В отличие от заявок на вход
+           выше, тут ничего не "прилетает" само — код нужно самому вписать
+           сюда (его показало ждущее устройство), это и есть подтверждение. -->
+      <div class="admin-card">
+        <div class="section-label">Подключить устройство по коду</div>
+        <div class="admin-empty" style="text-align:left; padding:0 0 14px;">
+          На новом устройстве в экране входа нажали «Подключить по коду» —
+          оно показало 6-символьный код. Впиши его сюда, чтобы разрешить
+          именно этому устройству входить под этим аккаунтом.
+        </div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" class="field-input" id="pairing-approve-input" placeholder="КОД" maxlength="6" style="text-transform:uppercase; text-align:center; letter-spacing:3px;">
+          <button class="btn btn-gold" id="pairing-approve-btn" style="flex-shrink:0;">Подтвердить</button>
+        </div>
+        <div class="admin-empty" id="pairing-approve-result" style="display:none; margin-top:10px; text-align:left;"></div>
+      </div>
+
+      <div class="admin-card">
+        <div class="section-label">Подключённые устройства</div>
+        <div class="admin-empty" style="text-align:left; padding:0 0 14px;">
+          Устройства, подключённые кодом выше. Отзыв убирает доступ именно
+          этому устройству — остальные (Telegram, вход по email) не
+          затрагивает.
+        </div>
+        <div id="trusted-devices-list"></div>
+        <div class="admin-empty" id="trusted-devices-empty" style="display:none;">Нет подключённых устройств</div>
       </div>
 
       <!-- ===== "Оформление" — то же самое, что "Тема"/Theme Lab в самой
@@ -1558,6 +1610,34 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     crypto.getRandomValues(arr);
     return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
   }
+
+  // ===== подключение устройства по коду (devicePairings/<код>) — см.
+  // комментарий у #pairing-start-btn на screen-login. deviceId создаётся
+  // ЛЕНИВО, только когда реально жмут "Подключить по коду" — не при
+  // каждом открытии экрана входа, иначе браузеры, которые всегда входили
+  // по email, вдруг обзавелись бы localStorage.battleDeviceId и попали бы
+  // под проверку доверенных устройств ниже по файлу без необходимости.
+  function getOrCreateDeviceId() {
+    let id = window.localStorage.getItem('battleDeviceId');
+    if (!id) {
+      id = randomToken(16);
+      window.localStorage.setItem('battleDeviceId', id);
+    }
+    return id;
+  }
+  function randomPairingCode() {
+    // без 0/O/1/I — на слух/глаз легко перепутать при диктовке кода
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const arr = new Uint8Array(6);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, (b) => alphabet[b % alphabet.length]).join('');
+  }
+  function currentDeviceLabel() {
+    const ua = navigator.userAgent || '';
+    const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Браузер';
+    const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /Linux/.test(ua) ? 'Linux' : 'ОС неизвестна';
+    return browser + ' / ' + os;
+  }
   // Реальная проверка "угона": не "занят ли слот", а "не появился ли
   // этот же токен на ДРУГОМ аккаунте". Один аккаунт свободно работает с
   // любого числа вкладок/устройств/браузеров — эксклюзивности сессий тут
@@ -1796,6 +1876,74 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     loadAccessTokenAndShowApp(raw);
   });
 
+  // ===== ожидание подтверждения парного кода — см. комментарий у
+  // getOrCreateDeviceId/#pairing-start-btn. Тот же паттерн, что и заявка на
+  // вход по email (push+.on('value')+таймаут), но ключ — сам код (его
+  // диктуют человеку, а не ищут по email), и в итоге пишется не просто
+  // battleTelegramId, а ещё и привязка именно этого deviceId в
+  // users/<telegramId>/trustedDevices — см. pairing-approve-btn ниже.
+  let pairingRef = null;
+  let pairingCb = null;
+  let pairingTimeoutId = null;
+  function stopWaitingForPairing() {
+    if (pairingRef && pairingCb) pairingRef.off('value', pairingCb);
+    if (pairingTimeoutId) clearTimeout(pairingTimeoutId);
+    pairingRef = null;
+    pairingCb = null;
+    pairingTimeoutId = null;
+  }
+  document.getElementById('pairing-start-btn')?.addEventListener('click', () => {
+    const startBtn = document.getElementById('pairing-start-btn');
+    const codeBlock = document.getElementById('pairing-code-block');
+    const codeDisplay = document.getElementById('pairing-code-display');
+    const errEl = document.getElementById('pairing-error');
+    errEl.style.display = 'none';
+    stopWaitingForPairing();
+    const deviceId = getOrCreateDeviceId();
+    const code = randomPairingCode();
+    pairingRef = db.ref('devicePairings/' + code);
+    startBtn.disabled = true;
+    pairingRef.set({ deviceId, device: currentDeviceLabel(), requestedAt: Date.now(), status: 'pending' })
+      .then(() => {
+        codeDisplay.textContent = code;
+        codeBlock.style.display = 'block';
+        startBtn.style.display = 'none';
+        pairingCb = pairingRef.on('value', (snap) => {
+          const val = snap.val();
+          if (!val || val.status === 'pending') return;
+          if (val.status === 'approved' && val.telegramId) {
+            pairingRef.remove();
+            window.localStorage.setItem('battleTelegramId', val.telegramId);
+            window.localStorage.setItem('battleDeviceId', deviceId);
+            stopWaitingForPairing();
+            loadAccountAndShowApp(val.telegramId);
+          } else if (val.status === 'denied') {
+            pairingRef.remove();
+            stopWaitingForPairing();
+            codeBlock.style.display = 'none';
+            startBtn.style.display = 'block';
+            startBtn.disabled = false;
+            errEl.textContent = 'Отклонено.';
+            errEl.style.display = 'block';
+          }
+        });
+        pairingTimeoutId = setTimeout(() => {
+          pairingRef.once('value').then((s) => { if (s.val()?.status === 'pending') pairingRef.remove(); });
+          stopWaitingForPairing();
+          codeBlock.style.display = 'none';
+          startBtn.style.display = 'block';
+          startBtn.disabled = false;
+          errEl.textContent = 'Время ожидания истекло, попробуй ещё раз.';
+          errEl.style.display = 'block';
+        }, 5 * 60 * 1000);
+      })
+      .catch((err) => {
+        startBtn.disabled = false;
+        errEl.textContent = 'Не удалось создать код: ' + (err.message || err);
+        errEl.style.display = 'block';
+      });
+  });
+
   const tgUser = tg?.initDataUnsafe?.user;
   if (tgUser) {
     loadAccountAndShowApp(String(tgUser.id));
@@ -1807,7 +1955,26 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const savedTelegramId = window.localStorage.getItem('battleTelegramId');
     const savedAccessToken = window.localStorage.getItem('battleAccessToken');
     if (savedTelegramId) {
-      loadAccountAndShowApp(savedTelegramId);
+      // battleDeviceId в localStorage бывает только у входов, прошедших
+      // через парный код (см. getOrCreateDeviceId) — обычный email-вход
+      // его не создаёт вообще, так что старые/email-сессии эта проверка
+      // не затрагивает никак. Если deviceId есть, но запись в
+      // trustedDevices пропала (владелец нажал "Отозвать") — не пускаем
+      // молча по старому battleTelegramId, а выгоняем на экран входа.
+      const savedDeviceId = window.localStorage.getItem('battleDeviceId');
+      if (savedDeviceId) {
+        db.ref('users/' + savedTelegramId + '/trustedDevices/' + savedDeviceId).once('value').then((snap) => {
+          if (snap.exists()) {
+            loadAccountAndShowApp(savedTelegramId);
+          } else {
+            window.localStorage.removeItem('battleTelegramId');
+            window.localStorage.removeItem('battleDeviceId');
+            showScreen('screen-login');
+          }
+        }).catch(() => loadAccountAndShowApp(savedTelegramId)); // сеть недоступна — не блокируем вход из-за этого
+      } else {
+        loadAccountAndShowApp(savedTelegramId);
+      }
     } else if (savedAccessToken) {
       loadAccessTokenAndShowApp(savedAccessToken);
     } else {
@@ -2776,6 +2943,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     noTelegramNoteEl.style.display = isFromTelegram ? 'none' : 'block';
 
     loadAccountLoginRequests();
+    loadTrustedDevicesList();
   }
 
   document.getElementById('btn-account-send-link')?.addEventListener('click', async () => {
@@ -2842,6 +3010,84 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         });
       });
     }).catch((err) => console.error('Заявки на вход', err));
+  }
+
+  // ===== подключение устройства по коду — подтверждение и список =====
+  // см. комментарий у #pairing-start-btn/getOrCreateDeviceId. В отличие от
+  // loadAccountLoginRequests выше, тут ничего не приходит само — код нужно
+  // самому вписать (это и есть подтверждение), поэтому это отдельная
+  // кнопка с вводом, а не список ожидающих.
+  document.getElementById('pairing-approve-btn')?.addEventListener('click', () => {
+    const input = document.getElementById('pairing-approve-input');
+    const resultEl = document.getElementById('pairing-approve-result');
+    const code = (input.value || '').trim().toUpperCase();
+    resultEl.style.display = 'block';
+    resultEl.style.color = '';
+    if (!code) { resultEl.style.color = 'var(--live)'; resultEl.textContent = 'Впиши код'; return; }
+    resultEl.textContent = 'Проверяем…';
+    const ref = db.ref('devicePairings/' + code);
+    ref.once('value').then((snap) => {
+      const data = snap.val();
+      if (!data || data.status !== 'pending') {
+        resultEl.style.color = 'var(--live)';
+        resultEl.textContent = 'Код не найден или уже использован — проверь, что переписал его без ошибок, и что он ещё не истёк (5 минут).';
+        return null;
+      }
+      return ref.update({ status: 'approved', telegramId: myTelegramId, approvedAt: Date.now() })
+        .then(() => db.ref('users/' + myTelegramId + '/trustedDevices/' + data.deviceId).set({
+          label: data.device || 'Устройство',
+          pairedAt: Date.now(),
+        }))
+        .then(() => {
+          logAction('device_paired', myTelegramId, null, null, `Подключено устройство: ${data.device || data.deviceId}`);
+          input.value = '';
+          resultEl.style.color = 'var(--gold)';
+          resultEl.textContent = '✅ Устройство подключено.';
+          loadTrustedDevicesList();
+        });
+    }).catch((err) => {
+      resultEl.style.color = 'var(--live)';
+      resultEl.textContent = 'Ошибка: ' + (err.message || err);
+    });
+  });
+
+  function loadTrustedDevicesList() {
+    const listEl = document.getElementById('trusted-devices-list');
+    const emptyEl = document.getElementById('trusted-devices-empty');
+    if (!listEl || !myTelegramId) return;
+    db.ref('users/' + myTelegramId + '/trustedDevices').once('value').then((snap) => {
+      const devices = snap.val() || {};
+      const keys = Object.keys(devices);
+      if (!keys.length) {
+        listEl.innerHTML = '';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      listEl.innerHTML = keys.map((deviceId) => {
+        const d = devices[deviceId] || {};
+        const dateStr = d.pairedAt ? new Date(d.pairedAt).toLocaleString('ru-RU') : '—';
+        return `
+        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
+            <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr}</div>
+          </div>
+          <button type="button" class="account-revoke-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
+        </div>`;
+      }).join('');
+      listEl.querySelectorAll('.account-revoke-device').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (!confirm('Отозвать доступ этому устройству? Оно вылетит на экран входа при следующем открытии панели.')) return;
+          db.ref('users/' + myTelegramId + '/trustedDevices/' + btn.dataset.deviceId).remove()
+            .then(() => {
+              logAction('device_revoked', myTelegramId, null, null, 'Устройство отозвано');
+              loadTrustedDevicesList();
+            })
+            .catch((err) => alert('Не удалось отозвать: ' + (err.message || err)));
+        });
+      });
+    }).catch((err) => console.error('Подключённые устройства', err));
   }
 
   // ===== значки-награды =====

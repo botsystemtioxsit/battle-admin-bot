@@ -15,13 +15,37 @@ const path = require('path');
 // авторизации для самого приложения не требуется.
 const ADMIN_URL = 'https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html';
 
+// Три формата сборки под Linux (AppImage/.deb/.tar.gz, см. package.json →
+// build.linux.target) — один и тот же код, просто по-разному упакован, и
+// самообновление (см. ниже) реально работает только у AppImage. Человеку
+// со стороны это не видно вообще никак — отсюда и путаница на практике
+// (спросили "что я вообще поставил?"), поэтому формат помечаем прямо в
+// заголовке окна, а не трогаем содержимое самой панели (admin-version в
+// src/admin.html) — та строка общая для браузера/Android/десктопа и не
+// должна знать про то, как именно упакован конкретно этот клиент.
+function detectLinuxBuildKind() {
+  if (process.platform !== 'linux') return null;
+  if (process.env.APPIMAGE) return 'AppImage';
+  // electron-builder ставит .deb по умолчанию в /opt/<санитизированное
+  // productName> — переносимый .tar.gz распаковывается куда угодно, так
+  // что "не /opt и не AppImage" достаточно надёжно значит именно .tar.gz.
+  if (app.getAppPath().startsWith('/opt/')) return 'deb';
+  return 'tar.gz';
+}
+
+function windowTitle() {
+  if (!app.isPackaged) return 'БАТТЛ · Админ (dev)';
+  const kind = detectLinuxBuildKind();
+  return kind ? `БАТТЛ · Админ (${kind})` : 'БАТТЛ · Админ';
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 720,
     minHeight: 560,
-    title: 'БАТТЛ · Админ',
+    title: windowTitle(),
     icon: path.join(__dirname, 'icon.png'), // значок окна/панели задач — тот же файл, что и у ярлыка меню приложений (см. install-launcher.sh) и у собранного AppImage/.deb (package.json → build.*.icon)
     autoHideMenuBar: true, // строка меню (File/Edit/...) панели не нужна — тут её просто прячем, а не убираем совсем, Alt всё ещё её покажет при необходимости
     backgroundColor: '#0b0b0f', // совпадает с тёмным фоном панели — без этого при загрузке на миг мелькает белый экран

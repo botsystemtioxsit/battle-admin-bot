@@ -1,6 +1,6 @@
 {
   "name": "battle-admin-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "Десктоп-приложение (Electron) для панели администратора БАТТЛ — окно, которое открывает живую панель без браузера.",
   "author": {

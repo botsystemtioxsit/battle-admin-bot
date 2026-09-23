@@ -273,7 +273,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Токен аккаунта» переделан: раньше это была одна строка на весь аккаунт без привязки к устройству, теперь — реально по устройствам (trustedDevices), с любым числом устройств на аккаунт. Вход для admin/superadmin без одобренного устройства теперь сам предлагает «Запросить одобрение», а не просто блокирует с просьбой идти к Супердоступу — тот одобряет запросы одним кликом в «Администрация» → «Запросы на устройства», без похода в карточку игрока. Старые аккаунты (с прежним deviceToken) не пострадают — их текущее устройство зачислится автоматически.">v4.7</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Реорганизация вкладок — было 11, стало 8 (особенно заметно на телефоне, где они оборачивались в несколько строк). Вкладка «Ассистент» убрана целиком (чат с ИИ через GitHub Actions). Ссылки на скачивание Desktop/Android/веб-версии панели, раньше зачем-то жившие внутри «Ассистента» и поэтому видные только Супердоступу, вынесены в новую вкладку «Приложения», видную всем. «Администрация», «Токены доступа», «Бэкапы» и «Система» объединены в одну вкладку «Супердоступ» с суб-навом внутри — доступ не изменился, просто меньше строк в списке вкладок.">v4.8</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -413,62 +413,27 @@
       <!-- видна всем, у кого вообще есть доступ к панели — отчёт "только
            для чтения" (см. loadStatsTab), не отдельное переключаемое право -->
       <div class="tab" data-tab="stats" id="tab-stats">Статистика</div>
-      <!-- сводная таблица прав всех модераторов/админов одним экраном, без
-           захода в карточку каждого по отдельности — тоже только
-           superadmin (см. applyRoleUI/canManageRoles); роль тут не меняют,
-           только делегируемые permissions (см. loadAdminsTab/setAdminPermission) -->
-      <div class="tab" data-tab="admins" id="tab-admins">Администрация</div>
-      <!-- "Бэкапы" объединяет список снимков/"бэкап сейчас" и
-           восстановление — суб-нав внутри .subview, см. showBackupsSection().
-           Обе части были и остаются доступны только superadmin (см.
-           applyRoleUI/canManageRoles), это либо разрушительное действие,
-           либо запись в чужой репозиторий — объединение вкладок тут не
-           меняет эффективный доступ. -->
-      <div class="tab" data-tab="backups" id="tab-backups">Бэкапы</div>
-      <!-- "Токены доступа" — отдельные, ни к какому существующему игроку
-           или Telegram-аккаунту не привязанные ключи входа (accessTokens/
-           <token> в базе). Создаёт и настраивает только Супердоступ: при
-           создании сам решает, какой именно набор вкладок этот токен
-           открывает, и отдельно — даёт ли он доступ к самой игре
-           (index.html). Вход по токену работает без approve и без
-           аккаунта вообще; отозвать (удалить) токен можно в любой момент,
-           см. renderAccessTokensList/revokeAccessToken. Никогда не
-           делегируется самим токеном — управлять токенами может только
-           настоящий superadmin. -->
-      <div class="tab" data-tab="tokens" id="tab-tokens">Токены доступа</div>
-      <!-- "Система" объединяет опасную зону (обслуживание/сброс/аварийный
-           режим, право danger) и сырой просмотр всей Firebase RTDB
-           деревом ("База данных", только superadmin) — суб-нав внутри
-           .subview, см. showDangerSection(). Вкладка видна, если есть хоть
-           одно из двух прав (canManageDanger() || canManageRoles());
-           кнопка "База данных" суб-нава скрыта не-superadmin (см.
-           applyRoleUI), а "Опасная зона" по-прежнему сама живо
-           перепроверяет role === 'superadmin' на сброс/аварийный режим
-           при каждом открытии (см. openDangerZone). -->
-      <div class="tab" data-tab="danger" id="tab-danger">Система</div>
-      <!-- "Ассистент" — чат с ИИ-ассистентом (Claude, общая логика в
-           lib/assistantCore.js) над теми же RTDB-действиями, что доступны
-           supердоступу в этой панели — банит/меняет роли/права, одобряет
-           заявки на вход/кланы/ссылки на чаты/никнеймы/бету, выдаёт значки
-           и токены доступа. Работает через GitHub Actions без стороннего
-           сайта (см. .github/workflows/assistant.yml,
-           .github/scripts/run-assistant.js): панель пишет запрос в
-           assistantRequests/<id> в Firebase, запускает workflow через
-           GitHub API (workflow_dispatch — нужен PAT, вводится в "Настройки
-           подключения") и слушает тот же путь в базе на ответ — задержка
-           обычно 20–60 секунд на запуск раннера GitHub, а не мгновенно, как
-           в обычном чате. (Есть и мгновенный вариант — api/claude-assistant.js
-           на Vercel, но он требует заводить отдельный сайт, поэтому не
-           используется по умолчанию.) Читает базу сразу сам, но каждое
-           ИЗМЕНЯЮЩЕЕ действие только ПРЕДЛАГАЕТ — ждёт явного клика
-           "Подтвердить"/"Отклонить" здесь в чате на каждое действие
-           отдельно (см. renderAssistantPendingActions ниже), реальная
-           запись в базу происходит только после этого клика. Сбросить базу
-           целиком (config/resetSecret) не может вообще ни при каких
-           обстоятельствах — для этого нет инструмента вообще, только
-           ручное подтверждение во вкладке "Система". Только superadmin, не
-           делегируется. -->
-      <div class="tab" data-tab="assistant" id="tab-assistant">Ассистент</div>
+      <!-- ссылки на скачивание Desktop/Android/веб-версии панели + инструкция
+           по установке под Linux — было засунуто внутрь бывшей вкладки
+           "Ассистент" (см. её полное удаление в истории коммитов), из-за
+           чего видно было только Супердоступу — по смыслу нужно любому, у
+           кого вообще есть доступ в панель, поэтому вынесено в отдельную
+           вкладку без ограничения по роли. -->
+      <div class="tab" data-tab="apps">Приложения</div>
+      <!-- ===== "Супердоступ" объединяет четыре бывшие отдельные вкладки —
+           "Администрация" (права + запросы на устройства), "Токены
+           доступа" (accessTokens), "Бэкапы" и "Система" (опасная зона +
+           база данных) — суб-нав внутри .subview, см. showSuperSection().
+           Все четыре и раньше были доступны только Супердоступу (см.
+           applyRoleUI/canManageRoles) — объединение вкладок тут не меняет
+           эффективный доступ, только убирает с телефона 4 лишние строки в
+           и без того длинном списке вкладок. Исключение внутри —
+           "Опасная зона": делегируется отдельным правом danger (см.
+           canManageDanger), поэтому кнопка суб-нава на неё видна и не-
+           superadmin с этим правом, а сама вкладка "Супердоступ" целиком
+           видна, если есть хоть одно из четырёх: canManageRoles() (всё,
+           кроме опасной зоны) или canManageDanger(). -->
+      <div class="tab" data-tab="super" id="tab-super">Супердоступ</div>
     </div>
 
     <!-- ===== "Пик" базы данных — только на десктопе, только superadmin.
@@ -951,22 +916,89 @@
       </div>
     </div>
 
-    <!-- ===== "Администрация" — сводная таблица прав всех модераторов/
-         админов/супердоступов одним экраном, чтобы не заходить в карточку
-         каждого по отдельности через поиск в "Панели". Живой db.ref('users')
-         .on('value') (отключается при уходе с вкладки — см. диспетчер
-         кликов по .tab), роль — только текст (менять роль по-прежнему
-         только через карточку игрока, см. changeUserRole), а чекбоксы прав
-         зовут тот же setAdminPermission(uid, key, value), что и карточка
-         (см. toggleAdminPermission), так что путь записи один и тот же. -->
-    <div class="subview" data-panel="admins" id="panel-admins">
-      <!-- ===== запросы на доверенное устройство (deviceTrustRequests) —
-           см. комментарий у #screen-device-trust. Глобальный список, не
-           привязан ни к какому конкретному uid заранее (в отличие от
-           "Заявок на вход" в "Аккаунт", которые уже знают, к кому идут) —
-           потому что любой существующий Супердоступ может одобрить любое
-           устройство любого admin/superadmin аккаунта, а не только своего
-           собственного. -->
+    <!-- ===== "Приложения" — ссылки на все способы открыть эту же панель
+         (Windows/Linux/Android/веб) + инструкция по установке под Linux.
+         Раньше жило внутри бывшей вкладки "Ассистент" (см. её удаление в
+         истории коммитов) и было из-за этого видно только Супердоступу —
+         по смыслу нужно любому, у кого вообще есть доступ в панель, поэтому
+         вынесено сюда без ограничения по роли (applyRoleUI её не трогает).
+         Windows и Linux собираются в CI (build-windows-installer.yml,
+         build-linux-installer.yml) и публикуются в ОДИН общий релиз
+         репозитория под тегом v<версия из desktop/package.json> — так нужно
+         electron-updater (см. main.js): оба таргета кладут туда свои файлы
+         обновления (latest.yml / latest-linux.yml), и desktop-приложение само
+         проверяет и тихо ставит новую версию при следующем перезапуске, без
+         похода на GitHub вручную — это касается только самой обёртки
+         (иконка/разрешения/Electron), не содержимого панели, которое и так
+         всегда живое. Ссылка ниже — .../releases/latest, отдаётся самим
+         GitHub и всегда указывает на актуальный релиз без ручного обновления
+         URL. Android собран отдельно (build-android-apk.yml) под своим
+         фиксированным тегом android-latest — WebView-обёртка, никакого
+         electron-updater там нет, обновление .apk только вручную по этой же
+         ссылке. Открываем через tg.openLink, если панель запущена внутри
+         Telegram Web App (обычный <a target="_blank"> там либо не работает,
+         либо открывает не то), иначе обычным window.open — см. openAppLink()
+         в JS. -->
+    <div class="subview" data-panel="apps" id="panel-apps">
+      <div class="admin-card" style="margin-bottom:14px;">
+        <div class="section-label">Приложения</div>
+        <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Та же панель, без входа заново — на любом устройстве. Desktop-версия (Windows/Linux) обновляется сама, без переустановки.</div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/latest" style="text-align:left;">🖥️ Desktop (Windows .exe / Linux AppImage-.deb-.tar.gz)</button>
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">📱 Android (.apk)</button>
+          <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">🌐 Открыть на сайте</button>
+        </div>
+      </div>
+
+      <button class="list-toggle" id="btn-toggle-linux-install" style="margin-bottom:14px;">
+        <span>Как установить Linux-версию (в т.ч. ChromeOS)</span>
+        <span class="chevron" id="linux-install-chevron">⌄</span>
+      </button>
+      <div id="linux-install-wrap" style="display:none; margin-bottom:14px;">
+        <div class="admin-card">
+          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">.tar.gz — самый надёжный вариант</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Ничего не ставит в систему — просто распаковка и запуск. Работает даже там, где <code>.deb</code> уже не ставится (часть свежих образов ChromeOS).</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px; color:var(--live);">На ChromeOS браузер скачивает файл в «Загрузки» самого ChromeOS — это НЕ то же самое, что <code>~/Downloads</code> внутри Linux (Crostini), и по умолчанию Linux эту папку не видит. Если <code>tar</code> пишет «No such file or directory»: открой приложение «Файлы» → «Загрузки» → правый клик по файлу → «Copy to Linux» (или проверь <code>ls /mnt/chromeos/MyFiles/Downloads/*.tar.gz</code>).</div>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>tar -xzf battle-admin-desktop-*.tar.gz
+cd battle-admin-desktop-*/
+./battle-admin-desktop
+# если пишет "error while loading shared libraries: libnss3.so...":
+sudo apt-get update
+sudo apt-get install -y libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libdrm2 libxkbcommon0
+# если apt ругается на libasound2 (переименован на новых Debian/Ubuntu):
+sudo apt-get install -y libasound2t64</code></pre>
+          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">AppImage</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Тоже без установки, но нужен FUSE — если не хватает, поставится одной командой. Из трёх форматов только AppImage умеет обновляться сам (autoUpdater поддерживает его на Linux официально).</div>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>chmod +x *.AppImage
+./*.AppImage
+# если ругается на FUSE:
+sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></pre>
+          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">.deb (обычная установка)</div>
+          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0;"><code>sudo dpkg -i battle-admin-desktop_*_amd64.deb</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== "Супердоступ" объединяет четыре бывшие отдельные вкладки —
+         "Администрация" (права + запросы на устройства), "Токены доступа"
+         (accessTokens), "Бэкапы" и "Система" (опасная зона + база данных) —
+         суб-нав переключает, какая из четырёх секций видна (см.
+         showSuperSection() в JS). Все четыре и раньше были доступны только
+         Супердоступу (см. applyRoleUI/canManageRoles), кроме "Опасной зоны"
+         внутри "Системы" — та делегируется отдельным правом danger, поэтому
+         кнопка "Система" суб-нава видна и не-superadmin с этим правом.
+         "Бэкапы" и "Система" сохранили свои собственные внутренние суб-навы
+         (список/восстановление; опасная зона/база данных) без изменений —
+         просто теперь на один уровень вложенности глубже. -->
+    <div class="subview" data-panel="super" id="panel-super">
+      <div class="subnav">
+        <button class="btn btn-gold" id="super-sub-admins">Администрация</button>
+        <button class="btn btn-line" id="super-sub-tokens">Токены доступа</button>
+        <button class="btn btn-line" id="super-sub-backups">Бэкапы</button>
+        <button class="btn btn-line" id="super-sub-danger">Система</button>
+      </div>
+
+      <div id="super-section-admins">
       <div class="admin-card">
         <div class="section-label" id="device-trust-requests-title">Запросы на устройства</div>
         <div id="device-trust-requests-list"></div>
@@ -976,25 +1008,28 @@
       <div class="section-label" id="admins-title">Модераторы и админы</div>
       <div id="admins-table-list"></div>
       <div class="admin-empty" id="admins-table-empty" style="display:none;">Пока нет ни одного модератора/админа</div>
-    </div>
+      </div>
 
-    <!-- ===== "Бэкапы" — объединяет список снимков/"бэкап сейчас" и
-         восстановление, портировано из battle-data-admin-bot (тот же
-         GitHub-токен, тот же lock/unlock-механизм). Суб-нав, см.
-         showBackupsSection(). Доступ только superadmin (canManageRoles) —
-         не делегируется, как и "База данных" в "Системе": здесь либо
-         запись в чужой репозиторий, либо необратимое восстановление.
+      <div id="super-section-tokens" style="display:none;">
+      <div class="section-label">Новый токен</div>
+      <div class="admin-card">
+        <div class="row">
+          <input type="text" class="field-input" id="new-token-label" placeholder="Метка (для себя, необязательно)">
+        </div>
+        <div class="admin-empty" style="text-align:left; padding:4px 0 8px;">Выбери, что этот токен открывает — можно отметить сколько угодно пунктов сразу:</div>
+        <div id="new-token-perm-toggles" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;"></div>
+        <button class="btn btn-gold" id="btn-create-access-token">+ Создать токен</button>
+        <div style="display:none; margin-top:10px;" id="new-token-reveal-wrap">
+          <div class="admin-empty" style="text-align:left; padding:0 0 6px;">Токен создан — скопируй и передай его человеку сейчас, второй раз он не покажется:</div>
+          <div class="token-reveal" id="new-token-reveal"></div>
+        </div>
+      </div>
 
-         Отличие от источника: battle-data-admin-bot становится ПРИВАТНЫМ
-         репозиторием — листинг снимков и их скачивание больше не работают
-         анонимно, поэтому оба идут через Contents API с Bearer-токеном
-         (см. ghApi/listBackupsAuthed в JS), а не через публичный
-         raw.githubusercontent.com / неавторизованный contents-запрос, как
-         раньше. Восстановление БД по-прежнему без токена — пишет прямо в
-         открытую на запись RTDB. Восстановление кода (index.html,
-         battle-admin-bot) тоже токеном же, эти два репозитория остаются
-         публичными. -->
-    <div class="subview" data-panel="backups" id="panel-backups">
+      <div class="section-label">Выданные токены</div>
+      <div id="access-tokens-list" class="admin-empty">Загрузка…</div>
+      </div>
+
+      <div id="super-section-backups" style="display:none;">
       <div class="subnav">
         <button class="btn btn-gold" id="backups-sub-list">Список и бэкап сейчас</button>
         <button class="btn btn-line" id="backups-sub-restore">Восстановление</button>
@@ -1088,179 +1123,9 @@
           <div class="status-line" id="restore-code-status"></div>
         </div>
       </div>
-    </div>
-
-    <!-- ===== "Токены доступа" — см. комментарий у #tab-tokens. Только
-         superadmin, не делегируется. -->
-    <div class="subview" data-panel="tokens" id="panel-tokens">
-      <div class="section-label">Новый токен</div>
-      <div class="admin-card">
-        <div class="row">
-          <input type="text" class="field-input" id="new-token-label" placeholder="Метка (для себя, необязательно)">
-        </div>
-        <div class="admin-empty" style="text-align:left; padding:4px 0 8px;">Выбери, что этот токен открывает — можно отметить сколько угодно пунктов сразу:</div>
-        <div id="new-token-perm-toggles" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;"></div>
-        <button class="btn btn-gold" id="btn-create-access-token">+ Создать токен</button>
-        <div style="display:none; margin-top:10px;" id="new-token-reveal-wrap">
-          <div class="admin-empty" style="text-align:left; padding:0 0 6px;">Токен создан — скопируй и передай его человеку сейчас, второй раз он не покажется:</div>
-          <div class="token-reveal" id="new-token-reveal"></div>
-        </div>
       </div>
 
-      <div class="section-label">Выданные токены</div>
-      <div id="access-tokens-list" class="admin-empty">Загрузка…</div>
-    </div>
-
-    <!-- ===== "Ассистент" — см. комментарий у #tab-assistant. Только
-         superadmin, не делегируется. -->
-    <div class="subview" data-panel="assistant" id="panel-assistant">
-      <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Читает базу свободно, а любое изменяющее действие (бан, роль, права, заявки, значки, токены) только предлагает — карточкой с кнопками «Подтвердить»/«Отклонить» ниже, реальная запись происходит только после твоего клика. Сбросить базу целиком не может вообще — это только вручную во вкладке «Система».</div>
-
-      <!-- ===== "Приложения" — ссылки на все способы открыть эту же панель,
-           собранные тут, чтобы не логиниться заново на сайте каждый раз:
-           открыл бота в Телеграме → сразу отсюда скачал нужный файл.
-           Windows и Linux собираются в CI (build-windows-installer.yml,
-           build-linux-installer.yml) и публикуются в ОДИН общий релиз
-           репозитория под тегом v<версия из desktop/package.json> — так
-           нужно electron-updater (см. main.js): оба таргета кладут туда
-           свои файлы обновления (latest.yml / latest-linux.yml), и
-           desktop-приложение само проверяет и тихо ставит новую версию
-           при следующем перезапуске, без похода на GitHub вручную — это
-           касается только самой обёртки (иконка/разрешения/Electron), не
-           содержимого панели, которое и так всегда живое. Ссылка ниже —
-           .../releases/latest, отдаётся самим GitHub и всегда указывает
-           на актуальный релиз без ручного обновления URL. Android собран
-           отдельно (build-android-apk.yml) под своим фиксированным тегом
-           android-latest — WebView-обёртка, никакого electron-updater там
-           нет, обновление .apk только вручную по этой же ссылке. Открываем
-           через tg.openLink, если панель запущена внутри Telegram Web App
-           (обычный <a target="_blank"> там либо не работает, либо
-           открывает не то), иначе обычным window.open — см. openAppLink()
-           в JS. -->
-      <div class="admin-card" style="margin-bottom:14px;">
-        <div class="section-label">Приложения</div>
-        <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Та же панель, без входа заново — на любом устройстве. Desktop-версия (Windows/Linux) обновляется сама, без переустановки.</div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/latest" style="text-align:left;">🖥️ Desktop (Windows .exe / Linux AppImage-.deb-.tar.gz)</button>
-          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">📱 Android (.apk)</button>
-          <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">🌐 Открыть на сайте</button>
-        </div>
-      </div>
-
-      <!-- ===== инструкция по установке Linux-сборки прямо в приложении —
-           не только в README/тексте релиза на GitHub, чтобы не заставлять
-           уходить с панели за командами. .tar.gz — приоритет, т.к. часть
-           свежих образов ChromeOS Crostini больше не ставит .deb; AppImage
-           не ставит ничего в систему, но требует FUSE. -->
-      <button class="list-toggle" id="btn-toggle-linux-install" style="margin-bottom:14px;">
-        <span>Как установить Linux-версию (в т.ч. ChromeOS)</span>
-        <span class="chevron" id="linux-install-chevron">⌄</span>
-      </button>
-      <div id="linux-install-wrap" style="display:none; margin-bottom:14px;">
-        <div class="admin-card">
-          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">.tar.gz — самый надёжный вариант</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Ничего не ставит в систему — просто распаковка и запуск. Работает даже там, где <code>.deb</code> уже не ставится (часть свежих образов ChromeOS).</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 8px; color:var(--live);">На ChromeOS браузер скачивает файл в «Загрузки» самого ChromeOS — это НЕ то же самое, что <code>~/Downloads</code> внутри Linux (Crostini), и по умолчанию Linux эту папку не видит. Если <code>tar</code> пишет «No such file or directory»: открой приложение «Файлы» → «Загрузки» → правый клик по файлу → «Copy to Linux» (или проверь <code>ls /mnt/chromeos/MyFiles/Downloads/*.tar.gz</code>).</div>
-          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>tar -xzf battle-admin-desktop-*.tar.gz
-cd battle-admin-desktop-*/
-./battle-admin-desktop
-# если пишет "error while loading shared libraries: libnss3.so...":
-sudo apt-get update
-sudo apt-get install -y libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libgtk-3-0 libgbm1 libasound2 libxss1 libxtst6 libdrm2 libxkbcommon0
-# если apt ругается на libasound2 (переименован на новых Debian/Ubuntu):
-sudo apt-get install -y libasound2t64</code></pre>
-          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">AppImage</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Тоже без установки, но нужен FUSE — если не хватает, поставится одной командой. Из трёх форматов только AppImage умеет обновляться сам (autoUpdater поддерживает его на Linux официально).</div>
-          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0 0 14px;"><code>chmod +x *.AppImage
-./*.AppImage
-# если ругается на FUSE:
-sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></pre>
-          <div style="font-size:13px; font-weight:600; margin-bottom:4px;">.deb (обычная установка)</div>
-          <pre style="background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:12px; overflow-x:auto; margin:0;"><code>sudo dpkg -i battle-admin-desktop_*_amd64.deb</code></pre>
-        </div>
-      </div>
-
-      <button class="list-toggle" id="btn-toggle-assistant-settings">
-        <span>Настройки подключения</span>
-        <span class="chevron" id="assistant-settings-chevron">⌄</span>
-      </button>
-      <div id="assistant-settings-wrap" style="display:none; margin-bottom:14px;">
-        <div class="admin-card">
-          <div class="admin-empty" style="text-align:left; padding:0 0 8px;">Ответ приходит через GitHub Actions (без стороннего сайта, но с задержкой в 20–60 секунд на запуск). Нужен один fine-grained PAT (GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens) с доступом к репозиторию <code>battle-admin-bot</code> и правом «Actions: Read and write» — и один раз добавленный секрет в Settings → Secrets and variables → Actions этого же репозитория: <code>ANTHROPIC_API_KEY</code> для модели Claude (console.anthropic.com) и/или <code>GEMINI_API_KEY</code> для модели Gemini (бесплатно, без карты — aistudio.google.com). Модель выбирается прямо в чате перед первым сообщением.</div>
-          <div class="row">
-            <input type="password" class="field-input" id="assistant-github-token-input" placeholder="GitHub-токен (Actions: Read and write)">
-          </div>
-          <button class="btn btn-line" id="btn-save-assistant-settings" style="width:100%;">Сохранить</button>
-        </div>
-      </div>
-
-      <div id="assistant-chat-log" style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px; max-height:50vh; overflow-y:auto;"></div>
-
-      <div class="admin-card" style="display:flex; flex-direction:column; gap:8px;">
-        <!-- Выбор модели фиксируется на весь чат — переключить можно только
-             через "Новый чат" (см. JS): формат хода/ответа у Anthropic и
-             Gemini разный, менять модель посреди диалога не поддерживается. -->
-        <div class="row" style="align-items:center;">
-          <label class="admin-empty" style="padding:0; white-space:nowrap;">Модель:</label>
-          <select class="field-input" id="assistant-provider-select" style="flex:1;">
-            <option value="anthropic">Claude</option>
-            <option value="gemini">Gemini (бесплатно)</option>
-          </select>
-        </div>
-        <textarea id="assistant-input" rows="3" placeholder="Например: разбери свежие ошибки за сегодня и забань того, кто явно спамит" style="width:100%; resize:vertical; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px 12px; color:var(--text); font-size:13px; font-family:inherit;"></textarea>
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-gold" id="btn-assistant-send" style="flex:1;">Отправить</button>
-          <button class="btn btn-line" id="btn-assistant-clear">Новый чат</button>
-        </div>
-        <div class="status-line" id="assistant-status"></div>
-      </div>
-    </div>
-
-    <!-- ===== "Система" — объединяет "Опасную зону" (сброс перед
-         бета-тестом, обслуживание, закрытый бета-тест, аварийный режим —
-         название вкладки нарочно нейтральное) и "База данных" (сырой
-         просмотр всей Firebase RTDB деревом). Суб-нав, см.
-         showDangerSection(). Вкладка видна всем, у кого есть хоть одно из
-         двух прав — canManageDanger() (делегируемое право "danger") или
-         canManageRoles() (superadmin, для "База данных").
-
-         "Опасная зона": воспользоваться получится только у тех, у кого
-         включено делегируемое право "danger" (см. canManageDanger,
-         applyRoleUI). Право проверяется заново живым запросом к базе при
-         КАЖДОМ открытии вкладки (см. openDangerZone в JS), а не один раз
-         при входе в панель — так если право/роль сменили, пока вкладка
-         панели просто лежала открытой, старый доступ не сохранится.
-
-         Два самых необратимых/критических действия внутри неё — полный
-         сброс истории и аварийный режим — НЕ делегируются вообще, несмотря
-         на "danger": они дополнительно жёстко требуют role === 'superadmin'
-         (см. guard на кнопках btn-danger-reset/toggle-emergency ниже) — у
-         делегированного admin с включённым "danger" эти два блока либо
-         скрыты, либо показывают явное сообщение вместо органов управления.
-
-         Второй барьер сброса — секретный пароль, хранится в самой базе
-         (config/resetSecret). Задать/сменить его можно прямо здесь, в
-         панели (форма "Задать новый пароль" ниже). Пароль одноразовый:
-         после каждого УСПЕШНОГО сброса он автоматически стирается из базы
-         вместе с остальными данными.
-
-         "База данных": верхний уровень получаем дёшево через REST
-         ?shallow=true (просто список ключей, без выкачивания всей базы
-         разом); открытая ветка потом уже живая — db.ref(path).on('value')
-         — и при реальном изменении внутри неё коротко подсвечивается
-         зелёным (см. renderDbNode/diffDbValues в JS). Один запрос на ветку
-         верхнего уровня, а не десятки. Доступ только superadmin
-         (canManageRoles) — не делегируется, как и "Бэкапы": здесь виден
-         буквально весь контент базы, включая привязанные email
-         (emailLogins). Кнопка суб-нава скрыта не-superadmin (см.
-         applyRoleUI), а живые слушатели веток отключаются и при уходе на
-         другую вкладку целиком (см. диспетчер кликов по .tab), и при
-         переключении на секцию "Опасная зона" внутри этой же вкладки (см.
-         showDangerSection) — не тянуть трафик за экраном, которого никто
-         не видит, ровно тот же принцип, что был у отдельной вкладки. -->
-
-    <div class="subview" data-panel="danger" id="panel-danger">
-
+      <div id="super-section-danger" style="display:none;">
       <div class="subnav">
         <button class="btn btn-gold" id="danger-sub-zone">Опасная зона</button>
         <button class="btn btn-line" id="danger-sub-db" style="display:none;">База данных</button>
@@ -1451,7 +1316,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         </div>
       </div>
 
+      </div>
     </div>
+
 
   </div>
 
@@ -2167,30 +2034,60 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       tab.classList.add('active');
       document.querySelectorAll('[data-panel]').forEach(p => p.classList.remove('active'));
       document.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');
-      // ушли с "Системы" (которая теперь включает "База данных") на другую
-      // вкладку — снимаем все живые слушатели веток, незачем продолжать
-      // тянуть трафик за экраном, который никто не видит
-      if (tab.dataset.tab !== 'danger') detachAllDbLiveBranches(dbTreeState);
-      // "Администрация" держит свой живой db.ref('users').on('value') только
-      // пока вкладка открыта — снимаем его при уходе на любую другую вкладку,
-      // как и с живыми ветками "База данных" выше.
-      if (tab.dataset.tab !== 'admins') { detachAdminsLiveListener(); detachDeviceTrustRequestsListener(); }
-      // "Токены доступа" держит свой живой db.ref('accessTokens').on('value')
-      // только пока вкладка открыта — тот же принцип, что и у "Администрации".
-      if (tab.dataset.tab !== 'tokens') detachAccessTokensListener();
+      // ушли со "Супердоступа" (объединяет бывшие "Администрация"/"Токены
+      // доступа"/"Бэкапы"/"Система", см. #panel-super) на другую вкладку —
+      // снимаем ВСЕ живые слушатели, которые могли остаться от любой из
+      // четырёх секций, независимо от того, какая из них была открыта
+      // последней: незачем продолжать тянуть трафик за экраном, который
+      // никто не видит (все detach-функции безопасно ничего не делают,
+      // если слушатель и так не был подключён).
+      if (tab.dataset.tab !== 'super') {
+        detachAllDbLiveBranches(dbTreeState);
+        detachAdminsLiveListener();
+        detachDeviceTrustRequestsListener();
+        detachAccessTokensListener();
+      }
       if (tab.dataset.tab === 'logs') showLogsSection('actions');
       if (tab.dataset.tab === 'event') loadEventsAdminList();
       if (tab.dataset.tab === 'beta') showBetaSection(canManageBeta() ? 'beta' : 'clans');
-      if (tab.dataset.tab === 'admins') { loadAdminsTab(); loadDeviceTrustRequests(); }
       if (tab.dataset.tab === 'stats') loadStatsTab();
-      if (tab.dataset.tab === 'backups') { showBackupsSection('list'); loadAllBackupLists(); }
-      if (tab.dataset.tab === 'tokens') loadAccessTokensList();
-      if (tab.dataset.tab === 'assistant') loadAssistantSettingsUI();
-      if (tab.dataset.tab === 'danger') { showDangerSection('zone'); openDangerZone(); }
+      if (tab.dataset.tab === 'super') showSuperSection(defaultSuperSection());
       if (tab.dataset.tab === 'account' && myTelegramId) db.ref('users/' + myTelegramId).once('value').then((s) => renderAccountTab(s.val() || {}));
       updateDbPeekVisibility();
     });
   });
+
+  // ===== суб-нав "Супердоступа" (см. #panel-super в HTML) — переключает,
+  // какая из четырёх бывших отдельных вкладок сейчас видна. Снимает все
+  // живые слушатели при КАЖДОМ переключении (не только при уходе со всей
+  // вкладки "Супердоступ" целиком, см. диспетчер выше) — так, переходя,
+  // скажем, из "Администрация" в "Токены доступа", не тянем впустую живой
+  // db.ref('users').on('value') от первой секции.
+  function defaultSuperSection() {
+    if (canManageRoles()) return 'admins';
+    if (myTokenBackupsAccess) return 'backups';
+    if (canManageDanger()) return 'danger';
+    return 'admins';
+  }
+  function showSuperSection(section) {
+    detachAllDbLiveBranches(dbTreeState);
+    detachAdminsLiveListener();
+    detachDeviceTrustRequestsListener();
+    detachAccessTokensListener();
+    ['admins', 'tokens', 'backups', 'danger'].forEach((s) => {
+      document.getElementById('super-sub-' + s).className = 'btn ' + (s === section ? 'btn-gold' : 'btn-line');
+      document.getElementById('super-section-' + s).style.display = s === section ? 'block' : 'none';
+    });
+    if (section === 'admins') { loadAdminsTab(); loadDeviceTrustRequests(); }
+    else if (section === 'tokens') { loadAccessTokensList(); }
+    else if (section === 'backups') { showBackupsSection('list'); loadAllBackupLists(); }
+    else if (section === 'danger') { showDangerSection('zone'); openDangerZone(); }
+    updateDbPeekVisibility();
+  }
+  document.getElementById('super-sub-admins').addEventListener('click', () => showSuperSection('admins'));
+  document.getElementById('super-sub-tokens').addEventListener('click', () => showSuperSection('tokens'));
+  document.getElementById('super-sub-backups').addEventListener('click', () => showSuperSection('backups'));
+  document.getElementById('super-sub-danger').addEventListener('click', () => showSuperSection('danger'));
 
   // ===== суб-навы объединённых вкладок (см. CLAUDE.md/PR-описание задачи
   // "merge related tabs") — переключают, какая из двух секций внутри
@@ -2670,278 +2567,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     chevron.textContent = isOpen ? '⌄' : '⌃';
   });
 
-  // ===== "Ассистент" — см. комментарий у #tab-assistant в HTML. =====
-  // Клиент хранит всю историю переписки (формат сообщений Anthropic Messages
-  // API) в assistantMessages и пишет её целиком в assistantRequests/<id>
-  // при каждом запросе — сам GitHub Actions run ничего не помнит между
-  // запусками, вся "сессия" держится либо в этой переменной (пока вкладка
-  // открыта), либо в самой записи в Firebase. "Новый чат" просто обнуляет
-  // этот массив и текущий requestId.
-  let assistantMessages = [];
-  let assistantBusy = false;
-  let assistantCurrentRequestId = null;
-  // Зафиксирован на весь чат по первому сообщению (см. sendAssistantMessage)
-  // — формат хода у Anthropic ({role, content}) и Gemini ({role, parts})
-  // разный, посреди диалога не переключается.
-  let assistantProvider = 'anthropic';
-
-  document.getElementById('btn-toggle-assistant-settings')?.addEventListener('click', () => {
-    const wrap = document.getElementById('assistant-settings-wrap');
-    const chevron = document.getElementById('assistant-settings-chevron');
-    const isOpen = wrap.style.display !== 'none';
-    wrap.style.display = isOpen ? 'none' : 'block';
-    chevron.textContent = isOpen ? '⌄' : '⌃';
-  });
-
-  function loadAssistantSettingsUI() {
-    document.getElementById('assistant-github-token-input').value = window.localStorage.getItem('assistantGithubToken') || '';
-  }
-  document.getElementById('btn-save-assistant-settings')?.addEventListener('click', () => {
-    window.localStorage.setItem('assistantGithubToken', document.getElementById('assistant-github-token-input').value.trim());
-    document.getElementById('assistant-status').textContent = 'Сохранено.';
-  });
-
-  const ASSISTANT_GH_OWNER = 'botsystemtioxsit';
-  const ASSISTANT_GH_REPO = 'battle-admin-bot';
-  function assistantGithubToken() {
-    return window.localStorage.getItem('assistantGithubToken') || '';
-  }
-
-  // Запускает .github/workflows/assistant.yml через GitHub API — тот же
-  // приём "Сделать бэкап сейчас" из battle-data-admin-bot, только тут
-  // запускает не бэкап, а обработку одного assistantRequests/<requestId>
-  // (см. .github/scripts/run-assistant.js). Ответ придёт не отсюда, а
-  // через db.ref('assistantRequests/'+requestId).on('value', ...), см.
-  // waitForAssistantResult ниже — сам workflow ничего не возвращает по
-  // HTTP, только пишет результат в Firebase.
-  async function triggerAssistantWorkflow(requestId) {
-    const token = assistantGithubToken();
-    if (!token) throw new Error('Впиши GitHub-токен в "Настройки подключения" вкладки.');
-    const res = await fetch(`https://api.github.com/repos/${ASSISTANT_GH_OWNER}/${ASSISTANT_GH_REPO}/actions/workflows/assistant.yml/dispatches`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ref: 'main', inputs: { requestId } }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GitHub API ${res.status}: ${text}`);
-    }
-  }
-
-  let assistantWaitRef = null;
-  let assistantWaitCb = null;
-  let assistantWaitTimeout = null;
-  function stopWaitingForAssistant() {
-    if (assistantWaitRef && assistantWaitCb) assistantWaitRef.off('value', assistantWaitCb);
-    if (assistantWaitTimeout) clearTimeout(assistantWaitTimeout);
-    assistantWaitRef = null;
-    assistantWaitCb = null;
-    assistantWaitTimeout = null;
-  }
-  function waitForAssistantResult(requestId) {
-    return new Promise((resolve, reject) => {
-      stopWaitingForAssistant();
-      assistantWaitRef = db.ref('assistantRequests/' + requestId);
-      assistantWaitCb = assistantWaitRef.on('value', (snap) => {
-        const val = snap.val();
-        if (!val || val.status === 'queued') return;
-        stopWaitingForAssistant();
-        if (val.status === 'error') { reject(new Error(val.error || 'Ошибка выполнения ассистента')); return; }
-        resolve(val.result);
-      });
-      assistantWaitTimeout = setTimeout(() => {
-        stopWaitingForAssistant();
-        reject(new Error('Не дождались ответа за 3 минуты — проверь вкладку Actions в репозитории battle-admin-bot: возможно, workflow не запустился (неверный токен/права) или упал с ошибкой.'));
-      }, 3 * 60 * 1000);
-    });
-  }
-
-  function appendAssistantLogRow(role, text) {
-    const log = document.getElementById('assistant-chat-log');
-    const row = document.createElement('div');
-    row.style.cssText = role === 'user'
-      ? 'align-self:flex-end; max-width:85%; background:var(--gold); color:#1a1200; border-radius:12px; padding:8px 12px; font-size:13px; white-space:pre-wrap;'
-      : 'align-self:flex-start; max-width:85%; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:8px 12px; font-size:13px; white-space:pre-wrap;';
-    row.textContent = text;
-    log.appendChild(row);
-    log.scrollTop = log.scrollHeight;
-    return row;
-  }
-
-  function appendAssistantActionsRow(actions) {
-    if (!actions || !actions.length) return;
-    const log = document.getElementById('assistant-chat-log');
-    const row = document.createElement('div');
-    row.style.cssText = 'align-self:flex-start; max-width:85%; font-size:11.5px; color:var(--muted); border-left:2px solid var(--line); padding:4px 0 4px 10px;';
-    row.innerHTML = actions.map((a) => {
-      if (a.result && a.result.rejectedByHuman) return `❌ ${escapeHtml(a.tool)} — отклонено оператором`;
-      const ok = a.result && a.result.ok !== false;
-      return `${ok ? '✅' : '⚠️'} ${escapeHtml(a.tool)}(${escapeHtml(JSON.stringify(a.input || {}))})${!ok && a.result?.error ? ' — ' + escapeHtml(a.result.error) : ''}`;
-    }).join('<br>');
-    log.appendChild(row);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  // Каждое изменяющее действие (всё, кроме read_db — см. api/claude-assistant.js
-  // и READ_ONLY_TOOL_NAMES там) сервер только ПРЕДЛАГАЕТ — сюда приходит
-  // список pendingActions, и реально в базу оно уйдёт только после клика
-  // "Подтвердить" здесь, на каждое действие отдельно. Пока не решены ВСЕ
-  // действия одного хода ассистента — запрос на продолжение не уходит,
-  // Anthropic API требует ответ на все tool_use одного хода разом.
-  let assistantPendingDecisions = null;
-  let assistantPendingCount = 0;
-
-  function renderAssistantPendingActions(pendingActions) {
-    if (!pendingActions || !pendingActions.length) return;
-    assistantPendingDecisions = {};
-    assistantPendingCount = pendingActions.length;
-    const log = document.getElementById('assistant-chat-log');
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'align-self:stretch; display:flex; flex-direction:column; gap:8px;';
-    pendingActions.forEach((pa) => {
-      const card = document.createElement('div');
-      card.className = 'admin-card';
-      card.style.padding = '10px 12px';
-      const infoEl = document.createElement('div');
-      infoEl.style.cssText = 'font-size:12.5px; margin-bottom:8px;';
-      infoEl.innerHTML = `<strong>${escapeHtml(pa.tool)}</strong><br><span style="color:var(--muted); word-break:break-all;">${escapeHtml(JSON.stringify(pa.input || {}))}</span>`;
-      const btnRow = document.createElement('div');
-      btnRow.style.cssText = 'display:flex; gap:8px;';
-      const approveBtn = document.createElement('button');
-      approveBtn.className = 'btn btn-gold';
-      approveBtn.style.flex = '1';
-      approveBtn.textContent = '✅ Подтвердить';
-      const rejectBtn = document.createElement('button');
-      rejectBtn.className = 'btn btn-line';
-      rejectBtn.style.flex = '1';
-      rejectBtn.textContent = '❌ Отклонить';
-      const decide = (decision) => {
-        assistantPendingDecisions[pa.tool_use_id] = decision;
-        approveBtn.disabled = true;
-        rejectBtn.disabled = true;
-        if (decision === 'approved') { approveBtn.textContent = '✅ Подтверждено'; rejectBtn.style.display = 'none'; }
-        else { rejectBtn.textContent = '❌ Отклонено'; approveBtn.style.display = 'none'; }
-        maybeSubmitAssistantDecisions();
-      };
-      approveBtn.addEventListener('click', () => decide('approved'));
-      rejectBtn.addEventListener('click', () => decide('rejected'));
-      btnRow.appendChild(approveBtn);
-      btnRow.appendChild(rejectBtn);
-      card.appendChild(infoEl);
-      card.appendChild(btnRow);
-      wrap.appendChild(card);
-    });
-    log.appendChild(wrap);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  function maybeSubmitAssistantDecisions() {
-    if (!assistantPendingDecisions) return;
-    if (Object.keys(assistantPendingDecisions).length < assistantPendingCount) return;
-    const decisions = assistantPendingDecisions;
-    assistantPendingDecisions = null;
-    submitAssistantDecisions(decisions);
-  }
-
-  function handleAssistantResponse(data) {
-    assistantMessages = data.messages || assistantMessages;
-    appendAssistantActionsRow(data.actions);
-    if (data.reply) appendAssistantLogRow('assistant', data.reply);
-    if (data.awaitingConfirmation) renderAssistantPendingActions(data.pendingActions);
-    else if (!data.reply) appendAssistantLogRow('assistant', '(пустой ответ)');
-  }
-
-  async function submitAssistantDecisions(decisions) {
-    if (!canManageRoles() || !assistantCurrentRequestId) return; // на случай подделки клика мимо скрытой вкладки
-    const statusEl = document.getElementById('assistant-status');
-    const sendBtn = document.getElementById('btn-assistant-send');
-    assistantBusy = true;
-    sendBtn.disabled = true;
-    statusEl.style.color = 'var(--muted)';
-    statusEl.textContent = 'Запускаю выполнение подтверждённых действий…';
-    try {
-      await db.ref('assistantRequests/' + assistantCurrentRequestId).update({
-        messages: assistantMessages, decisions, status: 'queued', updatedAt: Date.now(),
-      });
-      await triggerAssistantWorkflow(assistantCurrentRequestId);
-      statusEl.textContent = 'Жду ответа от GitHub Actions (обычно 20–60 секунд)…';
-      const result = await waitForAssistantResult(assistantCurrentRequestId);
-      statusEl.textContent = '';
-      handleAssistantResponse(result);
-    } catch (err) {
-      console.error('assistant error:', err);
-      statusEl.style.color = 'var(--live)';
-      statusEl.textContent = 'Ошибка: ' + (err.message || err);
-    } finally {
-      assistantBusy = false;
-      sendBtn.disabled = false;
-    }
-  }
-
-  async function sendAssistantMessage() {
-    if (!canManageRoles() || assistantBusy) return; // на случай подделки клика мимо скрытой вкладки
-    const input = document.getElementById('assistant-input');
-    const text = input.value.trim();
-    if (!text) return;
-    const statusEl = document.getElementById('assistant-status');
-    const sendBtn = document.getElementById('btn-assistant-send');
-    const providerSelect = document.getElementById('assistant-provider-select');
-    if (assistantMessages.length === 0) {
-      assistantProvider = providerSelect.value;
-      providerSelect.disabled = true;
-    }
-    assistantMessages.push(assistantProvider === 'gemini' ? { role: 'user', parts: [{ text }] } : { role: 'user', content: text });
-    appendAssistantLogRow('user', text);
-    input.value = '';
-    assistantBusy = true;
-    sendBtn.disabled = true;
-    sendBtn.textContent = 'Запускаю…';
-    statusEl.style.color = 'var(--muted)';
-    statusEl.textContent = '';
-    try {
-      const requestId = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-      assistantCurrentRequestId = requestId;
-      await db.ref('assistantRequests/' + requestId).set({
-        messages: assistantMessages, decisions: null, status: 'queued', createdAt: Date.now(), provider: assistantProvider,
-      });
-      await triggerAssistantWorkflow(requestId);
-      sendBtn.textContent = 'Думает…';
-      statusEl.textContent = 'Жду ответа от GitHub Actions (обычно 20–60 секунд)…';
-      const result = await waitForAssistantResult(requestId);
-      statusEl.textContent = '';
-      handleAssistantResponse(result);
-    } catch (err) {
-      console.error('assistant error:', err);
-      statusEl.style.color = 'var(--live)';
-      statusEl.textContent = 'Ошибка: ' + (err.message || err);
-    } finally {
-      assistantBusy = false;
-      sendBtn.disabled = false;
-      sendBtn.textContent = 'Отправить';
-    }
-  }
-  document.getElementById('btn-assistant-send')?.addEventListener('click', sendAssistantMessage);
-  document.getElementById('assistant-input')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAssistantMessage(); }
-  });
-  document.getElementById('btn-assistant-clear')?.addEventListener('click', () => {
-    if (assistantBusy) return;
-    stopWaitingForAssistant();
-    assistantMessages = [];
-    assistantPendingDecisions = null;
-    assistantCurrentRequestId = null;
-    assistantProvider = 'anthropic';
-    const providerSelect = document.getElementById('assistant-provider-select');
-    providerSelect.disabled = false;
-    providerSelect.value = 'anthropic';
-    document.getElementById('assistant-chat-log').innerHTML = '';
-    document.getElementById('assistant-status').textContent = '';
-  });
-
   // Кланы — тоже отдельное переключаемое право (canManageClans), а не
   // часть какого-то тира; вкладку для тех, у кого его нет, просто прячем
   // целиком, а не показываем заблокированной — как и с "Ивент" ниже.
@@ -2959,50 +2584,37 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (betaSubBetaBtn) betaSubBetaBtn.style.display = canManageBeta() ? '' : 'none';
     const betaSubClansBtn = document.getElementById('beta-sub-clans');
     if (betaSubClansBtn) betaSubClansBtn.style.display = canManageClans() ? '' : 'none';
-    // "Администрация" — сводная таблица прав, только superadmin. Токен
-    // доступа НИКОГДА не даёт этого права, даже теоретически — myRole у
-    // такой сессии всегда 'token', а не 'superadmin', см. canManageRoles().
-    const adminsTab = document.querySelector('.tab[data-tab="admins"]');
-    if (adminsTab) adminsTab.style.display = canManageRoles() ? '' : 'none';
-    // "Токены доступа" — управлять токенами (создавать/отзывать) может
-    // только настоящий superadmin, никогда сам токен — иначе токен смог бы
-    // выдавать себе (или кому угодно) новые токены бесконтрольно.
-    const tokensTab = document.querySelector('.tab[data-tab="tokens"]');
-    if (tokensTab) tokensTab.style.display = canManageRoles() ? '' : 'none';
-    // "Ассистент" — предлагает те же изменяющие действия, что доступны
-    // superadmin (исполняются только после подтверждения человеком, см.
-    // #tab-assistant), поэтому доступ к самому чату — тоже только
-    // superadmin, никогда через токен доступа (иначе токен получил бы
-    // фактически безграничный доступ руками ассистента в обход своих же
-    // явно выбранных прав).
-    const assistantTab = document.querySelector('.tab[data-tab="assistant"]');
-    if (assistantTab) assistantTab.style.display = canManageRoles() ? '' : 'none';
+    // "Супердоступ" объединяет 4 бывшие вкладки (см. комментарий у
+    // #panel-super в HTML) — сама вкладка видна, если есть право хотя бы на
+    // ОДНУ из четырёх секций, а видимость каждой кнопки суб-нава внутри
+    // по-прежнему подчиняется своему исходному условию (объединение вкладок
+    // тут не расширяет доступ к самому контенту).
+    const superTab = document.querySelector('.tab[data-tab="super"]');
+    const superAdminsVisible = canManageRoles();
+    const superTokensVisible = canManageRoles();
+    const superBackupsVisible = canManageRoles() || myTokenBackupsAccess;
+    const superDangerVisible = canManageDanger() || canManageRoles();
+    if (superTab) superTab.style.display = (superAdminsVisible || superTokensVisible || superBackupsVisible || superDangerVisible) ? '' : 'none';
+    const superSubAdminsBtn = document.getElementById('super-sub-admins');
+    if (superSubAdminsBtn) superSubAdminsBtn.style.display = superAdminsVisible ? '' : 'none';
+    const superSubTokensBtn = document.getElementById('super-sub-tokens');
+    if (superSubTokensBtn) superSubTokensBtn.style.display = superTokensVisible ? '' : 'none';
+    const superSubBackupsBtn = document.getElementById('super-sub-backups');
+    if (superSubBackupsBtn) superSubBackupsBtn.style.display = superBackupsVisible ? '' : 'none';
+    const superSubDangerBtn = document.getElementById('super-sub-danger');
+    if (superSubDangerBtn) superSubDangerBtn.style.display = superDangerVisible ? '' : 'none';
     // "Аккаунт" — привязка email/заявки на вход — не имеет смысла для
     // сессии по токену доступа, там нет ни email, ни реального аккаунта.
     const accountTab = document.querySelector('.tab[data-tab="account"]');
     if (accountTab) accountTab.style.display = myIsAccessToken ? 'none' : '';
-    // "Бэкапы" — обычному admin/moderator не делегируется (см. CLAUDE.md
-    // этого репозитория и battle-data-admin-bot), только superadmin. Токену
-    // доступа, в отличие от обычного admin, ЭТО право может выдать
-    // superadmin явно при создании токена (см. #tab-tokens/backups в
-    // ACCESS_TOKEN_PERMISSION_DEFS) — сознательное расширение только для
-    // этого механизма, не для делегируемых прав обычных админов.
-    const backupsTab = document.querySelector('.tab[data-tab="backups"]');
-    if (backupsTab) backupsTab.style.display = (canManageRoles() || myTokenBackupsAccess) ? '' : 'none';
-    // "Система" — объединяет "Опасную зону" (делегируемое право danger, см.
-    // PERMISSION_DEFS) и "База данных" (сырой доступ буквально ко всей базе,
-    // включая emailLogins с почтами игроков — только superadmin, без
-    // промежуточных прав, как раньше у отдельной вкладки "База"). Вкладка
-    // видна, если есть хоть одно из двух прав; кнопка "База данных"
-    // суб-нава скрыта не-superadmin, а сама секция и её loadDatabaseTree()
-    // дополнительно самопроверяются на случай подделки клика.
-    const dangerTab = document.querySelector('.tab[data-tab="danger"]');
-    if (dangerTab) dangerTab.style.display = (canManageDanger() || canManageRoles()) ? '' : 'none';
+    // "База данных" внутри секции "Система" (см. #panel-super) — сырой
+    // доступ буквально ко всей базе, включая emailLogins с почтами игроков,
+    // только superadmin, без промежуточных прав.
     const dangerSubDbBtn = document.getElementById('danger-sub-db');
     if (dangerSubDbBtn) dangerSubDbBtn.style.display = canManageRoles() ? '' : 'none';
-    // "Статистика" — отчёт "только для чтения", виден всем, у кого вообще
-    // есть доступ к панели (moderator/admin/superadmin), без отдельного
-    // переключаемого права — намеренно не трогаем её display здесь.
+    // "Статистика"/"Приложения" — видны всем, у кого вообще есть доступ к
+    // панели (moderator/admin/superadmin), без отдельного переключаемого
+    // права — намеренно не трогаем их display здесь.
     updateDbPeekVisibility();
   }
 
@@ -4367,8 +3979,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // дерево дважды на экране, а редактируемая версия и так занимает всю
   // правую колонку.
   function isViewingDbEditor() {
-    const dangerTab = document.querySelector('.tab[data-tab="danger"]');
-    if (!dangerTab || !dangerTab.classList.contains('active')) return false;
+    const superTab = document.querySelector('.tab[data-tab="super"]');
+    if (!superTab || !superTab.classList.contains('active')) return false;
+    const dangerSection = document.getElementById('super-section-danger');
+    if (!dangerSection || dangerSection.style.display === 'none') return false;
     const dbBtn = document.getElementById('danger-sub-db');
     return !!dbBtn && dbBtn.classList.contains('btn-gold');
   }

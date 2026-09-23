@@ -2,14 +2,9 @@ package com.tioxsit.battleadmin;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.DownloadManager;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.util.Log;
@@ -20,7 +15,6 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
-import android.widget.Toast;
 
 import org.json.JSONObject;
 
@@ -44,9 +38,6 @@ public class MainActivity extends Activity {
     private static final String APK_URL = RELEASE_BASE + "app-debug.apk";
 
     private WebView webView;
-    private long updateDownloadId = -1;
-    private boolean awaitingInstallPermission = false;
-    private BroadcastReceiver downloadReceiver;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -131,7 +122,6 @@ public class MainActivity extends Activity {
         setContentView(webView);
         webView.loadUrl(ADMIN_URL);
 
-        registerDownloadReceiver();
         checkForUpdate();
     }
 
@@ -144,39 +134,25 @@ public class MainActivity extends Activity {
         return super.onKeyDown(keyCode, event);
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Пользователь мог только что вернуться из системных настроек, где
-        // разрешал "Установка неизвестных приложений" для этого пакета (см.
-        // startUpdateFlow ниже) — если так, докручиваем обновление, вместо
-        // того чтобы заставлять его снова находить и жать "Обновить".
-        if (awaitingInstallPermission && canInstallPackages()) {
-            awaitingInstallPermission = false;
-            enqueueApkDownload();
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (downloadReceiver != null) {
-            try {
-                unregisterReceiver(downloadReceiver);
-            } catch (IllegalArgumentException ignored) {
-                // уже отвязан — например, если onDestroy вызван до того, как
-                // onCreate успел зарегистрировать ресивер
-            }
-        }
-    }
-
-    // ===== Автообновление =====
+    // ===== Проверка обновлений =====
     // Тот же принцип, что у Telegram и у desktop-сборки этой же панели
     // (electron-updater, см. ../desktop): при старте молча сверяем свою
     // версию с той, что реально задеплоена (version.json из последнего
     // релиза android-latest), и только если она новее — показываем диалог.
     // Ничего не показываем при сетевой ошибке или отсутствии обновления —
     // это фоновая проверка, а не то, ради чего человек открыл панель.
+    //
+    // Раньше по кнопке "Обновить" приложение само скачивало APK через
+    // DownloadManager и сразу открывало системный установщик — для этого
+    // требовалось разрешение REQUEST_INSTALL_PACKAGES. Google Play Защита
+    // распознала именно эту связку (сторонний неизвестный APK, который сам
+    // умеет ставить другие APK) как поведение трояна-дроппера и стала
+    // блокировать установку самого приложения целиком — то есть "починка"
+    // сделала APK менее устанавливаемым, а не более удобным. Поэтому теперь
+    // по кнопке просто открывается ссылка на APK в браузере — установку
+    // человек, как и раньше при самой первой установке, довершает сам
+    // тапом по скачанному файлу. Разрешение REQUEST_INSTALL_PACKAGES само
+    // приложение больше не запрашивает и не использует.
 
     private void checkForUpdate() {
         new Thread(() -> {
@@ -216,98 +192,11 @@ public class MainActivity extends Activity {
         if (isFinishing()) return;
         new AlertDialog.Builder(this)
                 .setTitle("Доступно обновление")
-                .setMessage("Вышла версия " + remoteVersionName + ". Скачать и установить сейчас?")
-                .setPositiveButton("Обновить", (dialog, which) -> startUpdateFlow())
+                .setMessage("Вышла версия " + remoteVersionName + ". Открыть страницу скачивания?")
+                .setPositiveButton("Обновить", (dialog, which) ->
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(APK_URL))))
                 .setNegativeButton("Позже", null)
                 .setCancelable(true)
                 .show();
-    }
-
-    private boolean canInstallPackages() {
-        // canRequestPackageInstalls появился только в API 26 — до него
-        // источник "неизвестных приложений" был одним общим тумблером в
-        // системных настройках, а не разрешением на конкретный пакет, и
-        // проверить его программно нельзя было в принципе, поэтому ниже
-        // просто пробуем ставить и ловим ошибку, если что-то не так.
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.O
-                || getPackageManager().canRequestPackageInstalls();
-    }
-
-    private void startUpdateFlow() {
-        if (!canInstallPackages()) {
-            awaitingInstallPermission = true;
-            Toast.makeText(this, "Разреши установку из этого приложения и вернись назад", Toast.LENGTH_LONG).show();
-            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:" + getPackageName()));
-            try {
-                startActivity(intent);
-            } catch (Exception e) {
-                awaitingInstallPermission = false;
-                Toast.makeText(this, "Не удалось открыть настройки установки", Toast.LENGTH_SHORT).show();
-            }
-            return;
-        }
-        enqueueApkDownload();
-    }
-
-    private static final String UPDATE_APK_FILENAME = "battle-admin-update.apk";
-
-    private void enqueueApkDownload() {
-        DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-        if (dm == null) return;
-        // Одноимённый файл от прошлого обновления мог остаться на диске —
-        // DownloadManager на новый enqueue() в тот же путь у части версий
-        // Android бросает исключение вместо того, чтобы просто перезаписать.
-        java.io.File dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
-        if (dir != null) {
-            java.io.File existing = new java.io.File(dir, UPDATE_APK_FILENAME);
-            if (existing.exists()) existing.delete();
-        }
-        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(APK_URL))
-                .setTitle("БАТТЛ Админ — обновление")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setDestinationInExternalFilesDir(this, android.os.Environment.DIRECTORY_DOWNLOADS, UPDATE_APK_FILENAME)
-                .setMimeType("application/vnd.android.package-archive");
-        updateDownloadId = dm.enqueue(request);
-        Toast.makeText(this, "Скачивается обновление…", Toast.LENGTH_SHORT).show();
-    }
-
-    private void registerDownloadReceiver() {
-        downloadReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                long finishedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
-                if (finishedId == -1 || finishedId != updateDownloadId) return;
-                promptInstall(finishedId);
-            }
-        };
-        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(downloadReceiver, filter);
-        }
-    }
-
-    private void promptInstall(long downloadId) {
-        DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-        if (dm == null) return;
-        // DownloadManager сам отдаёт content:// URI на скачанный файл — не
-        // нужен собственный FileProvider/зависимость androidx.core: начиная
-        // с API 24 (наш minSdk) голый file:// URI в install-интенте всё
-        // равно бросил бы FileUriExposedException.
-        Uri apkUri = dm.getUriForDownloadedFile(downloadId);
-        if (apkUri == null) {
-            Toast.makeText(this, "Файл обновления не найден после скачивания", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Intent installIntent = new Intent(Intent.ACTION_VIEW)
-                .setDataAndType(apkUri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        try {
-            startActivity(installIntent);
-        } catch (Exception e) {
-            Toast.makeText(this, "Не удалось запустить установку: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
     }
 }

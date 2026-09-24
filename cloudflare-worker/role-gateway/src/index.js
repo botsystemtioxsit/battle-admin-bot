@@ -483,6 +483,30 @@ async function triggerBackupNow(env) {
 // commit → перевод ветки main) теперь делает Worker с GITHUB_TOKEN, а не
 // браузер с PAT из localStorage. files — [{ path, base64 }], уже
 // подготовленные клиентом из распакованного архива.
+// base64 -> сырые байты. atob здесь безопасен (Cloudflare Workers его
+// поддерживают как стандартный global), нужен только для попытки
+// распознать текст ниже — сам base64 в блоб для бинарных файлов уходит
+// как есть, без промежуточного перекодирования.
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// Пытается прочитать байты как валидный UTF-8 текст без NUL — если
+// получилось, файл точно текстовый и его можно положить в дерево как есть
+// (см. ниже, зачем это вообще нужно).
+function tryDecodeUtf8Text(bytes) {
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+  return text.includes('\u0000') ? null : text;
+}
+
 async function restoreCode(env, repo, files) {
   if (!CODE_REPOS.has(repo)) throw new Error('Неизвестный репозиторий: ' + repo);
   if (!Array.isArray(files) || !files.length) throw new Error('Пустой список файлов');
@@ -490,10 +514,25 @@ async function restoreCode(env, repo, files) {
   const refData = await ghApi(`/repos/${GITHUB_OWNER}/${repo}/git/ref/heads/main`, env.GITHUB_TOKEN);
   const latestCommitSha = refData.object.sha;
 
+  // Cloudflare Worker ограничивает число исходящих запросов за один вызов
+  // (subrequests) — раньше здесь был один POST /git/blobs НА КАЖДЫЙ файл
+  // снимка, и уже на полусотне файлов (весь код-репозиторий — это как раз
+  // столько) Worker падал с "Too many subrequests by single Worker
+  // invocation", не дойдя даже до сборки дерева. Git Trees API умеет
+  // принимать содержимое текстового файла прямо в записи дерева (поле
+  // content вместо sha) — GitHub создаёт блоб сам, без отдельного запроса
+  // сюда. Поэтому отдельный blob-запрos теперь нужен только для файлов,
+  // которые не получилось прочитать как чистый UTF-8-текст (картинки и
+  // прочий бинарник) — в этом репозитории таких единицы, а не полсотни.
   const tree = [];
   for (const file of files) {
     if (!file || typeof file.path !== 'string' || typeof file.base64 !== 'string') {
       throw new Error('Некорректная запись файла в снимке');
+    }
+    const text = tryDecodeUtf8Text(base64ToBytes(file.base64));
+    if (text !== null) {
+      tree.push({ path: file.path, mode: '100644', type: 'blob', content: text });
+      continue;
     }
     const blob = await ghApi(`/repos/${GITHUB_OWNER}/${repo}/git/blobs`, env.GITHUB_TOKEN, {
       method: 'POST',

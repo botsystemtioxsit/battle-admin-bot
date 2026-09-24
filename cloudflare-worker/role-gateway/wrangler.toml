@@ -1,6 +1,0 @@
-name = "battle-role-gateway"
-main = "src/index.js"
-compatibility_date = "2024-11-01"
-
-# Секреты (BOT_TOKEN, ROLE_GRANT_KEY) сюда НЕ пишутся — задаются отдельно
-# командой `wrangler secret put`, см. README.md рядом.

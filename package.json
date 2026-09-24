@@ -4,9 +4,6 @@
   "private": true,
   "description": "Telegram-бот, открывающий Mini App админ-панель для проекта БАТТЛ",
   "main": "bot/index.js",
-  "bin": {
-    "battle-admin": "cli/battle-admin.js"
-  },
   "engines": {
     "node": ">=18"
   },

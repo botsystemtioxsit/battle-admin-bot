@@ -1,0 +1,66 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-android-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Accept Android SDK licenses and ensure required packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+
+      - name: Read version
+        id: ver
+        run: |
+          echo "name=$(grep -o 'versionName "[^"]*"' android/app/build.gradle | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+          echo "code=$(grep -o 'versionCode [0-9]*' android/app/build.gradle | grep -o '[0-9]*')" >> "$GITHUB_OUTPUT"
+
+      # Машиночитаемая версия для автообновления внутри самого приложения
+      # (MainActivity.checkForUpdate скачивает именно этот файл и сравнивает
+      # versionCode со своим собственным) — раньше номер версии был только
+      # в тексте релиза, откуда его пришлось бы парсить регулярками.
+      # Публикуется тем же фиксированным тегом android-latest, что и сам
+      # APK, поэтому у него всегда один и тот же стабильный URL.
+      - name: Write version.json
+        run: |
+          cat > android/version.json <<EOF
+          {"versionCode": ${{ steps.ver.outputs.code }}, "versionName": "${{ steps.ver.outputs.name }}"}
+          EOF
+
+      - name: Publish GitHub Release with APK attached
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: БАТТЛ Админ (Android) — последняя сборка
+          files: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/version.json
+          body: |
+            Версия ${{ steps.ver.outputs.name }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}.
+            Этот релиз всегда переиспользуется под фиксированным тегом `android-latest` — ссылка на него не меняется между сборками.

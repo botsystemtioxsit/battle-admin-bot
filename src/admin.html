@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бэкапы: у каждого снимка в списке появилась кнопка «Удалить» — старые снимки теперь можно чистить прямо из панели, без похода в GitHub руками (тот же role-gateway, новый /delete-backup). Заодно починил restoreCode — раньше он падал на репозиториях с полусотней+ файлов ('Too many subrequests by single Worker invocation', лимит Cloudflare Workers): текстовые файлы теперь идут в дерево коммита без отдельного запроса на блоб, отдельные запросы остались только для бинарников.">v5.1</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Временные токены: и при одобрении запроса на устройство («Администрация» → «Запросы на устройства»), и при создании токена доступа («Токены доступа») теперь можно выбрать срок действия (24ч/7д/30д или бессрочно) вместо только «навсегда». Истёкшее устройство/токен просто перестаёт пускать в панель — проверка на устройство идёт и на клиенте (UX), и в role-gateway (реальная граница для бэкапов), проверка на access-токен — только на клиенте, как и весь остальной вход по токену.">v5.2</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1015,6 +1015,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         </div>
         <div class="admin-empty" style="text-align:left; padding:4px 0 8px;">Выбери, что этот токен открывает — можно отметить сколько угодно пунктов сразу:</div>
         <div id="new-token-perm-toggles" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;"></div>
+        <div class="row" style="margin-bottom:12px;">
+          <select class="field-input" id="new-token-duration">
+            <option value="">Бессрочный</option>
+            <option value="3600000">На 1 час</option>
+            <option value="86400000">На 24 часа</option>
+            <option value="604800000">На 7 дней</option>
+            <option value="2592000000">На 30 дней</option>
+          </select>
+        </div>
         <button class="btn btn-gold" id="btn-create-access-token">+ Создать токен</button>
         <div style="display:none; margin-top:10px;" id="new-token-reveal-wrap">
           <div class="admin-empty" style="text-align:left; padding:0 0 6px;">Токен создан — скопируй и передай его человеку сейчас, второй раз он не покажется:</div>
@@ -1637,9 +1646,16 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (protectedRoles.includes(role)) {
           const deviceId = getOrCreateDeviceId();
           db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceId).once('value').then((trustSnap) => {
-            if (trustSnap.exists()) {
+            const trust = trustSnap.val();
+            if (trust && (!trust.expiresAt || trust.expiresAt > Date.now())) {
               proceedToApp();
               return;
+            }
+            if (trust && trust.expiresAt && trust.expiresAt <= Date.now()) {
+              // срок временного доверия истёк — убираем протухшую запись и
+              // просим одобрить заново, как будто устройство никогда не
+              // было доверено
+              db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceId).remove().catch(() => {});
             }
             // совместимость со старой схемой (единый deviceToken на
             // аккаунт, без привязки к устройству) — зачисляем ТЕКУЩЕЕ
@@ -1692,6 +1708,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (!data) {
         window.localStorage.removeItem('battleAccessToken');
         document.getElementById('denied-text').textContent = 'Токен доступа не найден или уже отозван Супердоступом.';
+        showScreen('screen-denied');
+        return;
+      }
+      if (data.expiresAt && data.expiresAt <= Date.now()) {
+        window.localStorage.removeItem('battleAccessToken');
+        document.getElementById('denied-text').textContent = 'Срок действия этого токена истёк — обратись к Супердоступу за новым.';
         showScreen('screen-denied');
         return;
       }
@@ -2272,7 +2294,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-top:8px;">
         <div style="flex:1; min-width:0;">
           <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
-          <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr}</div>
+          <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${formatExpiry(d.expiresAt)}</div>
         </div>
         <button type="button" class="admin-revoke-trusted-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
       </div>`;
@@ -2446,7 +2468,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
     const btn = document.getElementById('btn-create-access-token');
     const labelInput = document.getElementById('new-token-label');
+    const durationSel = document.getElementById('new-token-duration');
     const label = labelInput.value.trim();
+    const durationMs = durationSel && durationSel.value ? Number(durationSel.value) : null;
     btn.disabled = true;
     try {
       const token = randomToken(20);
@@ -2455,12 +2479,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         createdAt: Date.now(),
         createdBy: myTelegramId || '—',
         permissions: { ...newTokenPerms },
+        expiresAt: durationMs ? Date.now() + durationMs : null,
       });
       const grantedLabels = ACCESS_TOKEN_PERMISSION_DEFS.filter((p) => newTokenPerms[p.id]).map((p) => p.label);
-      logAction('access_token_created', token, label || '—', '—', grantedLabels.join(', ') || 'без прав');
+      const durationLabel = durationSel ? durationSel.selectedOptions[0].textContent : 'Бессрочный';
+      logAction('access_token_created', token, label || '—', '—', `${grantedLabels.join(', ') || 'без прав'} (${durationLabel})`);
       document.getElementById('new-token-reveal-wrap').style.display = 'block';
       document.getElementById('new-token-reveal').textContent = token;
       labelInput.value = '';
+      if (durationSel) durationSel.value = '';
       newTokenPerms = {};
       renderNewTokenToggles();
     } catch (err) {
@@ -2504,7 +2531,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         <div class="admin-card" style="margin-bottom:10px;">
           <div class="r-name" style="font-size:14px;">${escapeHtml(data.label || 'Без метки')}</div>
           <div class="token-reveal" style="margin:6px 0;">${escapeHtml(token)}</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 6px;">Создан: ${dateStr}<br>Открывает: ${activeLabels.length ? escapeHtml(activeLabels.join(', ')) : 'ничего (пустой токен)'}</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 6px;">Создан: ${dateStr} · ${formatExpiry(data.expiresAt)}<br>Открывает: ${activeLabels.length ? escapeHtml(activeLabels.join(', ')) : 'ничего (пустой токен)'}</div>
           <button class="btn btn-live btn-revoke-token" data-token="${escapeHtml(token)}" style="width:100%;">Отозвать (удалить)</button>
         </div>
       `;
@@ -2736,7 +2763,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
           <div style="flex:1; min-width:0;">
             <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
-            <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr}</div>
+            <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${formatExpiry(d.expiresAt)}</div>
           </div>
           <button type="button" class="account-revoke-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
         </div>`;
@@ -3312,6 +3339,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // напрямую небезопасно.
   function escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Общий формат для срока действия временных device/access-токенов (см.
+  // "Запросы на устройства" и "Токены доступа") — null/отсутствие поля
+  // значит "навсегда", как и было раньше до появления временных токенов.
+  function formatExpiry(expiresAt) {
+    if (!expiresAt) return 'бессрочно';
+    if (expiresAt <= Date.now()) return '<span style="color:var(--live);">истёк</span>';
+    return 'до ' + new Date(expiresAt).toLocaleString('ru-RU');
   }
 
   const CLAN_POLICY_LABELS_ADMIN = { open: 'Открытый', code: 'По коду', request: 'По заявке' };
@@ -4027,11 +4063,17 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }
     emptyEl.style.display = 'none';
     listEl.innerHTML = pending.map(([key, r]) => `
-      <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+      <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
         <div style="flex:1; min-width:0;">
           <div style="font-size:13px; font-weight:600;">🔐 ${escapeHtml(r.firstName || 'Игрок')} (${escapeHtml(r.playerId || r.uid)})</div>
           <div style="font-size:11px; color:var(--muted);">${escapeHtml(r.device || 'Неизвестное устройство')} · ${new Date(r.requestedAt || 0).toLocaleString('ru-RU')}</div>
         </div>
+        <select class="device-trust-duration field-input" data-key="${key}" style="width:auto; padding:6px 8px; font-size:12px;">
+          <option value="">Навсегда</option>
+          <option value="86400000">На 24 часа</option>
+          <option value="604800000">На 7 дней</option>
+          <option value="2592000000">На 30 дней</option>
+        </select>
         <button type="button" class="device-trust-approve" data-key="${key}" style="background:var(--gold); border:none; color:#0B0B0D; border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">✓ Одобрить</button>
         <button type="button" class="device-trust-deny" data-key="${key}" style="background:none; border:1px solid var(--line); color:var(--muted); border-radius:100px; width:30px; height:30px; font-size:14px; cursor:pointer; flex-shrink:0;">✕</button>
       </div>
@@ -4040,6 +4082,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       btn.addEventListener('click', () => {
         if (!canManageRoles()) return;
         const key = btn.dataset.key;
+        const durationSel = listEl.querySelector(`select.device-trust-duration[data-key="${key}"]`);
+        const durationMs = durationSel && durationSel.value ? Number(durationSel.value) : null;
+        const durationLabel = durationSel ? durationSel.selectedOptions[0].textContent : 'Навсегда';
         db.ref('deviceTrustRequests/' + key).once('value').then((snap) => {
           const r = snap.val();
           if (!r) return;
@@ -4047,8 +4092,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
             .then(() => db.ref('users/' + r.uid + '/trustedDevices/' + r.deviceId).set({
               label: r.device || 'Устройство',
               pairedAt: Date.now(),
+              expiresAt: durationMs ? Date.now() + durationMs : null,
             }))
-            .then(() => logAction('device_trust_approved', r.uid, r.firstName, r.playerId, `Устройство одобрено: ${r.device || r.deviceId}`));
+            .then(() => logAction('device_trust_approved', r.uid, r.firstName, r.playerId, `Устройство одобрено (${durationLabel}): ${r.device || r.deviceId}`));
         }).catch((err) => alert('Не удалось одобрить: ' + (err.message || err)));
       });
     });

@@ -135,6 +135,15 @@ async function verifyDeviceTrust(telegramId, deviceId) {
   if (!res.ok) return { ok: false, reason: 'Firebase недоступен' };
   const val = await res.json();
   if (!val) return { ok: false, reason: 'устройство не доверено' };
+  // Временное доверие (см. "Запросы на устройства" в admin.html) —
+  // expiresAt задаётся при одобрении, null/отсутствует значит "навсегда".
+  // Проверяем именно здесь, а не только на клиенте: клиентская проверка —
+  // это просто UX (не пускает на устаревший экран раньше времени), а этот
+  // Worker — единственное место, которое реально решает, можно ли трогать
+  // GITHUB_TOKEN.
+  if (val.expiresAt && val.expiresAt <= Date.now()) {
+    return { ok: false, reason: 'доверие устройству истекло' };
+  }
   return { ok: true, userId: String(telegramId) };
 }
 

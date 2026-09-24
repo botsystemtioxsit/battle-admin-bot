@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Бэкапы» → новый тумблер «Автобэкапы» — выключает ежедневный запуск снимков по расписанию в battle-data-admin-bot (config/backupsDisabled, проверяется в самих workflow'ах перед плановым запуском). «Сделать бэкап сейчас» по-прежнему работает всегда — это осознанное разовое действие, а не автосохранение, которое просили отключить.">v5.4</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Убрал отдельный тумблер «Автобэкапы» — теперь его переключает сам «Аварийный режим» («Система»): включил — заодно остановил ежедневные снимки (config/backupsDisabled), выключил — заодно возобновил. Одно действие вместо двух, раз оба означают одно и то же \"проект пока не трогаем\".">v5.5</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1043,15 +1043,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
       <div id="backups-section-list">
         <div class="admin-card">
-          <div class="section-label">Автобэкапы</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Выключает только ЕЖЕДНЕВНЫЙ запуск по расписанию в battle-data-admin-bot (свежий код + свежий снимок базы). «Сделать бэкап сейчас» ниже продолжит работать в любом случае — это осознанное разовое действие, а не автосохранение.</div>
-          <div class="toggle-row" id="toggle-auto-backups">
-            <div class="toggle-check"></div>
-            <div class="toggle-label">Включены</div>
-          </div>
-        </div>
-
-        <div class="admin-card">
           <div class="section-label">Сделать бэкап сейчас</div>
           <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Запускает оба workflow в battle-data-admin-bot немедленно (обычно они срабатывают раз в сутки по расписанию): свежий zip кода index.html и battle-admin-bot, свежий JSON всей базы. Снимок появится в списках ниже примерно через 1–2 минуты — тогда обнови страницу.</div>
           <button class="btn btn-gold" id="backup-now-btn" style="width:100%;">Сделать бэкап сейчас</button>
@@ -1284,11 +1275,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
             <div class="admin-empty" style="text-align:left; padding:0 0 10px; color:var(--live);">
               Полностью закрывает и основной сайт, и эту панель — для ВСЕХ,
               включая Админов и Модераторов. Доступ сохранится только у
-              Супердоступа. Используй при реальном инциденте (взлом, утечка
-              данных, критический баг — не для обычных обновлений, для них
-              есть режим обслуживания выше) — либо чтобы законсервировать
-              проект на неопределённый срок: снять тумблер и вернуть всем
-              доступ можно в любой момент, ничего не удаляется и не
+              Супердоступа, и заодно остановятся ежедневные автобэкапы в
+              battle-data-admin-bot — отдельно их выключать не нужно.
+              Используй при реальном инциденте (взлом, утечка данных,
+              критический баг — не для обычных обновлений, для них есть
+              режим обслуживания выше) — либо чтобы законсервировать проект
+              на неопределённый срок: снять тумблер и вернуть всем доступ
+              (и автобэкапы) можно в любой момент, ничего не удаляется и не
               ломается необратимо.
             </div>
             <div class="toggle-row" id="toggle-emergency">
@@ -2978,7 +2971,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     maintenance_message_changed: 'Сообщение режима обслуживания изменено',
     emergency_lockdown_toggled: 'Аварийный режим переключён',
     emergency_message_changed: 'Сообщение аварийного режима изменено',
-    auto_backups_toggled: 'Автобэкапы переключены',
     closed_beta_toggled: 'Закрытый бета-тест переключён',
     beta_application_approved: 'Заявка на бета-тест одобрена',
     beta_application_rejected: 'Заявка на бета-тест отклонена',
@@ -4485,27 +4477,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   let codeBackupsCache = { 'index.html': [], 'battle-admin-bot': [] };
   let backupListsLoaded = false;
 
-  function loadAutoBackupsToggleState() {
-    db.ref('config/backupsDisabled').once('value').then((snap) => {
-      document.getElementById('toggle-auto-backups').classList.toggle('on', !snap.val());
-    }).catch((err) => console.error('Автобэкапы: загрузка состояния', err));
-  }
-
-  document.getElementById('toggle-auto-backups').addEventListener('click', () => {
-    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или без права backups)
-    const toggle = document.getElementById('toggle-auto-backups');
-    const nowOn = toggle.classList.contains('on'); // "on" = автобэкапы включены, т.е. backupsDisabled === false
-    const disable = nowOn; // переключаем в противоположное
-    if (disable && !confirm('Выключить ежедневные автобэкапы? "Сделать бэкап сейчас" продолжит работать, но по расписанию новые снимки создаваться не будут.')) return;
-    db.ref('config/backupsDisabled').set(disable ? true : null).then(() => {
-      toggle.classList.toggle('on', !disable);
-      logAction('auto_backups_toggled', '—', '—', '—', disable ? 'Выключены' : 'Включены');
-    }).catch((err) => { console.error(err); alert('Не удалось изменить: ' + (err.message || err)); });
-  });
-
   async function loadAllBackupLists() {
     if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или без права backups)
-    loadAutoBackupsToggleState();
     const listIndexEl = document.getElementById('list-code-index');
     const listAdminEl = document.getElementById('list-code-admin');
     const listDbEl = document.getElementById('list-db');
@@ -5002,12 +4975,21 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const toggle = document.getElementById('toggle-emergency');
     const newVal = !toggle.classList.contains('on');
     const warning = newVal
-      ? 'Включить АВАРИЙНЫЙ РЕЖИМ? Это закроет сайт и эту панель для ВСЕХ, включая Админов и Модераторов. Продолжить?'
-      : 'Выключить аварийный режим и вернуть доступ всем?';
+      ? 'Включить АВАРИЙНЫЙ РЕЖИМ? Это закроет сайт и эту панель для ВСЕХ, включая Админов и Модераторов, и заодно остановит ежедневные автобэкапы в battle-data-admin-bot. Продолжить?'
+      : 'Выключить аварийный режим, вернуть доступ всем и возобновить автобэкапы?';
     if (!confirm(warning)) return;
-    db.ref('config/emergencyLockdown').set(newVal).then(() => {
+    // config/backupsDisabled переключается вместе с самим режимом — одно
+    // действие вместо двух отдельных тумблеров: включил аварийный режим/
+    // консервацию — автобэкапы сами остановились, выключил — сами
+    // возобновились. code-backup.yml/db-snapshot.yml в battle-data-
+    // admin-bot проверяют этот флаг перед КАЖДЫМ плановым запуском, так
+    // что снимать его отдельно вручную не нужно.
+    Promise.all([
+      db.ref('config/emergencyLockdown').set(newVal),
+      db.ref('config/backupsDisabled').set(newVal ? true : null),
+    ]).then(() => {
       toggle.classList.toggle('on', newVal);
-      logAction('emergency_lockdown_toggled', '—', '—', '—', newVal ? 'Включён' : 'Выключен');
+      logAction('emergency_lockdown_toggled', '—', '—', '—', newVal ? 'Включён (+ автобэкапы остановлены)' : 'Выключен (+ автобэкапы возобновлены)');
     }).catch((err) => { console.error(err); alert('Не удалось изменить аварийный режим: ' + (err.message || err)); });
   });
 </script>

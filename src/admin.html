@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Временные токены: и при одобрении запроса на устройство («Администрация» → «Запросы на устройства»), и при создании токена доступа («Токены доступа») теперь можно выбрать срок действия (24ч/7д/30д или бессрочно) вместо только «навсегда». Истёкшее устройство/токен просто перестаёт пускать в панель — проверка на устройство идёт и на клиенте (UX), и в role-gateway (реальная граница для бэкапов), проверка на access-токен — только на клиенте, как и весь остальной вход по токену.">v5.2</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Система» → «Аварийный режим» теперь годится и для консервации проекта на неопределённый срок, не только для инцидентов — добавил поле «Сообщение на экране блокировки» (раньше config/emergencyMessage читался игрой, но негде было его вписать) и убрал слово «временно» из заголовка экрана блокировки. Механизм тот же, что и был: игра закрывается для всех, эта панель — для всех, кроме Супердоступа, снимается тумблером в любой момент без потери данных.">v5.3</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -345,7 +345,7 @@
   <div class="screen" id="screen-emergency">
     <div class="center-msg denied">
       <div class="big">🚨 АВАРИЙНЫЙ РЕЖИМ</div>
-      <div class="small">Панель временно закрыта для всех, кроме Супердоступа — что-то пошло не так, и с этим уже разбираются. Доступ вернётся, как только аварийный режим снимут.</div>
+      <div class="small">Панель закрыта для всех, кроме Супердоступа. Доступ вернётся, как только режим снимут.</div>
     </div>
   </div>
 
@@ -1275,14 +1275,20 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
             <div class="admin-empty" style="text-align:left; padding:0 0 10px; color:var(--live);">
               Полностью закрывает и основной сайт, и эту панель — для ВСЕХ,
               включая Админов и Модераторов. Доступ сохранится только у
-              Супердоступа. Включай только при реальном инциденте (взлом,
-              утечка данных, критический баг) — не для обычных обновлений,
-              для них есть режим обслуживания выше.
+              Супердоступа. Используй при реальном инциденте (взлом, утечка
+              данных, критический баг — не для обычных обновлений, для них
+              есть режим обслуживания выше) — либо чтобы законсервировать
+              проект на неопределённый срок: снять тумблер и вернуть всем
+              доступ можно в любой момент, ничего не удаляется и не
+              ломается необратимо.
             </div>
             <div class="toggle-row" id="toggle-emergency">
               <div class="toggle-check"></div>
               <div class="toggle-label">Включён</div>
             </div>
+            <label class="field-label" style="margin-top:12px;">Сообщение на экране блокировки (необязательно)</label>
+            <textarea class="field-input" id="emergency-message-input" placeholder="Проект временно недоступен — ведутся работы." rows="2"></textarea>
+            <button class="btn btn-line" id="btn-save-emergency-message" style="width:100%; margin-top:8px;">Сохранить сообщение</button>
           </div>
         </div>
       </div>
@@ -4715,11 +4721,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       db.ref('config/maintenanceMode').once('value'),
       db.ref('config/maintenanceMessage').once('value'),
       db.ref('config/emergencyLockdown').once('value'),
+      db.ref('config/emergencyMessage').once('value'),
       db.ref('config/closedBeta').once('value')
-    ]).then(([modeSnap, msgSnap, lockdownSnap, closedBetaSnap]) => {
+    ]).then(([modeSnap, msgSnap, lockdownSnap, emergencyMsgSnap, closedBetaSnap]) => {
       document.getElementById('toggle-maintenance').classList.toggle('on', !!modeSnap.val());
       document.getElementById('maintenance-message-input').value = msgSnap.val() || '';
       document.getElementById('toggle-emergency').classList.toggle('on', !!lockdownSnap.val());
+      document.getElementById('emergency-message-input').value = emergencyMsgSnap.val() || '';
       document.getElementById('toggle-closed-beta').classList.toggle('on', !!closedBetaSnap.val());
     }).catch((err) => console.error('Режимы платформы: загрузка', err));
   }
@@ -4934,6 +4942,17 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const val = document.getElementById('maintenance-message-input').value.trim();
     db.ref('config/maintenanceMessage').set(val || null).then(() => {
       logAction('maintenance_message_changed', '—', '—', '—', val || '(очищено)');
+    }).catch((err) => { console.error(err); alert('Не удалось сохранить сообщение: ' + (err.message || err)); });
+  });
+
+  // текст на экране блокировки для аварийного режима/консервации —
+  // сам тумблер требует superadmin (см. toggle-emergency ниже), а вот
+  // сообщение можно готовить/менять заранее, пока режим ещё выключен
+  document.getElementById('btn-save-emergency-message').addEventListener('click', () => {
+    if (dangerZoneVerifiedRole !== 'superadmin') return; // на случай подделки клика мимо скрытого UI
+    const val = document.getElementById('emergency-message-input').value.trim();
+    db.ref('config/emergencyMessage').set(val || null).then(() => {
+      logAction('emergency_message_changed', '—', '—', '—', val || '(очищено)');
     }).catch((err) => { console.error(err); alert('Не удалось сохранить сообщение: ' + (err.message || err)); });
   });
 

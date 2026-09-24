@@ -477,6 +477,11 @@ async function ghDeleteFile(env, path) {
   const getRes = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}?ref=main`, {
     headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'battle-role-gateway' },
   });
+  // Удаление — идемпотентная операция: если файла уже нет (двойной клик
+  // по кнопке, устаревший список на экране после чужого удаления), это не
+  // ошибка, а ровно тот результат, которого добивался вызывающий — файла
+  // не существует.
+  if (getRes.status === 404) return;
   if (!getRes.ok) throw new Error(`GitHub Contents API ${getRes.status}: ${await getRes.text().catch(() => '')}`);
   const meta = await getRes.json();
   const delRes = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}`, {

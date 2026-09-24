@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Система» → «Аварийный режим» теперь годится и для консервации проекта на неопределённый срок, не только для инцидентов — добавил поле «Сообщение на экране блокировки» (раньше config/emergencyMessage читался игрой, но негде было его вписать) и убрал слово «временно» из заголовка экрана блокировки. Механизм тот же, что и был: игра закрывается для всех, эта панель — для всех, кроме Супердоступа, снимается тумблером в любой момент без потери данных.">v5.3</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="«Бэкапы» → новый тумблер «Автобэкапы» — выключает ежедневный запуск снимков по расписанию в battle-data-admin-bot (config/backupsDisabled, проверяется в самих workflow'ах перед плановым запуском). «Сделать бэкап сейчас» по-прежнему работает всегда — это осознанное разовое действие, а не автосохранение, которое просили отключить.">v5.4</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1042,6 +1042,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       </div>
 
       <div id="backups-section-list">
+        <div class="admin-card">
+          <div class="section-label">Автобэкапы</div>
+          <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Выключает только ЕЖЕДНЕВНЫЙ запуск по расписанию в battle-data-admin-bot (свежий код + свежий снимок базы). «Сделать бэкап сейчас» ниже продолжит работать в любом случае — это осознанное разовое действие, а не автосохранение.</div>
+          <div class="toggle-row" id="toggle-auto-backups">
+            <div class="toggle-check"></div>
+            <div class="toggle-label">Включены</div>
+          </div>
+        </div>
+
         <div class="admin-card">
           <div class="section-label">Сделать бэкап сейчас</div>
           <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Запускает оба workflow в battle-data-admin-bot немедленно (обычно они срабатывают раз в сутки по расписанию): свежий zip кода index.html и battle-admin-bot, свежий JSON всей базы. Снимок появится в списках ниже примерно через 1–2 минуты — тогда обнови страницу.</div>
@@ -2968,6 +2977,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     maintenance_toggled: 'Режим обслуживания переключён',
     maintenance_message_changed: 'Сообщение режима обслуживания изменено',
     emergency_lockdown_toggled: 'Аварийный режим переключён',
+    emergency_message_changed: 'Сообщение аварийного режима изменено',
+    auto_backups_toggled: 'Автобэкапы переключены',
     closed_beta_toggled: 'Закрытый бета-тест переключён',
     beta_application_approved: 'Заявка на бета-тест одобрена',
     beta_application_rejected: 'Заявка на бета-тест отклонена',
@@ -4474,8 +4485,27 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   let codeBackupsCache = { 'index.html': [], 'battle-admin-bot': [] };
   let backupListsLoaded = false;
 
+  function loadAutoBackupsToggleState() {
+    db.ref('config/backupsDisabled').once('value').then((snap) => {
+      document.getElementById('toggle-auto-backups').classList.toggle('on', !snap.val());
+    }).catch((err) => console.error('Автобэкапы: загрузка состояния', err));
+  }
+
+  document.getElementById('toggle-auto-backups').addEventListener('click', () => {
+    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или без права backups)
+    const toggle = document.getElementById('toggle-auto-backups');
+    const nowOn = toggle.classList.contains('on'); // "on" = автобэкапы включены, т.е. backupsDisabled === false
+    const disable = nowOn; // переключаем в противоположное
+    if (disable && !confirm('Выключить ежедневные автобэкапы? "Сделать бэкап сейчас" продолжит работать, но по расписанию новые снимки создаваться не будут.')) return;
+    db.ref('config/backupsDisabled').set(disable ? true : null).then(() => {
+      toggle.classList.toggle('on', !disable);
+      logAction('auto_backups_toggled', '—', '—', '—', disable ? 'Выключены' : 'Включены');
+    }).catch((err) => { console.error(err); alert('Не удалось изменить: ' + (err.message || err)); });
+  });
+
   async function loadAllBackupLists() {
     if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или без права backups)
+    loadAutoBackupsToggleState();
     const listIndexEl = document.getElementById('list-code-index');
     const listAdminEl = document.getElementById('list-code-admin');
     const listDbEl = document.getElementById('list-db');

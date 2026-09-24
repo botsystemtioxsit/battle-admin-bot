@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бэкапы/восстановление: GitHub-токен убран из браузера (localStorage) — листинг, скачивание, «Сделать бэкап сейчас» и восстановление кода/базы теперь идут через role-gateway (initData + проверка права на бэкапы), токен знает только Worker. У списков снимков появилась кнопка «Скачать» (раньше её не было вовсе) и видна версия игры/панели, зашитая в имя файла снимка.">v4.9</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бэкапы/восстановление: чинил два бага сразу — (1) GitHub API от Cloudflare Worker'а падал 403 без User-Agent в запросе (Workers его не подставляют сами, в отличие от браузера); (2) бэкапы работали только внутри настоящей Telegram-сессии — теперь Worker принимает и deviceId этого браузера (тот же trustedDevices, что уже обязателен для входа под admin/superadmin), так что desktop-приложение и обычный браузер тоже работают.">v5.0</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -4317,20 +4317,34 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     return bytes + ' Б';
   }
 
-  // Скачивание тоже идёт через role-gateway (initData вместо токена),
+  // Личность для бэкап-эндпоинтов role-gateway: initData, если открыто
+  // внутри настоящего Telegram (сильнее — подпись бота), иначе deviceId
+  // этого браузера — тот же trustedDevices, что уже обязателен для самого
+  // входа в панель под admin/superadmin (см. protectedRoles выше), так что
+  // desktop-приложение/обычный браузер, уже прошедшие этот вход, ничего
+  // заново одобрять не должны. null, если ни то ни другое не набралось
+  // (например, вход всё ещё идёт) — тогда сам Worker откажет.
+  function backupIdentityPayload() {
+    const initData = tg?.initData;
+    if (initData) return { initData };
+    if (myTelegramId) return { telegramId: myTelegramId, deviceId: getOrCreateDeviceId() };
+    return null;
+  }
+
+  // Скачивание идёт через role-gateway (initData/deviceId вместо токена),
   // поэтому не может быть обычной <a href> ссылкой на api.github.com —
   // тянем файл через fetch и отдаём браузеру как Blob через временную
   // ссылку с нужным именем файла.
   async function downloadBackupFile(path, filename, btnEl) {
-    const initData = tg?.initData;
-    if (!initData) { alert('Скачивание работает только из настоящей Telegram-сессии панели.'); return; }
+    const identity = backupIdentityPayload();
+    if (!identity) { alert('Не удалось определить личность — попробуй перезайти в панель.'); return; }
     const prevText = btnEl.textContent;
     btnEl.disabled = true; btnEl.textContent = '…';
     try {
       const res = await fetch(`${ROLE_GATEWAY_BASE}/download-backup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, path }),
+        body: JSON.stringify({ ...identity, path }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       const blob = await res.blob();
@@ -4377,9 +4391,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const listIndexEl = document.getElementById('list-code-index');
     const listAdminEl = document.getElementById('list-code-admin');
     const listDbEl = document.getElementById('list-db');
-    const initData = tg?.initData;
-    if (!initData) {
-      const hint = 'Работает только из настоящей Telegram-сессии панели.';
+    const identity = backupIdentityPayload();
+    if (!identity) {
+      const hint = 'Не удалось определить личность — попробуй перезайти в панель.';
       renderBackupList(listIndexEl, null, hint);
       renderBackupList(listAdminEl, null, hint);
       renderBackupList(listDbEl, null, hint);
@@ -4390,7 +4404,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const res = await fetch(`${ROLE_GATEWAY_BASE}/list-backups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData }),
+        body: JSON.stringify(identity),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       const { codeIndex, codeAdmin, db: dbList } = await res.json();
@@ -4423,15 +4437,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('backup-now-btn');
     const statusEl = document.getElementById('backup-now-status');
-    const initData = tg?.initData;
-    if (!initData) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Работает только из настоящей Telegram-сессии панели.'; return; }
+    const identity = backupIdentityPayload();
+    if (!identity) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Не удалось определить личность — попробуй перезайти в панель.'; return; }
     btn.disabled = true; btn.textContent = 'Запускаем…';
     statusEl.style.color = 'var(--muted)'; statusEl.textContent = '';
     try {
       const res = await fetch(`${ROLE_GATEWAY_BASE}/backup-now`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData }),
+        body: JSON.stringify(identity),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       statusEl.style.color = 'var(--gold)';
@@ -4450,8 +4464,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const statusEl = document.getElementById('restore-db-status');
     const date = document.getElementById('restore-db-select').value;
     const confirmText = document.getElementById('restore-db-confirm').value.trim();
-    const initData = tg?.initData;
-    if (!initData) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Работает только из настоящей Telegram-сессии панели.'; return; }
+    const identity = backupIdentityPayload();
+    if (!identity) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Не удалось определить личность — попробуй перезайти в панель.'; return; }
     if (!date) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Выбери снимок.'; return; }
     if (confirmText !== 'ВОССТАНОВИТЬ') { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Впиши слово ВОССТАНОВИТЬ для подтверждения.'; return; }
     btn.disabled = true; btn.textContent = 'Восстанавливаем…';
@@ -4460,7 +4474,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const snapRes = await fetch(`${ROLE_GATEWAY_BASE}/download-backup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, path: `db-snapshots/${date}.json` }),
+        body: JSON.stringify({ ...identity, path: `db-snapshots/${date}.json` }),
       });
       if (!snapRes.ok) throw new Error((await snapRes.json().catch(() => ({}))).error || `HTTP ${snapRes.status}`);
       const data = await snapRes.json();
@@ -4468,7 +4482,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const gatewayRes = await fetch(`${ROLE_GATEWAY_BASE}/restore-database`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, data }),
+        body: JSON.stringify({ ...identity, data }),
       });
       if (!gatewayRes.ok) throw new Error((await gatewayRes.json().catch(() => ({}))).error || `HTTP ${gatewayRes.status}`);
       statusEl.style.color = 'var(--gold)';
@@ -4489,8 +4503,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const repo = document.getElementById('restore-code-repo').value;
     const date = document.getElementById('restore-code-select').value;
     const confirmText = document.getElementById('restore-code-confirm').value.trim();
-    const initData = tg?.initData;
-    if (!initData) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Работает только из настоящей Telegram-сессии панели.'; return; }
+    const identity = backupIdentityPayload();
+    if (!identity) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Не удалось определить личность — попробуй перезайти в панель.'; return; }
     if (!date) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Выбери снимок.'; return; }
     if (confirmText !== 'ВОССТАНОВИТЬ') { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Впиши слово ВОССТАНОВИТЬ для подтверждения.'; return; }
     btn.disabled = true; btn.textContent = 'Восстанавливаем…';
@@ -4499,7 +4513,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const zipRes = await fetch(`${ROLE_GATEWAY_BASE}/download-backup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, path: `code-backups/${repo}/${date}.zip` }),
+        body: JSON.stringify({ ...identity, path: `code-backups/${repo}/${date}.zip` }),
       });
       if (!zipRes.ok) throw new Error((await zipRes.json().catch(() => ({}))).error || `HTTP ${zipRes.status}`);
       const zipBuffer = await zipRes.arrayBuffer();
@@ -4521,7 +4535,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const gatewayRes = await fetch(`${ROLE_GATEWAY_BASE}/restore-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, repo, files }),
+        body: JSON.stringify({ ...identity, repo, files }),
       });
       if (!gatewayRes.ok) throw new Error((await gatewayRes.json().catch(() => ({}))).error || `HTTP ${gatewayRes.status}`);
 

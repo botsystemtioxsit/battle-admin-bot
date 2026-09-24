@@ -115,6 +115,37 @@ async function verifyTelegramInitData(initData, botToken) {
   return { ok: true, userId: String(user.id) };
 }
 
+// Проверка через доверенное устройство (users/$uid/trustedDevices/$deviceId)
+// — альтернатива initData для бэкапов, чтобы они работали не только внутри
+// настоящей Telegram-сессии, но и из desktop-приложения/обычного браузера
+// (проект кроссплатформенный, initData там принципиально недоступен — это
+// не Telegram Mini App). deviceId — 128 бит случайности
+// (crypto.getRandomValues, см. randomToken в admin.html), известен только
+// тому браузеру, для которого он сгенерирован, и попадает в trustedDevices
+// только через явное одобрение существующим Супердоступом (см.
+// "Администрация" → "Запросы на устройства") — то же самое доказательство
+// личности, которое уже требуется для входа в панель под admin/superadmin
+// вообще (см. комментарий у protectedRoles в admin.html), просто теперь
+// проверяется ещё и здесь, а не только на клиенте.
+// Не подменяет initData для /grant-role и /set-status — эти два трогать не
+// просили, и там цена ошибки (выдать чужую роль) выше.
+async function verifyDeviceTrust(telegramId, deviceId) {
+  if (!telegramId || !deviceId) return { ok: false, reason: 'нужны telegramId и deviceId' };
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}/trustedDevices/${encodeURIComponent(deviceId)}.json`);
+  if (!res.ok) return { ok: false, reason: 'Firebase недоступен' };
+  const val = await res.json();
+  if (!val) return { ok: false, reason: 'устройство не доверено' };
+  return { ok: true, userId: String(telegramId) };
+}
+
+// Общая точка входа для проверки личности на бэкап-эндпоинтах: initData,
+// если она есть (сильнее — подпись Telegram), иначе deviceId (см. выше).
+async function verifyIdentity(body, env) {
+  if (body.initData) return verifyTelegramInitData(body.initData, env.BOT_TOKEN);
+  if (body.telegramId && body.deviceId) return verifyDeviceTrust(body.telegramId, body.deviceId);
+  return { ok: false, reason: 'нужны initData либо telegramId+deviceId' };
+}
+
 async function getRole(userId) {
   const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(userId)}/role.json`);
   if (!res.ok) return null;
@@ -385,6 +416,11 @@ async function ghApi(path, token, options = {}) {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
+      // GitHub отклоняет запросы без User-Agent 403'кой ("Request forbidden
+      // by administrative rules") — браузерный fetch подставляет его сам,
+      // а fetch внутри Cloudflare Worker'а нет, поэтому без этой строки
+      // все вызовы отсюда были обречены падать именно так.
+      'User-Agent': 'battle-role-gateway',
       ...(options.headers || {}),
     },
   });
@@ -400,7 +436,7 @@ async function ghApi(path, token, options = {}) {
 // отдаёт. 404 (папки ещё нет) — это не ошибка, просто пустой список.
 async function ghListDir(env, path) {
   const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}?ref=main`, {
-    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' },
+    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'battle-role-gateway' },
   });
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`GitHub Contents API ${res.status}: ${await res.text().catch(() => '')}`);
@@ -417,7 +453,7 @@ async function ghListDir(env, path) {
 // файла прямо в теле ответа вместо JSON с base64.
 async function ghDownloadFile(env, path) {
   const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}?ref=main`, {
-    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github.raw+json' },
+    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github.raw+json', 'User-Agent': 'battle-role-gateway' },
   });
   if (!res.ok) throw new Error(`GitHub Contents API ${res.status}: ${await res.text().catch(() => '')}`);
   return res;
@@ -620,14 +656,14 @@ export default {
         return jsonResponse({ error: 'битый JSON' }, 400);
       }
 
-      const { initData, data } = body || {};
-      if (!initData || !data || typeof data !== 'object') {
-        return jsonResponse({ error: 'нужны initData, data (снимок базы)' }, 400);
+      const { data } = body || {};
+      if (!data || typeof data !== 'object') {
+        return jsonResponse({ error: 'нужны initData (или telegramId+deviceId), data (снимок базы)' }, 400);
       }
 
-      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      const verified = await verifyIdentity(body, env);
       if (!verified.ok) {
-        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
       const requesterRole = await getRole(verified.userId);
@@ -652,14 +688,9 @@ export default {
         return jsonResponse({ error: 'битый JSON' }, 400);
       }
 
-      const { initData } = body || {};
-      if (!initData) {
-        return jsonResponse({ error: 'нужна initData' }, 400);
-      }
-
-      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      const verified = await verifyIdentity(body, env);
       if (!verified.ok) {
-        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
       const requester = await getUser(verified.userId);
@@ -684,14 +715,14 @@ export default {
         return jsonResponse({ error: 'битый JSON' }, 400);
       }
 
-      const { initData, repo, files } = body || {};
-      if (!initData || !repo || !files) {
-        return jsonResponse({ error: 'нужны initData, repo, files' }, 400);
+      const { repo, files } = body || {};
+      if (!repo || !files) {
+        return jsonResponse({ error: 'нужны repo, files' }, 400);
       }
 
-      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      const verified = await verifyIdentity(body, env);
       if (!verified.ok) {
-        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
       const requester = await getUser(verified.userId);
@@ -716,14 +747,9 @@ export default {
         return jsonResponse({ error: 'битый JSON' }, 400);
       }
 
-      const { initData } = body || {};
-      if (!initData) {
-        return jsonResponse({ error: 'нужна initData' }, 400);
-      }
-
-      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      const verified = await verifyIdentity(body, env);
       if (!verified.ok) {
-        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
       const requester = await getUser(verified.userId);
@@ -751,9 +777,9 @@ export default {
         return jsonResponse({ error: 'битый JSON' }, 400);
       }
 
-      const { initData, path } = body || {};
-      if (!initData || !path) {
-        return jsonResponse({ error: 'нужны initData, path' }, 400);
+      const { path } = body || {};
+      if (!path) {
+        return jsonResponse({ error: 'нужен path' }, 400);
       }
       // Жёсткий allowlist путей — это единственная защита от того, чтобы
       // через этот прокси не читали произвольные файлы приватного
@@ -762,9 +788,9 @@ export default {
         return jsonResponse({ error: 'путь недопустим' }, 400);
       }
 
-      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      const verified = await verifyIdentity(body, env);
       if (!verified.ok) {
-        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
       const requester = await getUser(verified.userId);

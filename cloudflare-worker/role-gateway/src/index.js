@@ -127,6 +127,16 @@ async function getUser(telegramId) {
   return res.json();
 }
 
+// Бэкапы/восстановление — не только для superadmin: admin.html позволяет
+// делегировать это конкретному admin через users/$uid/permissions/backups
+// (canManageEvent/canManageClans и т.п. — тот же паттерн), поэтому гейт
+// здесь шире, чем строгий superadmin у /restore-database ниже (это самое
+// разрушительное действие из всех — полная перезапись базы — его сознательно
+// не делегируем).
+function hasBackupsAccess(user) {
+  return !!user && (user.role === 'superadmin' || (user.permissions && user.permissions.backups === true));
+}
+
 // playerId (вида "PLR-XXXXXX") — внутренний игровой id, отдельный от
 // telegramId/ключа в users/ — вся логика боя (battles/matches, судейство)
 // оперирует именно им, поэтому нужен обратный поиск по нему.
@@ -385,6 +395,34 @@ async function ghApi(path, token, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+// Листинг снимков (code-backups/*, db-snapshots) — battle-data-admin-bot
+// теперь ПРИВАТНЫЙ репозиторий, анонимный Contents API его больше не
+// отдаёт. 404 (папки ещё нет) — это не ошибка, просто пустой список.
+async function ghListDir(env, path) {
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}?ref=main`, {
+    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json' },
+  });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`GitHub Contents API ${res.status}: ${await res.text().catch(() => '')}`);
+  const items = await res.json();
+  return items
+    .filter((i) => i.type === 'file')
+    .map((i) => ({ name: i.name, size: i.size }))
+    .sort((a, b) => b.name.localeCompare(a.name));
+}
+
+// Содержимое одного снимка (для кнопки "Скачать" в панели и для
+// restore-database) — тот же приватный репозиторий, тот же Contents API,
+// но с Accept: application/vnd.github.raw+json — GitHub отдаёт сырые байты
+// файла прямо в теле ответа вместо JSON с base64.
+async function ghDownloadFile(env, path) {
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}?ref=main`, {
+    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github.raw+json' },
+  });
+  if (!res.ok) throw new Error(`GitHub Contents API ${res.status}: ${await res.text().catch(() => '')}`);
+  return res;
+}
+
 // Запускает оба workflow бэкапа battle-data-admin-bot немедленно (кнопка
 // "Сделать бэкап сейчас"). Раньше это делал клиент напрямую, с GitHub PAT,
 // вставленным в браузере (см. переписку/аудит) — токен лежал в localStorage
@@ -468,7 +506,7 @@ export default {
       return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, roleGrantKeyMatchesRules });
     }
 
-    const needsGithubToken = url.pathname === '/backup-now' || url.pathname === '/restore-code';
+    const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup'].includes(url.pathname);
     if (!env.BOT_TOKEN || !env.ROLE_GRANT_KEY || (needsGithubToken && !env.GITHUB_TOKEN)) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
@@ -624,9 +662,9 @@ export default {
         return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
       }
 
-      const requesterRole = await getRole(verified.userId);
-      if (requesterRole !== 'superadmin') {
-        return jsonResponse({ error: 'Запускать бэкап может только superadmin' }, 403);
+      const requester = await getUser(verified.userId);
+      if (!hasBackupsAccess(requester)) {
+        return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
       try {
@@ -656,9 +694,9 @@ export default {
         return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
       }
 
-      const requesterRole = await getRole(verified.userId);
-      if (requesterRole !== 'superadmin') {
-        return jsonResponse({ error: 'Восстанавливать код может только superadmin' }, 403);
+      const requester = await getUser(verified.userId);
+      if (!hasBackupsAccess(requester)) {
+        return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
       try {
@@ -668,6 +706,88 @@ export default {
       }
 
       return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === '/list-backups' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData } = body || {};
+      if (!initData) {
+        return jsonResponse({ error: 'нужна initData' }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requester = await getUser(verified.userId);
+      if (!hasBackupsAccess(requester)) {
+        return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
+      }
+
+      try {
+        const [codeIndex, codeAdmin, db] = await Promise.all([
+          ghListDir(env, 'code-backups/index.html'),
+          ghListDir(env, 'code-backups/battle-admin-bot'),
+          ghListDir(env, 'db-snapshots'),
+        ]);
+        return jsonResponse({ codeIndex, codeAdmin, db });
+      } catch (err) {
+        return jsonResponse({ error: 'GitHub отказал: ' + err.message }, 502);
+      }
+    }
+
+    if (url.pathname === '/download-backup' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { initData, path } = body || {};
+      if (!initData || !path) {
+        return jsonResponse({ error: 'нужны initData, path' }, 400);
+      }
+      // Жёсткий allowlist путей — это единственная защита от того, чтобы
+      // через этот прокси не читали произвольные файлы приватного
+      // репозитория (например, секреты в других ветках/папках).
+      if (!/^(code-backups\/(index\.html|battle-admin-bot)\/[^/]+\.zip|db-snapshots\/[^/]+\.json)$/.test(path)) {
+        return jsonResponse({ error: 'путь недопустим' }, 400);
+      }
+
+      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+      }
+
+      const requester = await getUser(verified.userId);
+      if (!hasBackupsAccess(requester)) {
+        return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
+      }
+
+      let ghRes;
+      try {
+        ghRes = await ghDownloadFile(env, path);
+      } catch (err) {
+        return jsonResponse({ error: 'GitHub отказал: ' + err.message }, 502);
+      }
+
+      const filename = path.split('/').pop();
+      return new Response(ghRes.body, {
+        status: 200,
+        headers: {
+          'Content-Type': path.endsWith('.zip') ? 'application/zip' : 'application/json',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          ...CORS_HEADERS,
+        },
+      });
     }
 
     return jsonResponse({ error: 'not found' }, 404);

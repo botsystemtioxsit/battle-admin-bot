@@ -17,15 +17,26 @@ admin/superadmin, используя секретный ключ, зашитый
 3. Если всё сошлось — пишет `role` + `roleGrantKey` в Firebase (ключ нужен
    только чтобы пройти `database.rules.json`, сразу стирается).
 
-`POST /backup-now` с телом `{ initData }` и `POST /restore-code` с телом
-`{ initData, repo, files }` (`repo` — `index.html` или `battle-admin-bot`,
-`files` — `[{ path, base64 }]` из распакованного архива снимка) — та же
-проверка `initData` + `superadmin`, а сам вызов GitHub API идёт с
-`GITHUB_TOKEN` этого Worker'а. Используются панелью `battle-data-admin-bot`
-(`public/index.html`) вместо того, чтобы держать personal access token
-GitHub прямо в браузере оператора (`localStorage`) — раньше было так, и
-токен был виден через DevTools любому, кто физически сидит за тем же
-компьютером; теперь его знает только этот Worker.
+`POST /backup-now` (`{ initData }`), `POST /restore-code` (`{ initData,
+repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
+`[{ path, base64 }]` из распакованного архива снимка), `POST /list-backups`
+(`{ initData }`, отдаёт `{ codeIndex, codeAdmin, db }` — имя+размер каждого
+снимка) и `POST /download-backup` (`{ initData, path }`, path —
+`code-backups/<repo>/<файл>.zip` или `db-snapshots/<файл>.json`, отдаёт
+сырые байты файла): проверка `initData` + `hasBackupsAccess` (superadmin
+или `users/$uid/permissions/backups === true` — то же делегируемое право,
+что admin.html уже проверяет на клиенте), сам вызов GitHub API идёт с
+`GITHUB_TOKEN` этого Worker'а. `battle-data-admin-bot` — приватный
+репозиторий, так что и листинг, и скачивание снимков требуют авторизации;
+раньше это делалось PAT, вставленным прямо в браузер оператора
+(`localStorage`) в обеих панелях (`battle-data-admin-bot/public/index.html`
+и `battle-admin-bot/src/admin.html`) — токен был виден через DevTools
+любому, кто физически сидит за тем же компьютером. Теперь его знает
+только этот Worker, а обе панели ходят через него.
+
+`/restore-database` — исключение из `hasBackupsAccess`: остаётся строго
+`superadmin`-only (полная перезапись базы — самое разрушительное действие
+из всех, сознательно не делегируется).
 
 ## Разовая настройка (сделать один раз)
 

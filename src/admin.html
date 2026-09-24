@@ -256,9 +256,6 @@
   .status-line{ font-size:12px; margin-top:10px; min-height:16px; }
   .inline-confirm{ font-size:11px; color:var(--gold); margin-left:8px; opacity:0; transition:opacity .3s; }
   .inline-confirm.show{ opacity:1; }
-  .token-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
-  .token-row > input{ flex:1 1 220px; }
-  .lock-line{ font-size:12px; color:var(--muted); margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 
   /* ===== суб-нав внутри объединённых вкладок (Бэкапы/Восстановление,
      Журнал/Ошибки, База/Система, Кланы/Заявки) — две кнопки-переключателя
@@ -273,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Реорганизация вкладок — было 11, стало 8 (особенно заметно на телефоне, где они оборачивались в несколько строк). Вкладка «Ассистент» убрана целиком (чат с ИИ через GitHub Actions). Ссылки на скачивание Desktop/Android/веб-версии панели, раньше зачем-то жившие внутри «Ассистента» и поэтому видные только Супердоступу, вынесены в новую вкладку «Приложения», видную всем. «Администрация», «Токены доступа», «Бэкапы» и «Система» объединены в одну вкладку «Супердоступ» с суб-навом внутри — доступ не изменился, просто меньше строк в списке вкладок.">v4.8</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бэкапы/восстановление: GitHub-токен убран из браузера (localStorage) — листинг, скачивание, «Сделать бэкап сейчас» и восстановление кода/базы теперь идут через role-gateway (initData + проверка права на бэкапы), токен знает только Worker. У списков снимков появилась кнопка «Скачать» (раньше её не было вовсе) и видна версия игры/панели, зашитая в имя файла снимка.">v4.9</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1037,32 +1034,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
       <div id="backups-section-list">
         <div class="admin-card">
-          <div class="section-label">GitHub-токен</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 10px;">
-            Нужен для листинга/скачивания снимков (battle-data-admin-bot теперь приватный — анонимное чтение больше не работает) и для кнопки «Сделать бэкап сейчас» и восстановления кода. Токен уходит напрямую в api.github.com из этого браузера (никакого промежуточного сервера нет) и хранится только в localStorage.
-            <br><br>
-            Fine-grained Personal Access Token (github.com → Settings → Developer settings → Fine-grained tokens), выданный только на три репозитория: <b>battle-data-admin-bot</b> (Contents: Read and write — теперь нужно и для чтения снимков, не только для бэкапа; Actions: Read and write — для «Сделать бэкап сейчас»), <b>index.html</b> и <b>battle-admin-bot</b> (оба — Contents: Read and write, для восстановления кода).
-          </div>
-          <div class="token-row">
-            <input type="password" class="field-input" id="gh-token-input" placeholder="github_pat_...">
-            <button class="btn btn-line" id="gh-token-save-btn">Сохранить</button>
-            <button class="btn btn-gold" id="gh-token-lock-btn">Закрепить токен</button>
-            <span class="inline-confirm" id="gh-token-save-confirm">Сохранено ✓</span>
-          </div>
-          <div class="lock-line" id="gh-token-locked-line" style="display:none;">
-            <span>🔒 Токен закреплён</span>
-            <button class="btn btn-line" id="gh-token-change-btn">Изменить токен</button>
-          </div>
-          <div class="status-line" id="gh-token-status"></div>
-        </div>
-
-        <div class="admin-card" id="gh-token-requests-card" style="display:none;">
-          <div class="section-label">Заявки на изменение токена</div>
-          <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Запросы на разблокировку токена с других устройств/браузеров. Подтверждай только те, что ты сам инициировал.</div>
-          <div id="gh-token-requests-list"></div>
-        </div>
-
-        <div class="admin-card">
           <div class="section-label">Сделать бэкап сейчас</div>
           <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Запускает оба workflow в battle-data-admin-bot немедленно (обычно они срабатывают раз в сутки по расписанию): свежий zip кода index.html и battle-admin-bot, свежий JSON всей базы. Снимок появится в списках ниже примерно через 1–2 минуты — тогда обнови страницу.</div>
           <button class="btn btn-gold" id="backup-now-btn" style="width:100%;">Сделать бэкап сейчас</button>
@@ -1649,7 +1620,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
           // всё равно скрыты в applyRoleUI
           if (canManageRoles()) {
             loadAllBackupLists().catch((err) => console.error('Бэкапы: первичная загрузка', err));
-            attachTokenChangeRequestsListener(myTelegramId);
           }
         }
 
@@ -4329,209 +4299,17 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
 
   // ===== "Бэкапы"/"Восстановление" — портировано из battle-data-admin-bot.
-  // battle-data-admin-bot становится ПРИВАТНЫМ репозиторием — в отличие от
-  // источника, здесь и листинг снимков, и их скачивание идут через Contents
-  // API с Bearer-токеном (ghApiRaw ниже), а не анонимный
-  // raw.githubusercontent.com / неавторизованный contents-запрос. Токен —
-  // тот же пасted PAT из поля выше, хранится только в localStorage этого
-  // браузера, никогда не уходит никуда, кроме api.github.com. =====
-  const GH_OWNER = 'botsystemtioxsit';
-  const GH_DATA_REPO = 'battle-data-admin-bot';
-
-  const tokenInput = document.getElementById('gh-token-input');
-  const tokenSaveBtn = document.getElementById('gh-token-save-btn');
-  const tokenLockBtn = document.getElementById('gh-token-lock-btn');
-  const tokenSaveConfirm = document.getElementById('gh-token-save-confirm');
-  const tokenLockedLine = document.getElementById('gh-token-locked-line');
-  const tokenChangeBtn = document.getElementById('gh-token-change-btn');
-  const tokenStatusEl = document.getElementById('gh-token-status');
-
-  tokenInput.value = window.localStorage.getItem('battleDataGithubToken') || '';
-
-  function saveGithubToken() {
-    window.localStorage.setItem('battleDataGithubToken', tokenInput.value.trim());
-    tokenSaveConfirm.classList.add('show');
-    clearTimeout(saveGithubToken._t);
-    saveGithubToken._t = setTimeout(() => tokenSaveConfirm.classList.remove('show'), 2000);
-  }
-  tokenInput.addEventListener('input', saveGithubToken);
-  tokenInput.addEventListener('change', saveGithubToken);
-  tokenSaveBtn.addEventListener('click', saveGithubToken);
-
-  function getGithubToken() { return tokenInput.value.trim(); }
-
-  function isTokenLocked() { return window.localStorage.getItem('battleDataTokenLocked') === 'true'; }
-
-  function renderTokenLockUI() {
-    if (isTokenLocked()) {
-      tokenInput.disabled = true;
-      tokenInput.setAttribute('readonly', 'readonly');
-      tokenSaveBtn.style.display = 'none';
-      tokenLockBtn.style.display = 'none';
-      tokenLockedLine.style.display = 'flex';
-    } else {
-      tokenInput.disabled = false;
-      tokenInput.removeAttribute('readonly');
-      tokenSaveBtn.style.display = '';
-      tokenLockBtn.style.display = '';
-      tokenLockedLine.style.display = 'none';
-      tokenLockBtn.disabled = !tokenInput.value.trim();
-    }
-  }
-  tokenInput.addEventListener('input', () => { if (!isTokenLocked()) tokenLockBtn.disabled = !tokenInput.value.trim(); });
-
-  tokenLockBtn.addEventListener('click', () => {
-    if (!tokenInput.value.trim()) return;
-    window.localStorage.setItem('battleDataTokenLocked', 'true');
-    renderTokenLockUI();
-    tokenStatusEl.style.color = 'var(--gold)';
-    tokenStatusEl.textContent = 'Токен закреплён.';
-  });
-
-  // изменить закреплённый токен можно только после подтверждения из-под
-  // настоящего Telegram-сеанса — та же RTDB-заявка/одобрение, что и вход
-  // с другого устройства (см. "Аккаунт"), только своё дерево запросов
-  // (users/<uid>/tokenChangeRequests), чтобы не путать с loginRequests.
-  let tokenChangeReqPath = null;
-  let tokenChangeReqCb = null;
-  let tokenChangeReqTimeout = null;
-  function stopWaitingForTokenChangeApproval() {
-    if (tokenChangeReqPath && tokenChangeReqCb) db.ref(tokenChangeReqPath).off('value', tokenChangeReqCb);
-    if (tokenChangeReqTimeout) clearTimeout(tokenChangeReqTimeout);
-    tokenChangeReqPath = null;
-    tokenChangeReqCb = null;
-    tokenChangeReqTimeout = null;
-  }
-
-  tokenChangeBtn.addEventListener('click', () => {
-    if (!myTelegramId) {
-      tokenStatusEl.style.color = 'var(--live)';
-      tokenStatusEl.textContent = 'Не удалось определить аккаунт.';
-      return;
-    }
-    stopWaitingForTokenChangeApproval();
-    const reqRef = db.ref('users/' + myTelegramId + '/tokenChangeRequests').push();
-    const reqPath = 'users/' + myTelegramId + '/tokenChangeRequests/' + reqRef.key;
-    reqRef.set({ device: navigator.userAgent, requestedAt: Date.now(), status: 'pending' });
-    tokenChangeBtn.disabled = true;
-    tokenStatusEl.style.color = 'var(--gold)';
-    tokenStatusEl.textContent = 'Запрос отправлен. Открой эту же панель в Telegram, чтобы подтвердить.';
-    tokenChangeReqPath = reqPath;
-    tokenChangeReqCb = db.ref(reqPath).on('value', (snap) => {
-      const val = snap.val();
-      if (!val || val.status === 'pending') return;
-      if (val.status === 'approved') {
-        db.ref(reqPath).remove();
-        window.localStorage.removeItem('battleDataTokenLocked');
-        stopWaitingForTokenChangeApproval();
-        renderTokenLockUI();
-        tokenChangeBtn.disabled = false;
-        tokenStatusEl.style.color = 'var(--gold)';
-        tokenStatusEl.textContent = 'Подтверждено — теперь можно изменить токен.';
-      } else if (val.status === 'denied') {
-        db.ref(reqPath).remove();
-        stopWaitingForTokenChangeApproval();
-        tokenChangeBtn.disabled = false;
-        tokenStatusEl.style.color = 'var(--live)';
-        tokenStatusEl.textContent = 'Запрос отклонён.';
-      }
-    });
-    tokenChangeReqTimeout = setTimeout(() => {
-      db.ref(reqPath).once('value').then((s) => { if (s.val()?.status === 'pending') db.ref(reqPath).remove(); });
-      stopWaitingForTokenChangeApproval();
-      tokenChangeBtn.disabled = false;
-      tokenStatusEl.style.color = 'var(--live)';
-      tokenStatusEl.textContent = 'Время ожидания истекло, попробуй снова.';
-    }, 5 * 60 * 1000);
-  });
-
-  let tokenRequestsListenerRef = null;
-  let tokenRequestsListenerCb = null;
-  function attachTokenChangeRequestsListener(telegramId) {
-    if (!tgUser) return;
-    if (tokenRequestsListenerRef && tokenRequestsListenerCb) {
-      tokenRequestsListenerRef.off('value', tokenRequestsListenerCb);
-    }
-    tokenRequestsListenerRef = db.ref('users/' + telegramId + '/tokenChangeRequests');
-    tokenRequestsListenerCb = tokenRequestsListenerRef.on('value', (snap) => {
-      renderTokenChangeRequests(snap.val() || {});
-    });
-  }
-
-  function renderTokenChangeRequests(requests) {
-    const card = document.getElementById('gh-token-requests-card');
-    const list = document.getElementById('gh-token-requests-list');
-    const entries = Object.entries(requests).filter(([, r]) => r && r.status === 'pending');
-    if (!entries.length) { card.style.display = 'none'; list.innerHTML = ''; return; }
-    card.style.display = 'block';
-    list.innerHTML = entries.map(([id, r]) => `
-      <div class="list-row">
-        <span>${escapeHtml(r.device || 'Неизвестное устройство')}<br><span class="meta">${new Date(r.requestedAt || 0).toLocaleString('ru-RU')}</span></span>
-        <span class="row" style="margin:0;">
-          <button class="btn btn-gold" data-action="approve" data-id="${id}">Разрешить</button>
-          <button class="btn btn-live" data-action="deny" data-id="${id}">Отклонить</button>
-        </span>
-      </div>
-    `).join('');
-    list.querySelectorAll('button[data-action]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.id;
-        const status = btn.dataset.action === 'approve' ? 'approved' : 'denied';
-        db.ref('users/' + myTelegramId + '/tokenChangeRequests/' + id + '/status').set(status);
-      });
-    });
-  }
-
-  renderTokenLockUI();
-
-  // все GitHub API вызовы (кроме листинга/скачивания снимков — см.
-  // ghFetchRaw ниже) идут через этот общий helper, авторизованный
-  // Bearer-токеном
-  async function ghApi(path, token, options = {}) {
-    const res = await fetch(`https://api.github.com${path}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        ...(options.headers || {}),
-      },
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`${path} -> ${res.status}: ${body}`);
-    }
-    return res.status === 204 ? null : res.json();
-  }
-
-  // battle-data-admin-bot теперь ПРИВАТНЫЙ репозиторий — в отличие от
-  // источника (battle-data-admin-bot был публичным), листинг снимков
-  // требует авторизованного запроса к Contents API, анонимный
-  // GET .../contents/<path> вернёт 404 для чужого приватного репозитория.
-  async function listBackups(path, token) {
-    const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_DATA_REPO}/contents/${path}?ref=main`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
-    });
-    if (res.status === 404) return [];
-    if (!res.ok) throw new Error('GitHub API: ' + res.status);
-    const items = await res.json();
-    return items
-      .filter((i) => i.type === 'file')
-      .map((i) => ({ name: i.name, size: i.size }))
-      .sort((a, b) => b.name.localeCompare(a.name));
-  }
-
-  // скачивание содержимого снимка из приватного battle-data-admin-bot:
-  // raw.githubusercontent.com не отдаёт файлы приватного репозитория без
-  // отдельного механизма подписи ссылок, поэтому вместо него — тот же
-  // Contents API с Accept: application/vnd.github.raw+json и Bearer-токеном,
-  // он отдаёт сырое содержимое файла напрямую в теле ответа.
-  async function ghFetchRawFile(path, token) {
-    const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_DATA_REPO}/contents/${path}?ref=main`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.raw+json' },
-    });
-    if (!res.ok) throw new Error(`Не удалось скачать ${path}: ${res.status}`);
-    return res;
-  }
+  // battle-data-admin-bot — приватный репозиторий. Раньше и листинг
+  // снимков, и их скачивание, и "Сделать бэкап сейчас"/восстановление кода
+  // шли через GitHub PAT, вставленный оператором прямо в это поле и
+  // хранившийся в localStorage браузера — виден через DevTools любому, кто
+  // физически сидит за тем же компьютером. Теперь всё это идёт через
+  // role-gateway (тот же Worker, что выдаёт роли — см. ROLE_GATEWAY_URL
+  // выше): он сам держит GITHUB_TOKEN секретом и сам проверяет initData +
+  // право на бэкапы (superadmin или делегированное permissions.backups, см.
+  // hasBackupsAccess в Worker'е). Восстановление базы отдельно идёт через
+  // уже существующий /restore-database — тот строго superadmin-only. =====
+  const ROLE_GATEWAY_BASE = ROLE_GATEWAY_URL.replace(/\/grant-role$/, '');
 
   function formatBackupSize(bytes) {
     if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
@@ -4539,17 +4317,51 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     return bytes + ' Б';
   }
 
-  // без токена список снимков (а значит и восстановление) просто не
-  // построить — приватный репозиторий не отдаёт даже листинг анонимно.
-  function renderBackupList(el, items, hint) {
+  // Скачивание тоже идёт через role-gateway (initData вместо токена),
+  // поэтому не может быть обычной <a href> ссылкой на api.github.com —
+  // тянем файл через fetch и отдаём браузеру как Blob через временную
+  // ссылку с нужным именем файла.
+  async function downloadBackupFile(path, filename, btnEl) {
+    const initData = tg?.initData;
+    if (!initData) { alert('Скачивание работает только из настоящей Telegram-сессии панели.'); return; }
+    const prevText = btnEl.textContent;
+    btnEl.disabled = true; btnEl.textContent = '…';
+    try {
+      const res = await fetch(`${ROLE_GATEWAY_BASE}/download-backup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData, path }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Не удалось скачать: ' + (err.message || err));
+    } finally {
+      btnEl.disabled = false; btnEl.textContent = prevText;
+    }
+  }
+
+  function renderBackupList(el, items, hint, basePath) {
     if (!items) { el.innerHTML = `<div class="admin-empty" style="text-align:left; padding:0;">${escapeHtml(hint)}</div>`; return; }
     if (!items.length) { el.innerHTML = '<div class="admin-empty" style="text-align:left; padding:0;">Снимков пока нет.</div>'; return; }
-    el.innerHTML = items.map((i) => `
+    el.innerHTML = items.map((i, idx) => `
       <div class="list-row">
         <span>${escapeHtml(i.name.replace(/\.(zip|json)$/, ''))}</span>
         <span class="meta">${formatBackupSize(i.size)}</span>
+        <button class="btn btn-line" data-download-idx="${idx}">Скачать</button>
       </div>
     `).join('');
+    el.querySelectorAll('button[data-download-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const item = items[Number(btn.dataset.downloadIdx)];
+        downloadBackupFile(`${basePath}/${item.name}`, item.name, btn);
+      });
+    });
   }
 
   function fillBackupSelect(selectEl, items, placeholder) {
@@ -4558,35 +4370,37 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
 
   let codeBackupsCache = { 'index.html': [], 'battle-admin-bot': [] };
-  let backupListsLoadedForToken = null;
+  let backupListsLoaded = false;
 
   async function loadAllBackupLists() {
-    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
-    const token = getGithubToken();
+    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или без права backups)
     const listIndexEl = document.getElementById('list-code-index');
     const listAdminEl = document.getElementById('list-code-admin');
     const listDbEl = document.getElementById('list-db');
-    if (!token) {
-      const hint = 'Впиши и сохрани GitHub-токен выше — без него список снимков не загрузить (battle-data-admin-bot приватный).';
+    const initData = tg?.initData;
+    if (!initData) {
+      const hint = 'Работает только из настоящей Telegram-сессии панели.';
       renderBackupList(listIndexEl, null, hint);
       renderBackupList(listAdminEl, null, hint);
       renderBackupList(listDbEl, null, hint);
       return;
     }
-    if (backupListsLoadedForToken === token) return; // не перезапрашиваем на каждый повторный заход на вкладку с тем же токеном
+    if (backupListsLoaded) return; // не перезапрашиваем на каждый повторный заход на вкладку
     try {
-      const [codeIndex, codeAdmin, dbList] = await Promise.all([
-        listBackups('code-backups/index.html', token),
-        listBackups('code-backups/battle-admin-bot', token),
-        listBackups('db-snapshots', token),
-      ]);
+      const res = await fetch(`${ROLE_GATEWAY_BASE}/list-backups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      const { codeIndex, codeAdmin, db: dbList } = await res.json();
       codeBackupsCache['index.html'] = codeIndex;
       codeBackupsCache['battle-admin-bot'] = codeAdmin;
-      backupListsLoadedForToken = token;
+      backupListsLoaded = true;
 
-      renderBackupList(listIndexEl, codeIndex);
-      renderBackupList(listAdminEl, codeAdmin);
-      renderBackupList(listDbEl, dbList);
+      renderBackupList(listIndexEl, codeIndex, null, 'code-backups/index.html');
+      renderBackupList(listAdminEl, codeAdmin, null, 'code-backups/battle-admin-bot');
+      renderBackupList(listDbEl, dbList, null, 'db-snapshots');
 
       fillBackupSelect(document.getElementById('restore-db-select'), dbList, 'Выбери дату снимка');
       updateRestoreCodeSelect();
@@ -4606,21 +4420,20 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   document.getElementById('restore-code-repo').addEventListener('change', updateRestoreCodeSelect);
 
   document.getElementById('backup-now-btn').addEventListener('click', async () => {
-    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
+    if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('backup-now-btn');
     const statusEl = document.getElementById('backup-now-status');
-    const token = getGithubToken();
-    if (!token) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Сначала впиши GitHub-токен выше.'; return; }
+    const initData = tg?.initData;
+    if (!initData) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Работает только из настоящей Telegram-сессии панели.'; return; }
     btn.disabled = true; btn.textContent = 'Запускаем…';
     statusEl.style.color = 'var(--muted)'; statusEl.textContent = '';
     try {
-      await Promise.all(['code-backup.yml', 'db-snapshot.yml'].map((workflow) =>
-        ghApi(`/repos/${GH_OWNER}/${GH_DATA_REPO}/actions/workflows/${workflow}/dispatches`, token, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ref: 'main' }),
-        })
-      ));
+      const res = await fetch(`${ROLE_GATEWAY_BASE}/backup-now`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
       statusEl.style.color = 'var(--gold)';
       statusEl.textContent = 'Запущено — новые снимки появятся в списках через 1–2 минуты.';
     } catch (err) {
@@ -4632,22 +4445,32 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   });
 
   document.getElementById('restore-db-btn').addEventListener('click', async () => {
-    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
+    if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('restore-db-btn');
     const statusEl = document.getElementById('restore-db-status');
     const date = document.getElementById('restore-db-select').value;
     const confirmText = document.getElementById('restore-db-confirm').value.trim();
-    const token = getGithubToken();
-    if (!token) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Сначала впиши GitHub-токен выше (нужен, чтобы скачать снимок из приватного репозитория).'; return; }
+    const initData = tg?.initData;
+    if (!initData) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Работает только из настоящей Telegram-сессии панели.'; return; }
     if (!date) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Выбери снимок.'; return; }
     if (confirmText !== 'ВОССТАНОВИТЬ') { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Впиши слово ВОССТАНОВИТЬ для подтверждения.'; return; }
     btn.disabled = true; btn.textContent = 'Восстанавливаем…';
     statusEl.style.color = 'var(--muted)'; statusEl.textContent = 'Скачиваем снимок…';
     try {
-      const res = await ghFetchRawFile(`db-snapshots/${date}.json`, token);
-      const data = await res.json();
+      const snapRes = await fetch(`${ROLE_GATEWAY_BASE}/download-backup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData, path: `db-snapshots/${date}.json` }),
+      });
+      if (!snapRes.ok) throw new Error((await snapRes.json().catch(() => ({}))).error || `HTTP ${snapRes.status}`);
+      const data = await snapRes.json();
       statusEl.textContent = 'Записываем в базу…';
-      await db.ref('/').set(data);
+      const gatewayRes = await fetch(`${ROLE_GATEWAY_BASE}/restore-database`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData, data }),
+      });
+      if (!gatewayRes.ok) throw new Error((await gatewayRes.json().catch(() => ({}))).error || `HTTP ${gatewayRes.status}`);
       statusEl.style.color = 'var(--gold)';
       statusEl.textContent = `База восстановлена до состояния на ${date}.`;
       document.getElementById('restore-db-confirm').value = '';
@@ -4660,67 +4483,47 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   });
 
   document.getElementById('restore-code-btn').addEventListener('click', async () => {
-    if (!canManageRoles() && !myTokenBackupsAccess) return; // на случай подделки клика мимо скрытой вкладки (или токена без права backups)
+    if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('restore-code-btn');
     const statusEl = document.getElementById('restore-code-status');
     const repo = document.getElementById('restore-code-repo').value;
     const date = document.getElementById('restore-code-select').value;
     const confirmText = document.getElementById('restore-code-confirm').value.trim();
-    const token = getGithubToken();
-    if (!token) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Сначала впиши GitHub-токен.'; return; }
+    const initData = tg?.initData;
+    if (!initData) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Работает только из настоящей Telegram-сессии панели.'; return; }
     if (!date) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Выбери снимок.'; return; }
     if (confirmText !== 'ВОССТАНОВИТЬ') { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Впиши слово ВОССТАНОВИТЬ для подтверждения.'; return; }
     btn.disabled = true; btn.textContent = 'Восстанавливаем…';
     statusEl.style.color = 'var(--muted)'; statusEl.textContent = '';
     try {
-      // сам архив кода лежит в battle-data-admin-bot (приватный) — скачиваем
-      // его через тот же авторизованный Contents API, что и снимки БД
-      const zipRes = await ghFetchRawFile(`code-backups/${repo}/${date}.zip`, token);
+      const zipRes = await fetch(`${ROLE_GATEWAY_BASE}/download-backup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData, path: `code-backups/${repo}/${date}.zip` }),
+      });
+      if (!zipRes.ok) throw new Error((await zipRes.json().catch(() => ({}))).error || `HTTP ${zipRes.status}`);
       const zipBuffer = await zipRes.arrayBuffer();
       const zip = await JSZip.loadAsync(zipBuffer);
       const entries = Object.values(zip.files).filter((f) => !f.dir);
       if (!entries.length) throw new Error('Архив пуст.');
 
-      statusEl.textContent = `Загружаем файлы (0/${entries.length})…`;
-      // а сам целевой репозиторий (index.html / battle-admin-bot) остаётся
-      // публичным — пишем в него как и раньше через Git Data API
-      const refData = await ghApi(`/repos/${GH_OWNER}/${repo}/git/ref/heads/main`, token);
-      const latestCommitSha = refData.object.sha;
-
-      const tree = [];
+      statusEl.textContent = `Распаковываем файлы (0/${entries.length})…`;
+      const files = [];
       let done = 0;
       for (const entry of entries) {
         const base64 = await entry.async('base64');
-        const blob = await ghApi(`/repos/${GH_OWNER}/${repo}/git/blobs`, token, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: base64, encoding: 'base64' }),
-        });
-        tree.push({ path: entry.name, mode: '100644', type: 'blob', sha: blob.sha });
+        files.push({ path: entry.name, base64 });
         done += 1;
-        statusEl.textContent = `Загружаем файлы (${done}/${entries.length})…`;
+        statusEl.textContent = `Распаковываем файлы (${done}/${entries.length})…`;
       }
 
-      statusEl.textContent = 'Собираем коммит…';
-      const newTree = await ghApi(`/repos/${GH_OWNER}/${repo}/git/trees`, token, {
+      statusEl.textContent = 'Пишем коммит в репозиторий…';
+      const gatewayRes = await fetch(`${ROLE_GATEWAY_BASE}/restore-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tree }),
+        body: JSON.stringify({ initData, repo, files }),
       });
-      const newCommit = await ghApi(`/repos/${GH_OWNER}/${repo}/git/commits`, token, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `Восстановление из бэкапа battle-data-admin-bot за ${date}`,
-          tree: newTree.sha,
-          parents: [latestCommitSha],
-        }),
-      });
-      await ghApi(`/repos/${GH_OWNER}/${repo}/git/refs/heads/main`, token, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sha: newCommit.sha, force: false }),
-      });
+      if (!gatewayRes.ok) throw new Error((await gatewayRes.json().catch(() => ({}))).error || `HTTP ${gatewayRes.status}`);
 
       statusEl.style.color = 'var(--gold)';
       statusEl.textContent = `Репозиторий ${repo} восстановлен до состояния на ${date}.`;

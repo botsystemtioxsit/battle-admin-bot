@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Убрал отдельный тумблер «Автобэкапы» — теперь его переключает сам «Аварийный режим» («Система»): включил — заодно остановил ежедневные снимки (config/backupsDisabled), выключил — заодно возобновил. Одно действие вместо двух, раз оба означают одно и то же \"проект пока не трогаем\".">v5.5</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Выдача роли и смена статуса (бан/разбан) больше не требуют обязательно настоящей Telegram-сессии — role-gateway теперь принимает и deviceId этого браузера (тот же trustedDevices, что уже обязателен для входа под admin/superadmin), как раньше уже сделали для бэкапов. Desktop-приложение и обычный браузер (вход по email-заявке) теперь могут выдавать роли и банить не хуже Telegram.">v5.6</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -2336,15 +2336,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // admin/superadmin database.rules.json пропускает только вместе с
     // roleGrantKey, который знает исключительно role-gateway Worker (см.
     // ROLE_GATEWAY_URL выше) — сам этот код секрета больше не хранит.
-    // Worker проверяет подпись Telegram initData, поэтому выдавать роль
-    // получится только из настоящей Telegram-сессии (initData есть только
-    // там) — из браузерного входа по email-заявке эта кнопка не сработает,
-    // это осознанное ограничение: у email-сессии нет ничем не подделываемой
-    // подписи, значит и доверять ей для такого действия нельзя.
+    // Worker проверяет initData ИЛИ deviceId этого браузера (см.
+    // panelIdentityPayload выше) — то же доверенное устройство, которое
+    // уже обязательно для самого входа в панель под admin/superadmin, так
+    // что desktop-приложение/браузер, уже прошедшие этот вход, могут
+    // выдавать роли не хуже настоящей Telegram-сессии.
     const needsGateway = newRole === 'admin' || newRole === 'superadmin';
-    const initData = window.Telegram?.WebApp?.initData;
-    if (needsGateway && !initData) {
-      alert('Выдать эту роль можно только из настоящей Telegram-сессии панели (initData недоступна — похоже, вход был через email-заявку).');
+    const identity = needsGateway ? panelIdentityPayload() : null;
+    if (needsGateway && !identity) {
+      alert('Не удалось определить личность — попробуй перезайти в панель.');
       return;
     }
 
@@ -2352,7 +2352,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       ? fetch(ROLE_GATEWAY_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData, targetUserId: userKey, newRole }),
+          body: JSON.stringify({ ...identity, targetUserId: userKey, newRole }),
         }).then(async (res) => {
           if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
         })
@@ -3091,17 +3091,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // аккаунтов БЕЗ owners-записи (все существующие на сегодня) это условие
   // в правилах и так пропускает запись, так что старое поведение не
   // страдает, разница только в том, что запрос идёт через один лишний
-  // http-вызов. Работает только из настоящей Telegram-сессии (initData) —
-  // как и у выдачи роли, из desktop/email-входа бан временно не сработает.
+  // http-вызов. initData ИЛИ deviceId этого браузера (см.
+  // panelIdentityPayload) — как и у выдачи роли, desktop/email-вход со
+  // своим доверенным устройством работает не хуже настоящей Telegram-сессии.
   function setUserStatus(targetUserId, newStatus, restrictedUntil) {
-    const initData = window.Telegram?.WebApp?.initData;
-    if (!initData) {
-      return Promise.reject(new Error('Менять статус можно только из настоящей Telegram-сессии панели (initData недоступна)'));
+    const identity = panelIdentityPayload();
+    if (!identity) {
+      return Promise.reject(new Error('Не удалось определить личность — попробуй перезайти в панель'));
     }
     return fetch(ROLE_GATEWAY_URL.replace(/\/grant-role$/, '/set-status'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData, targetUserId, newStatus, restrictedUntil: restrictedUntil ?? null }),
+      body: JSON.stringify({ ...identity, targetUserId, newStatus, restrictedUntil: restrictedUntil ?? null }),
     }).then(async (res) => {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     });
@@ -4372,14 +4373,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     return bytes + ' Б';
   }
 
-  // Личность для бэкап-эндпоинтов role-gateway: initData, если открыто
-  // внутри настоящего Telegram (сильнее — подпись бота), иначе deviceId
-  // этого браузера — тот же trustedDevices, что уже обязателен для самого
-  // входа в панель под admin/superadmin (см. protectedRoles выше), так что
-  // desktop-приложение/обычный браузер, уже прошедшие этот вход, ничего
-  // заново одобрять не должны. null, если ни то ни другое не набралось
-  // (например, вход всё ещё идёт) — тогда сам Worker откажет.
-  function backupIdentityPayload() {
+  // Личность для всех эндпоинтов role-gateway (бэкапы, выдача роли, смена
+  // статуса): initData, если открыто внутри настоящего Telegram (сильнее —
+  // подпись бота), иначе deviceId этого браузера — тот же trustedDevices,
+  // что уже обязателен для самого входа в панель под admin/superadmin (см.
+  // protectedRoles выше), так что desktop-приложение/обычный браузер, уже
+  // прошедшие этот вход, ничего заново одобрять не должны. null, если ни
+  // то ни другое не набралось (например, вход всё ещё идёт) — тогда сам
+  // Worker откажет.
+  function panelIdentityPayload() {
     const initData = tg?.initData;
     if (initData) return { initData };
     if (myTelegramId) return { telegramId: myTelegramId, deviceId: getOrCreateDeviceId() };
@@ -4391,7 +4393,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // тянем файл через fetch и отдаём браузеру как Blob через временную
   // ссылку с нужным именем файла.
   async function downloadBackupFile(path, filename, btnEl) {
-    const identity = backupIdentityPayload();
+    const identity = panelIdentityPayload();
     if (!identity) { alert('Не удалось определить личность — попробуй перезайти в панель.'); return; }
     const prevText = btnEl.textContent;
     btnEl.disabled = true; btnEl.textContent = '…';
@@ -4422,7 +4424,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // списком заново.
   async function deleteBackupFile(path, filename, btnEl, onDeleted) {
     if (!confirm(`Удалить снимок «${filename}» безвозвратно?`)) return;
-    const identity = backupIdentityPayload();
+    const identity = panelIdentityPayload();
     if (!identity) { alert('Не удалось определить личность — попробуй перезайти в панель.'); return; }
     const prevText = btnEl.textContent;
     btnEl.disabled = true; btnEl.textContent = '…';
@@ -4482,7 +4484,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const listIndexEl = document.getElementById('list-code-index');
     const listAdminEl = document.getElementById('list-code-admin');
     const listDbEl = document.getElementById('list-db');
-    const identity = backupIdentityPayload();
+    const identity = panelIdentityPayload();
     if (!identity) {
       const hint = 'Не удалось определить личность — попробуй перезайти в панель.';
       renderBackupList(listIndexEl, null, hint);
@@ -4528,7 +4530,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('backup-now-btn');
     const statusEl = document.getElementById('backup-now-status');
-    const identity = backupIdentityPayload();
+    const identity = panelIdentityPayload();
     if (!identity) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Не удалось определить личность — попробуй перезайти в панель.'; return; }
     btn.disabled = true; btn.textContent = 'Запускаем…';
     statusEl.style.color = 'var(--muted)'; statusEl.textContent = '';
@@ -4555,7 +4557,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const statusEl = document.getElementById('restore-db-status');
     const date = document.getElementById('restore-db-select').value;
     const confirmText = document.getElementById('restore-db-confirm').value.trim();
-    const identity = backupIdentityPayload();
+    const identity = panelIdentityPayload();
     if (!identity) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Не удалось определить личность — попробуй перезайти в панель.'; return; }
     if (!date) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Выбери снимок.'; return; }
     if (confirmText !== 'ВОССТАНОВИТЬ') { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Впиши слово ВОССТАНОВИТЬ для подтверждения.'; return; }
@@ -4594,7 +4596,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const repo = document.getElementById('restore-code-repo').value;
     const date = document.getElementById('restore-code-select').value;
     const confirmText = document.getElementById('restore-code-confirm').value.trim();
-    const identity = backupIdentityPayload();
+    const identity = panelIdentityPayload();
     if (!identity) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Не удалось определить личность — попробуй перезайти в панель.'; return; }
     if (!date) { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Выбери снимок.'; return; }
     if (confirmText !== 'ВОССТАНОВИТЬ') { statusEl.style.color = 'var(--live)'; statusEl.textContent = 'Впиши слово ВОССТАНОВИТЬ для подтверждения.'; return; }

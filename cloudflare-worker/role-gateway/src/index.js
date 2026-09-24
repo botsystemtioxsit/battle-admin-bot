@@ -632,17 +632,17 @@ export default {
         return jsonResponse({ error: 'битый JSON' }, 400);
       }
 
-      const { initData, targetUserId, newRole } = body || {};
-      if (!initData || !targetUserId || !newRole) {
-        return jsonResponse({ error: 'нужны initData, targetUserId, newRole' }, 400);
+      const { targetUserId, newRole } = body || {};
+      if (!targetUserId || !newRole) {
+        return jsonResponse({ error: 'нужны targetUserId, newRole' }, 400);
       }
       if (!ALLOWED_ROLES.has(newRole)) {
         return jsonResponse({ error: `newRole должен быть одним из: ${[...ALLOWED_ROLES].join(', ')}` }, 400);
       }
 
-      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      const verified = await verifyIdentity(body, env);
       if (!verified.ok) {
-        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
       const requesterRole = await getRole(verified.userId);
@@ -667,17 +667,17 @@ export default {
         return jsonResponse({ error: 'битый JSON' }, 400);
       }
 
-      const { initData, targetUserId, newStatus, restrictedUntil } = body || {};
-      if (!initData || !targetUserId || !newStatus) {
-        return jsonResponse({ error: 'нужны initData, targetUserId, newStatus' }, 400);
+      const { targetUserId, newStatus, restrictedUntil } = body || {};
+      if (!targetUserId || !newStatus) {
+        return jsonResponse({ error: 'нужны targetUserId, newStatus' }, 400);
       }
       if (!ALLOWED_STATUSES.has(newStatus)) {
         return jsonResponse({ error: `newStatus должен быть одним из: ${[...ALLOWED_STATUSES].join(', ')}` }, 400);
       }
 
-      const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
+      const verified = await verifyIdentity(body, env);
       if (!verified.ok) {
-        return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
       const requesterRole = await getRole(verified.userId);

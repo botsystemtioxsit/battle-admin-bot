@@ -8,14 +8,20 @@ admin/superadmin, используя секретный ключ, зашитый
 
 ## Что он делает
 
-`POST /grant-role` с телом `{ initData, targetUserId, newRole }`:
+`POST /grant-role` и `POST /set-status` — тело `{ initData, targetUserId,
+newRole }` / `{ initData, targetUserId, newStatus, restrictedUntil }`, но
+`initData` можно заменить на `{ telegramId, deviceId }` (см. `verifyIdentity`
+ниже — то же доверенное устройство, что и у бэкапов):
 1. Проверяет подпись `initData` (её даёт `Telegram.WebApp.initData` внутри
    мини-приложения) через `BOT_TOKEN` — подделать её без токена бота
-   невозможно.
-2. Смотрит текущую роль подписавшегося в Firebase — должна быть
-   `superadmin`.
-3. Если всё сошлось — пишет `role` + `roleGrantKey` в Firebase (ключ нужен
-   только чтобы пройти `database.rules.json`, сразу стирается).
+   невозможно — либо, если initData нет, `deviceId` по
+   `users/$uid/trustedDevices/$deviceId`.
+2. Смотрит текущую роль подписавшегося в Firebase — для `/grant-role`
+   должна быть `superadmin`, для `/set-status` — любая из
+   moderator/admin/superadmin.
+3. Если всё сошлось — пишет `role`/`status` + служебный ключ
+   (`roleGrantKey`/`adminActionKey`) в Firebase, нужный только чтобы пройти
+   `database.rules.json`, сразу стирается.
 
 `POST /backup-now` (`{ initData }`), `POST /restore-code` (`{ initData,
 repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
@@ -40,15 +46,18 @@ true` — то же делегируемое право, что admin.html уж�
 `superadmin`-only (полная перезапись базы — самое разрушительное действие
 из всех, сознательно не делегируется).
 
-Все пять бэкап-эндпоинтов (`/backup-now`, `/restore-code`,
+Все шесть бэкап-эндпоинтов (`/backup-now`, `/restore-code`,
 `/restore-database`, `/list-backups`, `/download-backup`, `/delete-backup`)
-принимают `initData` ИЛИ `{ telegramId, deviceId }` — второе нужно, чтобы
-бэкапы работали не только внутри настоящей Telegram-сессии, но и из
-desktop-приложения/обычного браузера (initData там физически недоступна —
-это не Telegram Mini App). `deviceId` проверяется по
-`users/$uid/trustedDevices/$deviceId` — тому же 128-битному случайному
-токену, что уже обязателен для самого входа в admin.html под
-admin/superadmin (см. код рядом с `protectedRoles`).
+и, отдельно, `/grant-role`/`/set-status` принимают `initData` ИЛИ
+`{ telegramId, deviceId }` — второе нужно, чтобы все эти действия работали
+не только внутри настоящей Telegram-сессии, но и из desktop-приложения/
+обычного браузера (initData там физически недоступна — это не Telegram
+Mini App). `deviceId` проверяется по `users/$uid/trustedDevices/$deviceId`
+— тому же 128-битному случайному токену, что уже обязателен для самого
+входа в admin.html под admin/superadmin (см. код рядом с
+`protectedRoles`) — так что desktop/браузер, уже прошедшие этот вход, не
+теряют доступ к выдаче ролей/бану/бэкапам только из-за того, что это не
+настоящий Telegram Mini App.
 
 `restoreCode` кладёт текстовые файлы прямо в дерево коммита (Git Trees API
 принимает `content` вместо `sha` и создаёт блоб сам) — отдельный

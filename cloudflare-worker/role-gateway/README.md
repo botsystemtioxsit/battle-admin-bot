@@ -17,6 +17,27 @@ admin/superadmin, используя секретный ключ, зашитый
 3. Если всё сошлось — пишет `role` + `roleGrantKey` в Firebase (ключ нужен
    только чтобы пройти `database.rules.json`, сразу стирается).
 
+`POST /backup-now` (`{ initData }`), `POST /restore-code` (`{ initData,
+repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
+`[{ path, base64 }]` из распакованного архива снимка), `POST /list-backups`
+(`{ initData }`, отдаёт `{ codeIndex, codeAdmin, db }` — имя+размер каждого
+снимка) и `POST /download-backup` (`{ initData, path }`, path —
+`code-backups/<repo>/<файл>.zip` или `db-snapshots/<файл>.json`, отдаёт
+сырые байты файла): проверка `initData` + `hasBackupsAccess` (superadmin
+или `users/$uid/permissions/backups === true` — то же делегируемое право,
+что admin.html уже проверяет на клиенте), сам вызов GitHub API идёт с
+`GITHUB_TOKEN` этого Worker'а. `battle-data-admin-bot` — приватный
+репозиторий, так что и листинг, и скачивание снимков требуют авторизации;
+раньше это делалось PAT, вставленным прямо в браузер оператора
+(`localStorage`) в обеих панелях (`battle-data-admin-bot/public/index.html`
+и `battle-admin-bot/src/admin.html`) — токен был виден через DevTools
+любому, кто физически сидит за тем же компьютером. Теперь его знает
+только этот Worker, а обе панели ходят через него.
+
+`/restore-database` — исключение из `hasBackupsAccess`: остаётся строго
+`superadmin`-only (полная перезапись базы — самое разрушительное действие
+из всех, сознательно не делегируется).
+
 ## Разовая настройка (сделать один раз)
 
 Требуется Node.js. `wrangler` ставить отдельно не нужно — `npx` подтянет
@@ -27,6 +48,7 @@ cd cloudflare-worker/role-gateway
 npx wrangler login          # откроет браузер, авторизует Cloudflare-аккаунт
 npx wrangler secret put BOT_TOKEN         # вставить токен бота от @BotFather
 npx wrangler secret put ROLE_GRANT_KEY    # вставить значение из чата с Claude / см. ниже
+npx wrangler secret put GITHUB_TOKEN      # fine-grained PAT, см. ниже
 npx wrangler deploy
 ```
 
@@ -45,6 +67,12 @@ git) и как GitHub Actions secret `ROLE_GRANT_KEY` в репозитории
 плейсхолдер `__ROLE_GRANT_KEY__`. Значения в обоих местах должны
 совпадать один в один — при смене меняешь сразу оба, иначе выдача роли
 перестанет работать у всех.
+
+**`GITHUB_TOKEN`** — fine-grained Personal Access Token
+(github.com → Settings → Developer settings → Fine-grained tokens),
+выданный только на три репозитория: `battle-data-admin-bot` (Actions: Read
+and write), `index.html` и `battle-admin-bot` (оба — Contents: Read and
+write). Никогда не расширяй его scope на "все репозитории".
 
 ## Обновление кода Worker'а
 

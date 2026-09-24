@@ -459,6 +459,30 @@ async function ghDownloadFile(env, path) {
   return res;
 }
 
+// Удаление одного снимка (кнопка "Удалить" в списке бэкапов — старые
+// снимки со временем становятся бесполезны, а место в репозитории не
+// резиновое). Contents API на DELETE требует текущий sha файла — GitHub
+// не даёт удалить вслепую, sha защищает от гонки с параллельным изменением
+// того же файла, поэтому сначала GET, потом DELETE с этим sha.
+async function ghDeleteFile(env, path) {
+  const getRes = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}?ref=main`, {
+    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'battle-role-gateway' },
+  });
+  if (!getRes.ok) throw new Error(`GitHub Contents API ${getRes.status}: ${await getRes.text().catch(() => '')}`);
+  const meta = await getRes.json();
+  const delRes = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${DATA_REPO}/contents/${path}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'battle-role-gateway',
+    },
+    body: JSON.stringify({ message: `Удаление старого снимка: ${path}`, sha: meta.sha, branch: 'main' }),
+  });
+  if (!delRes.ok) throw new Error(`GitHub Contents API ${delRes.status}: ${await delRes.text().catch(() => '')}`);
+}
+
 // Запускает оба workflow бэкапа battle-data-admin-bot немедленно (кнопка
 // "Сделать бэкап сейчас"). Раньше это делал клиент напрямую, с GitHub PAT,
 // вставленным в браузере (см. переписку/аудит) — токен лежал в localStorage
@@ -581,7 +605,7 @@ export default {
       return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, roleGrantKeyMatchesRules });
     }
 
-    const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup'].includes(url.pathname);
+    const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);
     if (!env.BOT_TOKEN || !env.ROLE_GRANT_KEY || (needsGithubToken && !env.GITHUB_TOKEN)) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
@@ -853,6 +877,43 @@ export default {
           ...CORS_HEADERS,
         },
       });
+    }
+
+    if (url.pathname === '/delete-backup' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { path } = body || {};
+      if (!path) {
+        return jsonResponse({ error: 'нужен path' }, 400);
+      }
+      // Тот же allowlist, что и у download-backup — удалять из приватного
+      // репозитория можно только сами снимки, ничего больше.
+      if (!/^(code-backups\/(index\.html|battle-admin-bot)\/[^/]+\.zip|db-snapshots\/[^/]+\.json)$/.test(path)) {
+        return jsonResponse({ error: 'путь недопустим' }, 400);
+      }
+
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      }
+
+      const requester = await getUser(verified.userId);
+      if (!hasBackupsAccess(requester)) {
+        return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
+      }
+
+      try {
+        await ghDeleteFile(env, path);
+      } catch (err) {
+        return jsonResponse({ error: 'GitHub отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
     }
 
     return jsonResponse({ error: 'not found' }, 404);

@@ -21,13 +21,15 @@ admin/superadmin, используя секретный ключ, зашитый
 repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
 `[{ path, base64 }]` из распакованного архива снимка), `POST /list-backups`
 (`{ initData }`, отдаёт `{ codeIndex, codeAdmin, db }` — имя+размер каждого
-снимка) и `POST /download-backup` (`{ initData, path }`, path —
-`code-backups/<repo>/<файл>.zip` или `db-snapshots/<файл>.json`, отдаёт
-сырые байты файла): проверка `initData` + `hasBackupsAccess` (superadmin
-или `users/$uid/permissions/backups === true` — то же делегируемое право,
-что admin.html уже проверяет на клиенте), сам вызов GitHub API идёт с
-`GITHUB_TOKEN` этого Worker'а. `battle-data-admin-bot` — приватный
-репозиторий, так что и листинг, и скачивание снимков требуют авторизации;
+снимка), `POST /download-backup` и `POST /delete-backup` (оба — `{
+initData, path }`, path — `code-backups/<repo>/<файл>.zip` или
+`db-snapshots/<файл>.json`; download отдаёт сырые байты файла, delete
+удаляет его из репозитория навсегда): проверка `initData` +
+`hasBackupsAccess` (superadmin или `users/$uid/permissions/backups ===
+true` — то же делегируемое право, что admin.html уже проверяет на
+клиенте), сам вызов GitHub API идёт с `GITHUB_TOKEN` этого Worker'а.
+`battle-data-admin-bot` — приватный репозиторий, так что и листинг, и
+скачивание снимков требуют авторизации;
 раньше это делалось PAT, вставленным прямо в браузер оператора
 (`localStorage`) в обеих панелях (`battle-data-admin-bot/public/index.html`
 и `battle-admin-bot/src/admin.html`) — токен был виден через DevTools
@@ -37,6 +39,24 @@ repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
 `/restore-database` — исключение из `hasBackupsAccess`: остаётся строго
 `superadmin`-only (полная перезапись базы — самое разрушительное действие
 из всех, сознательно не делегируется).
+
+Все пять бэкап-эндпоинтов (`/backup-now`, `/restore-code`,
+`/restore-database`, `/list-backups`, `/download-backup`, `/delete-backup`)
+принимают `initData` ИЛИ `{ telegramId, deviceId }` — второе нужно, чтобы
+бэкапы работали не только внутри настоящей Telegram-сессии, но и из
+desktop-приложения/обычного браузера (initData там физически недоступна —
+это не Telegram Mini App). `deviceId` проверяется по
+`users/$uid/trustedDevices/$deviceId` — тому же 128-битному случайному
+токену, что уже обязателен для самого входа в admin.html под
+admin/superadmin (см. код рядом с `protectedRoles`).
+
+`restoreCode` кладёт текстовые файлы прямо в дерево коммита (Git Trees API
+принимает `content` вместо `sha` и создаёт блоб сам) — отдельный
+`POST /git/blobs` теперь нужен только бинарным файлам. Это не косметика:
+Cloudflare Worker ограничивает число исходящих запросов за один вызов, и
+при одном blob-запросе на файл восстановление большого репозитория
+(полсотни+ файлов) падало с "Too many subrequests by single Worker
+invocation" ещё до того, как вообще пытался собраться коммит.
 
 ## Разовая настройка (сделать один раз)
 

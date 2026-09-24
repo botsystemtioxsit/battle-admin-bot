@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бэкапы/восстановление: чинил два бага сразу — (1) GitHub API от Cloudflare Worker'а падал 403 без User-Agent в запросе (Workers его не подставляют сами, в отличие от браузера); (2) бэкапы работали только внутри настоящей Telegram-сессии — теперь Worker принимает и deviceId этого браузера (тот же trustedDevices, что уже обязателен для входа под admin/superadmin), так что desktop-приложение и обычный браузер тоже работают.">v5.0</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Бэкапы: у каждого снимка в списке появилась кнопка «Удалить» — старые снимки теперь можно чистить прямо из панели, без похода в GitHub руками (тот же role-gateway, новый /delete-backup). Заодно починил restoreCode — раньше он падал на репозиториях с полусотней+ файлов ('Too many subrequests by single Worker invocation', лимит Cloudflare Workers): текстовые файлы теперь идут в дерево коммита без отдельного запроса на блоб, отдельные запросы остались только для бинарников.">v5.1</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -4360,6 +4360,31 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }
   }
 
+  // Удаляет один снимок насовсем (старые накапливаются, репозиторий не
+  // резиновый) — подтверждение через confirm(), сам вызов идёт через тот
+  // же role-gateway, что и скачивание/восстановление. onDeleted убирает
+  // строку из уже отрисованного списка без повторного похода за всем
+  // списком заново.
+  async function deleteBackupFile(path, filename, btnEl, onDeleted) {
+    if (!confirm(`Удалить снимок «${filename}» безвозвратно?`)) return;
+    const identity = backupIdentityPayload();
+    if (!identity) { alert('Не удалось определить личность — попробуй перезайти в панель.'); return; }
+    const prevText = btnEl.textContent;
+    btnEl.disabled = true; btnEl.textContent = '…';
+    try {
+      const res = await fetch(`${ROLE_GATEWAY_BASE}/delete-backup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...identity, path }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      onDeleted();
+    } catch (err) {
+      alert('Не удалось удалить: ' + (err.message || err));
+      btnEl.disabled = false; btnEl.textContent = prevText;
+    }
+  }
+
   function renderBackupList(el, items, hint, basePath) {
     if (!items) { el.innerHTML = `<div class="admin-empty" style="text-align:left; padding:0;">${escapeHtml(hint)}</div>`; return; }
     if (!items.length) { el.innerHTML = '<div class="admin-empty" style="text-align:left; padding:0;">Снимков пока нет.</div>'; return; }
@@ -4368,12 +4393,23 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         <span>${escapeHtml(i.name.replace(/\.(zip|json)$/, ''))}</span>
         <span class="meta">${formatBackupSize(i.size)}</span>
         <button class="btn btn-line" data-download-idx="${idx}">Скачать</button>
+        <button class="btn btn-live" data-delete-idx="${idx}">Удалить</button>
       </div>
     `).join('');
     el.querySelectorAll('button[data-download-idx]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const item = items[Number(btn.dataset.downloadIdx)];
         downloadBackupFile(`${basePath}/${item.name}`, item.name, btn);
+      });
+    });
+    el.querySelectorAll('button[data-delete-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.deleteIdx);
+        const item = items[idx];
+        deleteBackupFile(`${basePath}/${item.name}`, item.name, btn, () => {
+          items.splice(idx, 1);
+          renderBackupList(el, items, hint, basePath);
+        });
       });
     });
   }

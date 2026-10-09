@@ -24,10 +24,8 @@ function withCacheBust(url) {
   return `${url}${sep}v=${Date.now()}`;
 }
 
-export default async function (input) {
-  // по документации сюда приходит сам message; на случай, если платформа
-  // передаст целый update — достаём message из него
-  const msg = input && input.message ? input.message : input;
+// Платформа вызывает default export с самим Message (полный update — в ctx.update)
+export default async function (msg, ctx) {
   if (!msg || typeof msg.text !== 'string' || !msg.chat) return;
 
   const chatId = msg.chat.id;

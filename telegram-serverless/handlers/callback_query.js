@@ -5,7 +5,7 @@
 // <id> берётся из query.from.id, а не из callback_data, поэтому нажать
 // можно только на свои собственные запросы.
 // В BotFather вставляется одной строкой (см. message.js, почему).
-import { api } from 'sdk';
+import { api, fetch } from 'sdk';
 
 const DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 

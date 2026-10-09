@@ -9,7 +9,7 @@
 // Редактор BotFather при вставке с телефона ломает переносы строк (Save
 // failed), поэтому туда вставляется однострочная версия этого же кода
 // (внутри функций нет //-комментариев, чтобы строки можно было склеить).
-import { api } from 'sdk';
+import { api, fetch } from 'sdk';
 
 const GAME_URL = 'https://botsystemtioxsit.github.io/index.html/';
 const ADMIN_URL = 'https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html';

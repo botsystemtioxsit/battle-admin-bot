@@ -32,21 +32,25 @@ export default async function (message, ctx) {
       reply_markup: { inline_keyboard: [[{ text: 'Открыть админ-панель', web_app: { url: ADMIN_URL + v } }]] }
     });
   } else if (command === '/requests' && message.chat.type === 'private') {
-    const res = await fetch(DB_URL + '/users/' + message.from.id + '/loginRequests.json');
-    const all = (await res.json()) || {};
-    const pending = Object.keys(all).filter((k) => all[k] && all[k].status === 'pending' && Date.now() - (all[k].requestedAt || 0) < 5 * 60 * 1000);
-    if (pending.length === 0) {
-      await api.sendMessage({ chat_id: chatId, text: 'Нет ожидающих запросов на вход.' });
-      return;
-    }
-    for (const k of pending) {
-      const r = all[k];
-      const mins = Math.round((Date.now() - r.requestedAt) / 60000);
-      await api.sendMessage({
-        chat_id: chatId,
-        text: 'Запрос на вход в твой аккаунт: ' + (r.device || 'неизвестное устройство') + ', ' + mins + ' мин. назад. Если это не ты - отклони.',
-        reply_markup: { inline_keyboard: [[{ text: 'Разрешить', callback_data: 'la:' + k }, { text: 'Отклонить', callback_data: 'ld:' + k }]] }
-      });
+    try {
+      const res = await fetch(DB_URL + '/users/' + message.from.id + '/loginRequests.json');
+      const all = (await res.json()) || {};
+      const pending = Object.keys(all).filter((k) => all[k] && all[k].status === 'pending' && Date.now() - (all[k].requestedAt || 0) < 5 * 60 * 1000);
+      if (pending.length === 0) {
+        await api.sendMessage({ chat_id: chatId, text: 'Нет ожидающих запросов на вход.' });
+        return;
+      }
+      for (const k of pending) {
+        const r = all[k];
+        const mins = Math.round((Date.now() - r.requestedAt) / 60000);
+        await api.sendMessage({
+          chat_id: chatId,
+          text: 'Запрос на вход в твой аккаунт: ' + (r.device || 'неизвестное устройство') + ', ' + mins + ' мин. назад. Если это не ты - отклони.',
+          reply_markup: { inline_keyboard: [[{ text: 'Разрешить', callback_data: 'la:' + k }, { text: 'Отклонить', callback_data: 'ld:' + k }]] }
+        });
+      }
+    } catch (e) {
+      await api.sendMessage({ chat_id: chatId, text: 'Ошибка /requests: ' + (e && e.message ? e.message : String(e)) });
     }
   } else if (command === '/help') {
     await api.sendMessage({

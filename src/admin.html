@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Выдача роли и смена статуса (бан/разбан) больше не требуют обязательно настоящей Telegram-сессии — role-gateway теперь принимает и deviceId этого браузера (тот же trustedDevices, что уже обязателен для входа под admin/superadmin), как раньше уже сделали для бэкапов. Desktop-приложение и обычный браузер (вход по email-заявке) теперь могут выдавать роли и банить не хуже Telegram.">v5.6</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Запрос на вход по email теперь сам приходит в Telegram-бот с кнопками «Разрешить»/«Отклонить» (role-gateway → /login-notify, нажатия обрабатывает Telegram Serverless).">v5.7</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1989,6 +1989,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const reqRef = db.ref('users/' + targetTelegramId + '/loginRequests').push();
       await reqRef.set({ device: 'Админ-панель, браузер', requestedAt: Date.now(), status: 'pending' });
       const reqPath = 'users/' + targetTelegramId + '/loginRequests/' + reqRef.key;
+      // бот сам пишет владельцу аккаунта в Telegram с кнопками Разрешить/
+      // Отклонить (role-gateway → /login-notify); если не вышло — заявку
+      // всё равно можно подтвердить в игре или во вкладке «Аккаунт»
+      fetch(ROLE_GATEWAY_URL.replace('/grant-role', '/login-notify'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telegramId: targetTelegramId, requestId: reqRef.key }) }).catch(() => {});
       statusEl.textContent = '⏳ Заявка отправлена — подтверди её в игре (Сообщество → Запросы) или в самой панели (вкладка «Аккаунт») на устройстве с настоящим Telegram-аккаунтом.';
       statusEl.style.display = 'block';
       btn.textContent = 'Ждём подтверждения…';

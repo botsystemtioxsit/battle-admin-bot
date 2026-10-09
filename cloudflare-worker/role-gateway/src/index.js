@@ -419,6 +419,37 @@ async function restoreDatabase(env, snapshot) {
   }
 }
 
+// Пишет владельцу аккаунта в Telegram "кто-то входит" с кнопками
+// Разрешить/Отклонить — их нажатия обрабатывает Telegram Serverless
+// (telegram-serverless/handlers/callback_query.js, callback_data la:/ld:).
+// Вызывает браузер, который только что положил заявку в loginRequests —
+// он не в Telegram, initData у него нет, поэтому ничего не берём на веру:
+// заявка должна реально существовать, быть pending и свежей, и по каждой
+// уведомляем ровно один раз (notifiedAt) — так через этот маршрут нельзя
+// слать людям произвольные сообщения или спамить одной заявкой.
+async function notifyLoginRequest(env, telegramId, requestId) {
+  const reqUrl = `${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}/loginRequests/${encodeURIComponent(requestId)}.json`;
+  const req = await (await fetch(reqUrl)).json();
+  if (!req || req.status !== 'pending') throw new Error('заявка не найдена или уже обработана');
+  if (Date.now() - (req.requestedAt || 0) > 5 * 60 * 1000) throw new Error('заявка устарела');
+  if (req.notifiedAt) return { alreadyNotified: true };
+  await fetch(reqUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notifiedAt: Date.now() }) });
+  const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: telegramId,
+      text: 'Запрос на вход в твой аккаунт: ' + (req.device || 'неизвестное устройство') + '. Если это не ты - отклони.',
+      reply_markup: { inline_keyboard: [[{ text: 'Разрешить', callback_data: 'la:' + requestId }, { text: 'Отклонить', callback_data: 'ld:' + requestId }]] },
+    }),
+  });
+  const data = await res.json();
+  // 403 = человек ни разу не запускал бота или заблокировал его — не ошибка
+  // вызывающего, заявку всё равно можно подтвердить в игре/панели
+  if (!data.ok) return { sent: false, reason: data.description };
+  return { sent: true };
+}
+
 async function ghApi(path, token, options = {}) {
   const res = await fetch(`https://api.github.com${path}`, {
     ...options,
@@ -692,6 +723,25 @@ export default {
       }
 
       return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === '/login-notify' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+      const { telegramId, requestId } = body || {};
+      if (!/^\d+$/.test(String(telegramId || '')) || !/^[A-Za-z0-9_-]+$/.test(String(requestId || ''))) {
+        return jsonResponse({ error: 'нужны telegramId (число) и requestId' }, 400);
+      }
+      try {
+        const result = await notifyLoginRequest(env, String(telegramId), String(requestId));
+        return jsonResponse({ ok: true, ...result });
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 400);
+      }
     }
 
     if (url.pathname === '/finish-match' && request.method === 'POST') {

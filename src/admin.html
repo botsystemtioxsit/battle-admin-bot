@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Безопасность: доверенные устройства больше не открываются по deviceId, прочитанному из открытой базы — в базе только sha256(deviceId), а доверенная запись несёт подпись role-gateway (/trust-device). Старые записи и старые deviceId не действуют — устройства одобрить заново. Экранирование данных из базы в списках/журнале. Worker переведён на запись токеном сервисного аккаунта — служебный ключ больше не попадает в открытую базу (статус режима — «Система» → role-gateway).">v5.10</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Безопасность: доверенные устройства больше не открываются по deviceId, прочитанному из открытой базы — в базе только sha256(deviceId), а доверенная запись несёт подпись role-gateway (/trust-device). Старые записи и старые deviceId не действуют — устройства одобрить заново. Экранирование данных из базы в списках/журнале. Worker пишет в базу токеном сервисного аккаунта — служебный ключ больше не попадает в открытую базу; бэкапы, выдача ролей и бан — только Супердоступ и админ (статус — «Система» → role-gateway).">v5.11</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -4927,7 +4927,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         row(data.firebaseAdminConfigured, 'Worker пишет в базу токеном сервисного аккаунта (FIREBASE_SERVICE_ACCOUNT) — секретных ключей в базе нет'),
       ].join('') + (data.firebaseAdminConfigured
         ? ''
-        : '<div class="small" style="color:var(--live); padding-top:6px;">Worker работает по старой схеме: ключ выдачи роли (ROLE_GRANT_KEY) на мгновение попадает в открытую базу при каждой выдаче роли, бане и завершении боя. Выложите Worker: GitHub → battle-admin-bot → Actions → «Deploy role-gateway Worker».</div>')
+        : '<div class="small" style="color:var(--live); padding-top:6px;">У Worker\'а нет ключа сервисного аккаунта — выдача ролей, бан, итоги боёв, доверие устройств и бэкапы сейчас не работают (ответ 500). Выложите Worker: GitHub → репозиторий index.html → Actions → «Deploy role-gateway Worker».</div>')
         + '<div class="small" style="color:var(--muted); padding-top:6px;">Совпадение ключа с database.rules.json не проверяется: проба писала секрет в открытую базу по запросу любого.</div>';
     } catch (err) {
       console.error(err);

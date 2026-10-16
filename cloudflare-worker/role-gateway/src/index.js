@@ -8,7 +8,7 @@
 // зашитый в его JS, виден любому через DevTools/просмотр исходного кода
 // страницы, поэтому такая защита не настоящая (см. переписку/аудит).
 //
-// Здесь секрет (ROLE_GRANT_KEY) и токен бота (BOT_TOKEN) — переменные
+// Здесь ключ сервисного аккаунта (FIREBASE_SERVICE_ACCOUNT) и токен бота (BOT_TOKEN) — переменные
 // окружения Worker'а, они физически никогда не попадают ни в один файл,
 // который отдаётся браузеру. Единственное, что видит клиент — HTTP-ответ
 // "успех/ошибка".
@@ -26,7 +26,11 @@ const DATA_REPO = 'battle-data-admin-bot';
 const CODE_REPOS = new Set(['index.html', 'battle-admin-bot']);
 const ALLOWED_ROLES = new Set(['admin', 'superadmin']);
 const ALLOWED_STATUSES = new Set(['active', 'restricted', 'banned']);
-const STAFF_ROLES = new Set(['moderator', 'admin', 'superadmin']);
+// Кто считается "персоналом" для Worker'а. 'moderator' сюда НЕ входит: это
+// легаси-значение (панель новых модераторов не назначает, в базе их нет), а
+// запись role:'moderator' в users/<id> клиенту разрешена правилами — значит,
+// любой игрок мог бы сам стать "персоналом" и банить кого угодно.
+const STAFF_ROLES = new Set(['admin', 'superadmin']);
 const MAX_INITDATA_AGE_SECONDS = 5 * 60; // initData даётся один раз на открытие — 5 минут более чем достаточно
 
 // Дублирует ELO_K/ELO_BASELINE и стоимость лиг из index.html (LEAGUES,
@@ -229,14 +233,33 @@ async function getUser(telegramId) {
   return res.json();
 }
 
-// Бэкапы/восстановление — не только для superadmin: admin.html позволяет
-// делегировать это конкретному admin через users/$uid/permissions/backups
-// (canManageEvent/canManageClans и т.п. — тот же паттерн), поэтому гейт
-// здесь шире, чем строгий superadmin у /restore-database ниже (это самое
-// разрушительное действие из всех — полная перезапись базы — его сознательно
-// не делегируем).
-function hasBackupsAccess(user) {
-  return !!user && (user.role === 'superadmin' || (user.permissions && user.permissions.backups === true));
+// Кто для Worker'а superadmin. Если в конфиге задан OWNER_IDS (список
+// telegram-id через запятую, см. wrangler.toml), то ТОЛЬКО они: роль в базе
+// (users/<id>/role) — данные, которые любой может стереть (DELETE
+// пропускает .validate) или, до исправления правил, подделать, поэтому на неё
+// нельзя опираться как на единственное основание для выдачи ролей, полной
+// перезаписи базы и бэкапов (GITHUB_TOKEN). Без OWNER_IDS — как раньше, по роли.
+function ownerIds(env) {
+  return new Set(String(env.OWNER_IDS || '').split(',').map((x) => x.trim()).filter(Boolean));
+}
+
+function isSuperadmin(env, userId, role) {
+  const owners = ownerIds(env);
+  return owners.size > 0 ? owners.has(String(userId)) : role === 'superadmin';
+}
+
+function isStaff(env, userId, role) {
+  return isSuperadmin(env, userId, role) || STAFF_ROLES.has(role);
+}
+
+// Бэкапы/восстановление — ТОЛЬКО superadmin. Раньше можно было делегировать
+// конкретному admin через users/<id>/permissions/backups, но правила
+// разрешают записать это поле кому угодно: любой игрок выдавал себе право и
+// через /restore-code (файлы берутся из запроса!) подменял код игры и панели
+// токеном Worker'а. В панели такого права у admin нет (его нет в
+// PERMISSION_DEFS), в базе его не было ни у кого.
+function hasBackupsAccess(env, userId, user) {
+  return isSuperadmin(env, userId, user && user.role);
 }
 
 // playerId (вида "PLR-XXXXXX") — внутренний игровой id, отдельный от
@@ -252,40 +275,27 @@ async function getUserByPlayerId(playerId) {
   return { key: keys[0], user: data[keys[0]] || {} };
 }
 
-// Раньше здесь была checkRoleGrantKeyMatchesRules: /health (без авторизации)
-// писал ROLE_GRANT_KEY в users/_role_gateway_healthcheck_ в открытой базе —
-// любой, кто слушает этот путь, получал ключ по первому же запросу. Проба
-// убрана; сверять ключ с правилами теперь можно только по факту: если они
-// разъехались, grant-role/set-status вернут "Firebase отказал".
-
-// Два режима записи в базу:
-//  - "admin" (задан секрет FIREBASE_SERVICE_ACCOUNT): запрос идёт с OAuth-
-//    токеном сервисного аккаунта, database.rules.json для него не действует
-//    (включая .validate) — в данные не кладётся НИКАКОЙ секрет, очищать
-//    нечего. Это штатный режим.
-//  - "legacy" (секрета нет): как раньше, ROLE_GRANT_KEY кладётся в саму
-//    запись (roleGrantKey/adminActionKey) и стирается отдельным запросом.
-//    Пока база читается всеми, в этом промежутке ключ виден любому
-//    слушателю — режим оставлен только чтобы Worker, выложенный раньше
-//    секрета, не перестал работать; переключение — задать секрет.
-function adminMode(env) {
-  return !!env.FIREBASE_SERVICE_ACCOUNT;
-}
+// Раньше Worker доказывал базе "запись разрешил я", кладя общий секрет
+// (ROLE_GRANT_KEY) в саму запись и стирая его вторым запросом. База читается
+// всеми, поэтому слушатель видел ключ в этот промежуток (а анонимный /health
+// мог запустить такую запись по запросу). Теперь все записи идут с OAuth-токеном
+// сервисного аккаунта (секрет FIREBASE_SERVICE_ACCOUNT): правила для него не
+// действуют, никакой секрет в данные не попадает, очищать нечего. Старого
+// режима нет намеренно — без секрета Worker отвечает 500, а не молча
+// возвращается к схеме с утечкой.
 
 // URL записи в базу; `path` — от корня, с `.json` (например '/users/1.json').
 async function dbWriteUrl(env, path) {
-  const base = `${FIREBASE_DB_URL}${path}`;
-  if (!adminMode(env)) return base;
   const token = await getAdminAccessToken(env.FIREBASE_SERVICE_ACCOUNT);
-  return `${base}${base.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
+  return `${FIREBASE_DB_URL}${path}?access_token=${encodeURIComponent(token)}`;
 }
 
-// Запись в базу (fetch с нужным URL). В admin-режиме на 401/403 один раз
-// сбрасываем кэш токена и повторяем: ключ сервисного аккаунта могли
-// ротировать, токен — отозвать; без этого все записи падали бы до конца часа.
+// Запись в базу. На 401/403 один раз сбрасываем кэш токена и повторяем: ключ
+// сервисного аккаунта могли ротировать, токен — отозвать; без этого все
+// записи падали бы до конца часа.
 async function dbWrite(env, path, init) {
   const res = await fetch(await dbWriteUrl(env, path), init);
-  if (adminMode(env) && (res.status === 401 || res.status === 403)) {
+  if (res.status === 401 || res.status === 403) {
     resetAdminTokenCache();
     return fetch(await dbWriteUrl(env, path), init);
   }
@@ -297,66 +307,31 @@ async function dbWrite(env, path, init) {
 // строиться из непроверенного текста: ни слэшей, ни точек, ни спецсимволов.
 const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
-// Убирает служебный ключ (roleGrantKey/adminActionKey) из базы после записи
-// (только legacy-режим — в admin-режиме ключей в данных нет).
-// Пока он лежит в открытой базе, его видят все слушатели, поэтому повторяем
-// при сбое, а не молча глотаем ошибку, как раньше: потерянная очистка с
-// ответом 200 оставляла ключ в базе навсегда (и в ежедневных снимках).
-async function fbCleanup(url, init) {
-  let lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const res = await fetch(url, init);
-      if (res.ok) return true;
-      lastErr = new Error(`HTTP ${res.status}`);
-    } catch (err) {
-      lastErr = err;
-    }
-  }
-  console.error('role-gateway: не удалось убрать служебный ключ из базы', url, lastErr && lastErr.message);
-  return false;
-}
-
 async function grantRole(env, requesterId, targetUserId, newRole) {
-  const admin = adminMode(env);
   const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(admin ? { role: newRole } : { role: newRole, roleGrantKey: env.ROLE_GRANT_KEY }),
+    body: JSON.stringify({ role: newRole }),
   });
   if (!patchRes.ok) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
-  if (admin) return;
-  // legacy: ключ был нужен только чтобы протолкнуть запись через
-  // database.rules.json — сразу убираем его, в профиле ему делать нечего
-  await fbCleanup(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/roleGrantKey.json`, {
-    method: 'DELETE',
-  });
 }
 
-// Бан/разбан чужого аккаунта — то же самое зеркало, что и grantRole, но
-// для users/$uid/status. Нужен отдельно от прямой записи из admin.html,
-// потому что для аккаунтов с owners-записью (см. index.html, Anonymous
-// Auth) database.rules.json больше не пускает чужой auth.uid менять
-// status без adminActionKey — тот самый секрет, который знает только этот
-// Worker.
+// Бан/разбан чужого аккаунта — то же самое зеркало, что и grantRole, но для
+// users/$uid/status. Нужен отдельно от прямой записи из admin.html, потому что
+// для аккаунтов с owners-записью (см. index.html, Anonymous Auth)
+// database.rules.json не пускает чужой auth.uid менять status — а запись
+// токеном сервисного аккаунта правила обходит.
 async function setStatus(env, targetUserId, newStatus, restrictedUntil) {
-  const admin = adminMode(env);
-  const body = { status: newStatus, restrictedUntil: restrictedUntil ?? null };
-  if (!admin) body.adminActionKey = env.ROLE_GRANT_KEY;
   const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ status: newStatus, restrictedUntil: restrictedUntil ?? null }),
   });
   if (!patchRes.ok) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
-  if (admin) return;
-  await fbCleanup(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/adminActionKey.json`, {
-    method: 'DELETE',
-  });
 }
 
 // Записывает итог боя — раньше это делал напрямую клиент СУДЬИ (см.
@@ -383,6 +358,11 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
   const battle = await battleRes.json();
   if (!battle) throw new Error('Бой не найден');
   if (battle.status === 'finished') throw new Error('Бой уже завершён');
+  // Записи боя и игроков в базе пишет кто угодно, поэтому "я судья этого боя"
+  // этим не доказать (см. README, известные ограничения). Хотя бы явную
+  // подделку отсекаем: судья не может быть участником боя, а бой — с самим собой.
+  if (battle.hostId && battle.hostId === battle.guestId) throw new Error('Некорректный бой');
+  if (refereePlayerId === battle.hostId || refereePlayerId === battle.guestId) throw new Error('Судья не может быть участником боя');
   if (battle.refereeId !== refereePlayerId) throw new Error('Вы не назначены судьёй этого боя');
 
   const winnerId = winnerSide === 'host' ? battle.hostId : battle.guestId;
@@ -430,8 +410,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     [`matches/${matchId}/finishedAt`]: finishedAt,
   };
 
-  const admin = adminMode(env);
-  const touchedKeys = [];
   for (const [playerId, rec] of [[winnerId, winnerRec], [loserId, loserRec]]) {
     const u = rec.user;
     const delta = Number(pointsAwarded[playerId] || 0);
@@ -445,8 +423,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     update[`users/${rec.key}/stats/wins`] = Number(stats.wins || 0) + (winnerId === playerId ? 1 : 0);
     update[`users/${rec.key}/stats/losses`] = Number(stats.losses || 0) + (loserId === playerId ? 1 : 0);
     update[`users/${rec.key}/stats/audienceLikes`] = Number(stats.audienceLikes || 0) + likeDelta;
-    if (!admin) update[`users/${rec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
-    touchedKeys.push(rec.key);
   }
 
   const refRec = await getUserByPlayerId(refereePlayerId);
@@ -454,8 +430,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     const u = refRec.user;
     update[`users/${refRec.key}/stats/refereeBattles`] = Number(u.stats?.refereeBattles || 0) + 1;
     update[`users/${refRec.key}/starsBalance`] = Number(u.starsBalance || 0) + REFEREE_STARS_REWARD;
-    if (!admin) update[`users/${refRec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
-    touchedKeys.push(refRec.key);
   }
 
   const patchRes = await dbWrite(env, '/.json', {
@@ -467,58 +441,17 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
 
-  if (!admin) {
-    const cleanup = {};
-    for (const key of touchedKeys) cleanup[`users/${key}/adminActionKey`] = null;
-    await fbCleanup(`${FIREBASE_DB_URL}/.json`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanup),
-    });
-  }
 
   return { winnerId, loserId, pointsAwarded, audienceVotes, trophyMultiplier: 1 };
 }
 
 // Полное восстановление базы из снимка (battle-data-admin-bot, вкладка
-// «Восстановление» → «Восстановить базу»). Раньше это был прямой
-// db.ref('/').set(data) с клиента — работало, пока database.rules.json не
-// обзавёлся .validate-правилами на users/$uid/role (нужен roleGrantKey для
-// admin/superadmin) и на status/points/starsBalance (нужен adminActionKey
-// для аккаунтов с owners-записью). Снимок этих служебных полей не содержит
-// (они одноразовые и стираются сразу после использования — см. grantRole/
-// setStatus выше), поэтому голый set(data) с любым непустым снимком реальных
-// пользователей стал отклоняться правилами. Чинится тем же приёмом, что и
-// остальной файл: секрет знает только Worker, поэтому restore идёт через
-// него — перед записью подмешивает roleGrantKey/adminActionKey в те записи
-// users/$uid, которым он понадобится, пишет весь снимок одним PUT в корень,
-// затем чистит подмешанные поля отдельным PATCH.
+// «Восстановление» → «Восстановить базу»). Пишется одним PUT в корень токеном
+// сервисного аккаунта: правила для него не действуют, поэтому снимок кладётся
+// как есть — раньше приходилось подмешивать в записи users/<id> служебные ключи
+// и потом стирать их (и они на время оказывались в открытой базе).
 async function restoreDatabase(env, snapshot) {
-  const payload = snapshot && typeof snapshot === 'object' ? { ...snapshot } : {};
-  const admin = adminMode(env);
-  const touchedForRole = [];
-  const touchedForAction = [];
-
-  // admin-режим: снимок пишется как есть, правила для токена сервисного
-  // аккаунта не действуют — подмешивать и потом стирать ключи не нужно
-  if (!admin && payload.users && typeof payload.users === 'object') {
-    const usersCopy = {};
-    for (const [uid, rec] of Object.entries(payload.users)) {
-      if (!rec || typeof rec !== 'object') { usersCopy[uid] = rec; continue; }
-      const u = { ...rec };
-      if (u.role === 'admin' || u.role === 'superadmin') {
-        u.roleGrantKey = env.ROLE_GRANT_KEY;
-        touchedForRole.push(uid);
-      }
-      if (u.status !== undefined || u.points !== undefined || u.starsBalance !== undefined) {
-        u.adminActionKey = env.ROLE_GRANT_KEY;
-        touchedForAction.push(uid);
-      }
-      usersCopy[uid] = u;
-    }
-    payload.users = usersCopy;
-  }
-
+  const payload = snapshot && typeof snapshot === 'object' ? snapshot : {};
   const putRes = await dbWrite(env, '/.json', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -526,18 +459,6 @@ async function restoreDatabase(env, snapshot) {
   });
   if (!putRes.ok) {
     throw new Error(`Firebase PUT ${putRes.status}: ${await putRes.text()}`);
-  }
-  if (admin) return;
-
-  const cleanup = {};
-  for (const uid of touchedForRole) cleanup[`users/${uid}/roleGrantKey`] = null;
-  for (const uid of touchedForAction) cleanup[`users/${uid}/adminActionKey`] = null;
-  if (Object.keys(cleanup).length) {
-    await fbCleanup(`${FIREBASE_DB_URL}/.json`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanup),
-    });
   }
 }
 
@@ -561,14 +482,16 @@ async function notifyLoginRequest(env, telegramId, requestId) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: telegramId,
-      text: 'Запрос на вход в твой аккаунт: ' + (req.device || 'неизвестное устройство') + '. Если это не ты - отклони.',
+      // заявку (и её device) пишет кто угодно — подставляем только короткую
+      // метку из безопасных символов, а не произвольный текст от имени бота
+      text: 'Запрос на вход в твой аккаунт: ' + (/^[A-Za-z0-9 ._()\/-]{1,40}$/.test(String(req.device || '')) ? req.device : 'неизвестное устройство') + '. Если это не ты - отклони.',
       reply_markup: { inline_keyboard: [[{ text: 'Разрешить', callback_data: 'la:' + requestId }, { text: 'Отклонить', callback_data: 'ld:' + requestId }]] },
     }),
   });
   const data = await res.json();
   // 403 = человек ни разу не запускал бота или заблокировал его — не ошибка
   // вызывающего, заявку всё равно можно подтвердить в игре/панели
-  if (!data.ok) return { sent: false, reason: data.description };
+  if (!data.ok) return { sent: false };
   return { sent: true };
 }
 
@@ -768,17 +691,14 @@ export default {
     // с секретом по запросу анонима выдавала бы этот секрет слушателям базы.
     if (url.pathname === '/health' && request.method === 'GET') {
       const botTokenConfigured = !!env.BOT_TOKEN;
-      const roleGrantKeyConfigured = !!env.ROLE_GRANT_KEY;
-      // true — Worker пишет в базу токеном сервисного аккаунта (admin-режим,
-      // ключ в данные не кладётся); false — legacy-режим через ROLE_GRANT_KEY
-      const firebaseAdminConfigured = adminMode(env);
-      return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, firebaseAdminConfigured });
+      // true — Worker пишет в базу токеном сервисного аккаунта; без него все
+      // эндпоинты (кроме этого) отвечают 500
+      const firebaseAdminConfigured = !!env.FIREBASE_SERVICE_ACCOUNT;
+      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);
-    // для записи в базу нужен либо FIREBASE_SERVICE_ACCOUNT (admin-режим),
-    // либо ROLE_GRANT_KEY (legacy) — достаточно одного из двух
-    if (!env.BOT_TOKEN || (!env.ROLE_GRANT_KEY && !env.FIREBASE_SERVICE_ACCOUNT) || (needsGithubToken && !env.GITHUB_TOKEN)) {
+    if (!env.BOT_TOKEN || !env.FIREBASE_SERVICE_ACCOUNT || (needsGithubToken && !env.GITHUB_TOKEN)) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
 
@@ -807,7 +727,7 @@ export default {
       }
 
       const requesterRole = await getRole(verified.userId);
-      if (requesterRole !== 'superadmin') {
+      if (!isSuperadmin(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Выдавать admin/superadmin может только существующий superadmin' }, 403);
       }
 
@@ -848,8 +768,8 @@ export default {
       }
 
       const requesterRole = await getRole(verified.userId);
-      if (!STAFF_ROLES.has(requesterRole)) {
-        return jsonResponse({ error: 'Менять статус может только модератор/админ/супердоступ' }, 403);
+      if (!isStaff(env, verified.userId, requesterRole)) {
+        return jsonResponse({ error: 'Менять статус может только админ/супердоступ' }, 403);
       }
 
       try {
@@ -895,7 +815,7 @@ export default {
 
       const requesterRole = await getRole(verified.userId);
       const isSelf = verified.userId === uid;
-      if (!(requesterRole === 'superadmin' || (isSelf && STAFF_ROLES.has(requesterRole)))) {
+      if (!(isSuperadmin(env, verified.userId, requesterRole) || (isSelf && STAFF_ROLES.has(requesterRole)))) {
         return jsonResponse({ error: 'Одобрять устройство может сам владелец аккаунта (модератор/админ/супердоступ) либо superadmin' }, 403);
       }
 
@@ -999,7 +919,7 @@ export default {
       }
 
       const requesterRole = await getRole(verified.userId);
-      if (requesterRole !== 'superadmin') {
+      if (!isSuperadmin(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Восстанавливать базу может только superadmin' }, 403);
       }
 
@@ -1026,7 +946,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1058,7 +978,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1085,7 +1005,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1116,7 +1036,7 @@ export default {
       // Жёсткий allowlist путей — это единственная защита от того, чтобы
       // через этот прокси не читали произвольные файлы приватного
       // репозитория (например, секреты в других ветках/папках).
-      if (!/^(code-backups\/(index\.html|battle-admin-bot)\/[^/]+\.zip|db-snapshots\/[^/]+\.json)$/.test(path)) {
+      if (typeof path !== 'string' || path.includes('..') || !/^(code-backups\/(index\.html|battle-admin-bot)\/[A-Za-z0-9._-]+\.zip|db-snapshots\/[A-Za-z0-9._-]+\.json)$/.test(path)) {
         return jsonResponse({ error: 'путь недопустим' }, 400);
       }
 
@@ -1126,7 +1046,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1162,7 +1082,7 @@ export default {
       }
       // Тот же allowlist, что и у download-backup — удалять из приватного
       // репозитория можно только сами снимки, ничего больше.
-      if (!/^(code-backups\/(index\.html|battle-admin-bot)\/[^/]+\.zip|db-snapshots\/[^/]+\.json)$/.test(path)) {
+      if (typeof path !== 'string' || path.includes('..') || !/^(code-backups\/(index\.html|battle-admin-bot)\/[A-Za-z0-9._-]+\.zip|db-snapshots\/[A-Za-z0-9._-]+\.json)$/.test(path)) {
         return jsonResponse({ error: 'путь недопустим' }, 400);
       }
 
@@ -1172,7 +1092,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 

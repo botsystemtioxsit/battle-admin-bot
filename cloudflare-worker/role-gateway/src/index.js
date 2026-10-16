@@ -18,6 +18,8 @@
 // невозможно, не зная BOT_TOKEN (алгоритм — офиц. документация Telegram
 // Bot API, "Validating data received via the Mini App").
 
+import { getAdminAccessToken } from './firebase-admin.mjs';
+
 const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const GITHUB_OWNER = 'botsystemtioxsit';
 const DATA_REPO = 'battle-data-admin-bot';
@@ -207,7 +209,7 @@ async function verifyIdentity(body, env) {
 async function writeTrustedDevice(env, uid, deviceKey, { label, durationMs, approvedBy }) {
   const expiresAt = durationMs ? Date.now() + durationMs : null;
   const sig = await deviceTrustSig(env, uid, deviceKey, expiresAt);
-  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`, {
+  const res = await fetch(await dbWriteUrl(env, `/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ label, pairedAt: Date.now(), expiresAt, approvedBy, sig }),
@@ -256,7 +258,30 @@ async function getUserByPlayerId(playerId) {
 // убрана; сверять ключ с правилами теперь можно только по факту: если они
 // разъехались, grant-role/set-status вернут "Firebase отказал".
 
-// Убирает служебный ключ (roleGrantKey/adminActionKey) из базы после записи.
+// Два режима записи в базу:
+//  - "admin" (задан секрет FIREBASE_SERVICE_ACCOUNT): запрос идёт с OAuth-
+//    токеном сервисного аккаунта, database.rules.json для него не действует
+//    (включая .validate) — в данные не кладётся НИКАКОЙ секрет, очищать
+//    нечего. Это штатный режим.
+//  - "legacy" (секрета нет): как раньше, ROLE_GRANT_KEY кладётся в саму
+//    запись (roleGrantKey/adminActionKey) и стирается отдельным запросом.
+//    Пока база читается всеми, в этом промежутке ключ виден любому
+//    слушателю — режим оставлен только чтобы Worker, выложенный раньше
+//    секрета, не перестал работать; переключение — задать секрет.
+function adminMode(env) {
+  return !!env.FIREBASE_SERVICE_ACCOUNT;
+}
+
+// URL записи в базу; `path` — от корня, с `.json` (например '/users/1.json').
+async function dbWriteUrl(env, path) {
+  const base = `${FIREBASE_DB_URL}${path}`;
+  if (!adminMode(env)) return base;
+  const token = await getAdminAccessToken(env.FIREBASE_SERVICE_ACCOUNT);
+  return `${base}${base.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
+}
+
+// Убирает служебный ключ (roleGrantKey/adminActionKey) из базы после записи
+// (только legacy-режим — в admin-режиме ключей в данных нет).
 // Пока он лежит в открытой базе, его видят все слушатели, поэтому повторяем
 // при сбое, а не молча глотаем ошибку, как раньше: потерянная очистка с
 // ответом 200 оставляла ключ в базе навсегда (и в ежедневных снимках).
@@ -276,16 +301,18 @@ async function fbCleanup(url, init) {
 }
 
 async function grantRole(env, requesterId, targetUserId, newRole) {
-  const patchRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}.json`, {
+  const admin = adminMode(env);
+  const patchRes = await fetch(await dbWriteUrl(env, `/users/${encodeURIComponent(targetUserId)}.json`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: newRole, roleGrantKey: env.ROLE_GRANT_KEY }),
+    body: JSON.stringify(admin ? { role: newRole } : { role: newRole, roleGrantKey: env.ROLE_GRANT_KEY }),
   });
   if (!patchRes.ok) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
-  // ключ был нужен только чтобы протолкнуть запись через database.rules.json —
-  // сразу убираем его, в профиле ему делать нечего
+  if (admin) return;
+  // legacy: ключ был нужен только чтобы протолкнуть запись через
+  // database.rules.json — сразу убираем его, в профиле ему делать нечего
   await fbCleanup(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/roleGrantKey.json`, {
     method: 'DELETE',
   });
@@ -298,14 +325,18 @@ async function grantRole(env, requesterId, targetUserId, newRole) {
 // status без adminActionKey — тот самый секрет, который знает только этот
 // Worker.
 async function setStatus(env, targetUserId, newStatus, restrictedUntil) {
-  const patchRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}.json`, {
+  const admin = adminMode(env);
+  const body = { status: newStatus, restrictedUntil: restrictedUntil ?? null };
+  if (!admin) body.adminActionKey = env.ROLE_GRANT_KEY;
+  const patchRes = await fetch(await dbWriteUrl(env, `/users/${encodeURIComponent(targetUserId)}.json`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: newStatus, restrictedUntil: restrictedUntil ?? null, adminActionKey: env.ROLE_GRANT_KEY }),
+    body: JSON.stringify(body),
   });
   if (!patchRes.ok) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
+  if (admin) return;
   await fbCleanup(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/adminActionKey.json`, {
     method: 'DELETE',
   });
@@ -382,6 +413,7 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     [`matches/${matchId}/finishedAt`]: finishedAt,
   };
 
+  const admin = adminMode(env);
   const touchedKeys = [];
   for (const [playerId, rec] of [[winnerId, winnerRec], [loserId, loserRec]]) {
     const u = rec.user;
@@ -396,7 +428,7 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     update[`users/${rec.key}/stats/wins`] = Number(stats.wins || 0) + (winnerId === playerId ? 1 : 0);
     update[`users/${rec.key}/stats/losses`] = Number(stats.losses || 0) + (loserId === playerId ? 1 : 0);
     update[`users/${rec.key}/stats/audienceLikes`] = Number(stats.audienceLikes || 0) + likeDelta;
-    update[`users/${rec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
+    if (!admin) update[`users/${rec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
     touchedKeys.push(rec.key);
   }
 
@@ -405,11 +437,11 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     const u = refRec.user;
     update[`users/${refRec.key}/stats/refereeBattles`] = Number(u.stats?.refereeBattles || 0) + 1;
     update[`users/${refRec.key}/starsBalance`] = Number(u.starsBalance || 0) + REFEREE_STARS_REWARD;
-    update[`users/${refRec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
+    if (!admin) update[`users/${refRec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
     touchedKeys.push(refRec.key);
   }
 
-  const patchRes = await fetch(`${FIREBASE_DB_URL}/.json`, {
+  const patchRes = await fetch(await dbWriteUrl(env, '/.json'), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -418,13 +450,15 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
 
-  const cleanup = {};
-  for (const key of touchedKeys) cleanup[`users/${key}/adminActionKey`] = null;
-  await fbCleanup(`${FIREBASE_DB_URL}/.json`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cleanup),
-  });
+  if (!admin) {
+    const cleanup = {};
+    for (const key of touchedKeys) cleanup[`users/${key}/adminActionKey`] = null;
+    await fbCleanup(`${FIREBASE_DB_URL}/.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cleanup),
+    });
+  }
 
   return { winnerId, loserId, pointsAwarded, audienceVotes, trophyMultiplier: 1 };
 }
@@ -444,10 +478,13 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
 // затем чистит подмешанные поля отдельным PATCH.
 async function restoreDatabase(env, snapshot) {
   const payload = snapshot && typeof snapshot === 'object' ? { ...snapshot } : {};
+  const admin = adminMode(env);
   const touchedForRole = [];
   const touchedForAction = [];
 
-  if (payload.users && typeof payload.users === 'object') {
+  // admin-режим: снимок пишется как есть, правила для токена сервисного
+  // аккаунта не действуют — подмешивать и потом стирать ключи не нужно
+  if (!admin && payload.users && typeof payload.users === 'object') {
     const usersCopy = {};
     for (const [uid, rec] of Object.entries(payload.users)) {
       if (!rec || typeof rec !== 'object') { usersCopy[uid] = rec; continue; }
@@ -465,7 +502,7 @@ async function restoreDatabase(env, snapshot) {
     payload.users = usersCopy;
   }
 
-  const putRes = await fetch(`${FIREBASE_DB_URL}/.json`, {
+  const putRes = await fetch(await dbWriteUrl(env, '/.json'), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -473,6 +510,7 @@ async function restoreDatabase(env, snapshot) {
   if (!putRes.ok) {
     throw new Error(`Firebase PUT ${putRes.status}: ${await putRes.text()}`);
   }
+  if (admin) return;
 
   const cleanup = {};
   for (const uid of touchedForRole) cleanup[`users/${uid}/roleGrantKey`] = null;
@@ -714,11 +752,16 @@ export default {
     if (url.pathname === '/health' && request.method === 'GET') {
       const botTokenConfigured = !!env.BOT_TOKEN;
       const roleGrantKeyConfigured = !!env.ROLE_GRANT_KEY;
-      return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured });
+      // true — Worker пишет в базу токеном сервисного аккаунта (admin-режим,
+      // ключ в данные не кладётся); false — legacy-режим через ROLE_GRANT_KEY
+      const firebaseAdminConfigured = adminMode(env);
+      return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, firebaseAdminConfigured });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);
-    if (!env.BOT_TOKEN || !env.ROLE_GRANT_KEY || (needsGithubToken && !env.GITHUB_TOKEN)) {
+    // для записи в базу нужен либо FIREBASE_SERVICE_ACCOUNT (admin-режим),
+    // либо ROLE_GRANT_KEY (legacy) — достаточно одного из двух
+    if (!env.BOT_TOKEN || (!env.ROLE_GRANT_KEY && !env.FIREBASE_SERVICE_ACCOUNT) || (needsGithubToken && !env.GITHUB_TOKEN)) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
 

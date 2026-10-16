@@ -115,26 +115,68 @@ async function verifyTelegramInitData(initData, botToken) {
   return { ok: true, userId: String(user.id) };
 }
 
-// Проверка через доверенное устройство (users/$uid/trustedDevices/$deviceId)
-// — альтернатива initData для бэкапов, чтобы они работали не только внутри
+// Проверка через доверенное устройство (users/$uid/trustedDevices/$deviceKey)
+// — альтернатива initData, чтобы бэкапы/роли работали не только внутри
 // настоящей Telegram-сессии, но и из desktop-приложения/обычного браузера
 // (проект кроссплатформенный, initData там принципиально недоступен — это
-// не Telegram Mini App). deviceId — 128 бит случайности
-// (crypto.getRandomValues, см. randomToken в admin.html), известен только
-// тому браузеру, для которого он сгенерирован, и попадает в trustedDevices
-// только через явное одобрение существующим Супердоступом (см.
-// "Администрация" → "Запросы на устройства") — то же самое доказательство
-// личности, которое уже требуется для входа в панель под admin/superadmin
-// вообще (см. комментарий у protectedRoles в admin.html), просто теперь
-// проверяется ещё и здесь, а не только на клиенте.
-// Не подменяет initData для /grant-role и /set-status — эти два трогать не
-// просили, и там цена ошибки (выдать чужую роль) выше.
-async function verifyDeviceTrust(telegramId, deviceId) {
+// не Telegram Mini App).
+//
+// База читается целиком всеми (database.rules.json: .read: true) и пишется
+// всеми (.write: true), поэтому в ней нельзя хранить ничего, что одновременно
+// является доказательством личности. Раньше ключом записи был сам сырой
+// deviceId — и любой, кто просто прочитал users/<id>/trustedDevices (или
+// devicePairings/deviceTrustRequests, куда deviceId тоже попадал), получал
+// готовое "доказательство" чужого устройства и мог вызывать /grant-role,
+// /restore-database, /restore-code от имени суперадмина. Теперь:
+//  - сырой deviceId живёт только в localStorage браузера и приходит сюда
+//    только в теле HTTPS-запроса — в базу он не пишется нигде;
+//  - в базе лежит deviceKey = sha256(deviceId): по нему deviceId не
+//    восстановить (128 бит случайности), а сам по себе он ничего не даёт;
+//  - запись считается доверенной, только если в ней есть sig =
+//    HMAC(секрет Worker'а, uid|deviceKey|expiresAt). Такую запись умеет
+//    создавать только этот Worker (POST /trust-device); подделать её прямой
+//    записью в открытую базу нельзя — подпись не угадать, а expiresAt в неё
+//    входит, так что срок доверия тоже не продлить.
+// Записи старого формата (ключ — сырой deviceId, без sig) не проходят —
+// они были публично прочитаны, устройства надо одобрить заново.
+const DEVICE_KEY_RE = /^[0-9a-f]{64}$/;
+const MAX_TRUST_DURATION_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Ключ подписи выводится из BOT_TOKEN с отдельным контекстом — отдельный
+// секрет заводить не нужно (wrangler secret put не требуется), а подпись
+// доверия при этом не пересекается ни с чем, что подписывается BOT_TOKEN
+// напрямую (initData).
+async function deviceTrustSig(env, uid, deviceKey, expiresAt) {
+  const keyBytes = await hmacSha256Bytes(new TextEncoder().encode(env.BOT_TOKEN), 'battle-role-gateway/device-trust/v1');
+  return hmacSha256Hex(keyBytes, `${uid}|${deviceKey}|${expiresAt || 0}`);
+}
+
+function safeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function verifyDeviceTrust(env, telegramId, deviceId) {
   if (!telegramId || !deviceId) return { ok: false, reason: 'нужны telegramId и deviceId' };
-  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}/trustedDevices/${encodeURIComponent(deviceId)}.json`);
+  if (typeof deviceId !== 'string' || deviceId.length < 16 || deviceId.length > 128) {
+    return { ok: false, reason: 'некорректный deviceId' };
+  }
+  const uid = String(telegramId);
+  const deviceKey = await sha256Hex(deviceId);
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`);
   if (!res.ok) return { ok: false, reason: 'Firebase недоступен' };
   const val = await res.json();
   if (!val) return { ok: false, reason: 'устройство не доверено' };
+  if (typeof val.sig !== 'string') return { ok: false, reason: 'устройство не доверено (запись старого формата — нужно одобрить заново)' };
+  const expected = await deviceTrustSig(env, uid, deviceKey, val.expiresAt);
+  if (!safeEqualHex(val.sig, expected)) return { ok: false, reason: 'подпись доверия не совпала' };
   // Временное доверие (см. "Запросы на устройства" в admin.html) —
   // expiresAt задаётся при одобрении, null/отсутствует значит "навсегда".
   // Проверяем именно здесь, а не только на клиенте: клиентская проверка —
@@ -144,15 +186,33 @@ async function verifyDeviceTrust(telegramId, deviceId) {
   if (val.expiresAt && val.expiresAt <= Date.now()) {
     return { ok: false, reason: 'доверие устройству истекло' };
   }
-  return { ok: true, userId: String(telegramId) };
+  return { ok: true, userId: uid, via: 'device' };
 }
 
-// Общая точка входа для проверки личности на бэкап-эндпоинтах: initData,
-// если она есть (сильнее — подпись Telegram), иначе deviceId (см. выше).
+// Общая точка входа для проверки личности: initData, если она есть
+// (сильнее — подпись Telegram), иначе deviceId (см. выше). `via` говорит,
+// каким из двух способов личность подтверждена.
 async function verifyIdentity(body, env) {
-  if (body.initData) return verifyTelegramInitData(body.initData, env.BOT_TOKEN);
-  if (body.telegramId && body.deviceId) return verifyDeviceTrust(body.telegramId, body.deviceId);
+  if (body.initData) {
+    const verified = await verifyTelegramInitData(body.initData, env.BOT_TOKEN);
+    return verified.ok ? { ...verified, via: 'telegram' } : verified;
+  }
+  if (body.telegramId && body.deviceId) return verifyDeviceTrust(env, body.telegramId, body.deviceId);
   return { ok: false, reason: 'нужны initData либо telegramId+deviceId' };
+}
+
+// Единственное место, где в trustedDevices появляется доверенная запись.
+// Писать её вызывающий напрямую в базу не может — без sig запись не
+// считается доверенной (см. verifyDeviceTrust).
+async function writeTrustedDevice(env, uid, deviceKey, { label, durationMs, approvedBy }) {
+  const expiresAt = durationMs ? Date.now() + durationMs : null;
+  const sig = await deviceTrustSig(env, uid, deviceKey, expiresAt);
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label, pairedAt: Date.now(), expiresAt, approvedBy, sig }),
+  });
+  if (!res.ok) throw new Error(`Firebase PUT ${res.status}: ${await res.text()}`);
 }
 
 async function getRole(userId) {
@@ -718,6 +778,63 @@ export default {
 
       try {
         await setStatus(env, String(targetUserId), newStatus, restrictedUntil ?? null);
+      } catch (err) {
+        return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
+    }
+
+    // Одобрение устройства — единственный способ получить доверенную запись
+    // (см. комментарий у verifyDeviceTrust). Одобряет либо сам владелец
+    // аккаунта (его личность подтверждена initData или уже доверенным
+    // устройством — это парный код "Подключить по коду" и первый вход
+    // суперадмина из Telegram), либо любой superadmin за другого человека
+    // ("Администрация" → "Запросы на устройства"). deviceKey приходит уже
+    // хэшем — сырой deviceId в базу и в заявки не попадает.
+    if (url.pathname === '/trust-device' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { targetUserId, deviceKey, label, durationMs } = body || {};
+      if (typeof deviceKey !== 'string' || !DEVICE_KEY_RE.test(deviceKey)) {
+        return jsonResponse({ error: 'нужен deviceKey (sha256 в hex, 64 символа)' }, 400);
+      }
+      if (!/^\d+$/.test(String(targetUserId || ''))) {
+        return jsonResponse({ error: 'нужен targetUserId (числовой telegramId)' }, 400);
+      }
+      if (durationMs != null && !(typeof durationMs === 'number' && durationMs > 0 && durationMs <= MAX_TRUST_DURATION_MS)) {
+        return jsonResponse({ error: 'durationMs должен быть положительным числом (или null — навсегда)' }, 400);
+      }
+      const uid = String(targetUserId);
+
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      const isSelf = verified.userId === uid;
+      if (!(requesterRole === 'superadmin' || (isSelf && STAFF_ROLES.has(requesterRole)))) {
+        return jsonResponse({ error: 'Одобрять устройство может сам владелец аккаунта (модератор/админ/супердоступ) либо superadmin' }, 403);
+      }
+
+      // не плодим "пустые" users/<id> с одной лишь trustedDevices внутри
+      const target = await getUser(uid);
+      if (!target) {
+        return jsonResponse({ error: 'пользователь не найден' }, 404);
+      }
+
+      try {
+        await writeTrustedDevice(env, uid, deviceKey, {
+          label: typeof label === 'string' && label.trim() ? label.trim().slice(0, 64) : 'Устройство',
+          durationMs: durationMs || null,
+          approvedBy: verified.userId,
+        });
       } catch (err) {
         return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
       }

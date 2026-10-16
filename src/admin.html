@@ -270,7 +270,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Запрос на вход по email теперь сам приходит в Telegram-бот с кнопками «Разрешить»/«Отклонить» (role-gateway → /login-notify, нажатия обрабатывает Telegram Serverless).">v5.7</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Безопасность: доверенные устройства больше не открываются по deviceId, прочитанному из открытой базы — в базе только sha256(deviceId), а доверенная запись несёт подпись role-gateway (/trust-device). Старые записи не действуют — устройства одобрить заново.">v5.8</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -316,12 +316,13 @@
       <!-- ===== парный код устройства — альтернатива запросу по email: не
            нужно ничего заранее привязывать. Устройство само генерирует
            6-символьный код и deviceId (localStorage.battleDeviceId, живёт
-           только в этом браузере), владелец аккаунта вводит этот код в
-           "Аккаунт" на СВОЁМ устройстве и подтверждает — тогда именно этот
-           deviceId (и только он) записывается в
-           users/<telegramId>/trustedDevices/<deviceId>. В отличие от входа
+           только в этом браузере и в базу не попадает — она читается
+           всеми), владелец аккаунта вводит этот код в "Аккаунт" на СВОЁМ
+           устройстве и подтверждает — тогда sha256(deviceId) (deviceKey, и
+           только он) записывается role-gateway'ем, с подписью, в
+           users/<telegramId>/trustedDevices/<deviceKey>. В отличие от входа
            по email, эта привязка живая и отзываемая: пока
-           trustedDevices/<deviceId> существует — вход работает, стёр его
+           trustedDevices/<deviceKey> существует — вход работает, стёр его
            владелец (кнопка "Отозвать" в "Аккаунт") — при следующей загрузке
            это устройство обратно выкинет на экран входа. См. JS
            (startDevicePairing/getOrCreateDeviceId) и проверку при чтении
@@ -355,30 +356,32 @@
        был выдан и не совпадал ни с чьим ещё — то есть не пропуск
        конкретного устройства, а просто печать "этот аккаунт настоящий".
        Теперь у каждого admin/superadmin аккаунта — свой набор
-       users/<uid>/trustedDevices/<deviceId> (тот же механизм, что и
+       users/<uid>/trustedDevices/<deviceKey> (тот же механизм, что и
        опциональный "Подключить по коду" на screen-login, см. комментарий
-       у getOrCreateDeviceId), и вход БЕЗ УСЛОВИЙ (даже из настоящего
-       Telegram) требует, чтобы ИМЕННО deviceId текущего устройства
-       (localStorage.battleDeviceId) был в этом списке — так подделанный
-       через devtools role:'admin' на левом аккаунте не пройдёт: у него
-       неоткуда взяться записи trustedDevices с deviceId именно этого
-       браузера, а получить её можно только запросом (см.
-       screen-device-trust ниже) с одобрением существующего Супердоступа
-       (вкладка "Администрация" → "Запросы на устройства"), либо это
-       устройство уже когда-то было одобрено. Один аккаунт может иметь
+       у getOrCreateDeviceId; deviceKey = sha256 от localStorage.battleDeviceId,
+       сам deviceId в базу не пишется — она читается всеми), и вход БЕЗ
+       УСЛОВИЙ (даже из настоящего Telegram) требует, чтобы запись именно
+       для этого устройства была в списке И несла sig — подпись, которую
+       ставит только role-gateway (/trust-device). Так подделанный через
+       devtools role:'admin' на левом аккаунте не пройдёт: дописать запись
+       в открытую базу можно, но подпись не угадать, а получить настоящую
+       можно только запросом (см. screen-device-trust ниже) с одобрением
+       существующего Супердоступа (вкладка "Администрация" → "Запросы на
+       устройства"), либо это устройство уже когда-то было одобрено.
+       Супердоступ внутри настоящего Telegram (initData) доверяет своему
+       устройству сам — иначе ему было бы некому одобрить первое. Один
+       аккаунт может иметь
        сколько угодно доверенных устройств одновременно (человеку нужно
        управлять с нескольких) — каждое просят и одобряют отдельно, и
        отозвать можно тоже по одному (см. "Аккаунт" → "Подключённые
        устройства" — свои, и блок в карточке игрока — чужие, только
        Супердоступу).
 
-       Совместимость: аккаунты, уже работавшие по старой схеме
-       (users/<uid>/deviceToken выдан, но trustedDevices ещё пустой) —
-       текущее устройство один раз молча зачисляется в доверенные при
-       следующем входе (см. protectedRoles-проверку в коде входа, ниже по
-       файлу), чтобы никого не выкинуло разом при появлении этой версии.
-       Новым устройствам того же аккаунта это не помогает — они всё равно
-       проходят обычный запрос. -->
+       Совместимость НЕТ, и это намеренно: записи старого формата (ключ —
+       сырой deviceId, без sig) и старый deviceToken были публично
+       читаемы, то есть скомпрометированы, поэтому они больше ничего не
+       дают. Все устройства, кроме Telegram-сессии суперадмина (она
+       доверяется сама), одобряются заново. -->
   <div class="screen" id="screen-device-trust">
     <div class="center-msg">
       <div class="big">🔒 УСТРОЙСТВО НЕ ПОДТВЕРЖДЕНО</div>
@@ -1511,6 +1514,37 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }
     return id;
   }
+  // deviceId — секрет этого браузера: база читается всеми, поэтому класть его
+  // туда (в trustedDevices, devicePairings, deviceTrustRequests, журнал)
+  // нельзя — прочитавший получил бы доказательство личности этого
+  // устройства. В базу уходит только deviceKey = sha256(deviceId): по нему
+  // deviceId не восстановить, а role-gateway сам хэширует присланный
+  // deviceId и сверяет с подписанной записью (см. verifyDeviceTrust).
+  async function deviceKeyOf(deviceId) {
+    if (!window.crypto || !window.crypto.subtle) {
+      throw new Error('Браузер не поддерживает crypto.subtle (нужен https) — устройство не удалось подготовить');
+    }
+    const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(deviceId));
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  function getDeviceKey() {
+    return deviceKeyOf(getOrCreateDeviceId());
+  }
+  // Записать устройство в trustedDevices умеет только role-gateway (запись
+  // подписывается его секретом) — прямая запись из браузера больше не
+  // считается доверием. `identity` — panelIdentityPayload() (initData либо
+  // telegramId+deviceId уже доверенного устройства). durationMs: null —
+  // навсегда.
+  function trustDeviceViaGateway(identity, targetUserId, deviceKey, label, durationMs) {
+    if (!identity) return Promise.reject(new Error('Не удалось определить личность — попробуй перезайти в панель.'));
+    return fetch(ROLE_GATEWAY_URL.replace(/\/grant-role$/, '/trust-device'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...identity, targetUserId: String(targetUserId), deviceKey, label: label || 'Устройство', durationMs: durationMs || null }),
+    }).then((res) => res.json().catch(() => ({})).then((data) => {
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    }));
+  }
   function randomPairingCode() {
     // без 0/O/1/I — на слух/глаз легко перепутать при диктовке кода
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1652,10 +1686,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         // и "Администрация" → "Запросы на устройства").
         const protectedRoles = ['admin', 'superadmin'];
         if (protectedRoles.includes(role)) {
-          const deviceId = getOrCreateDeviceId();
-          db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceId).once('value').then((trustSnap) => {
+          getDeviceKey().then((deviceKey) => db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceKey).once('value').then((trustSnap) => {
             const trust = trustSnap.val();
-            if (trust && (!trust.expiresAt || trust.expiresAt > Date.now())) {
+            // sig есть только у записей, созданных role-gateway — запись
+            // без неё (старого формата, либо дописанная в открытую базу
+            // руками) доверием не считается. Это всего лишь UX-проверка:
+            // реально проверяет подпись Worker (verifyDeviceTrust).
+            if (trust && trust.sig && (!trust.expiresAt || trust.expiresAt > Date.now())) {
               proceedToApp();
               return;
             }
@@ -1663,37 +1700,26 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
               // срок временного доверия истёк — убираем протухшую запись и
               // просим одобрить заново, как будто устройство никогда не
               // было доверено
-              db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceId).remove().catch(() => {});
+              db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceKey).remove().catch(() => {});
             }
-            // совместимость со старой схемой (единый deviceToken на
-            // аккаунт, без привязки к устройству) — зачисляем ТЕКУЩЕЕ
-            // устройство доверенным один-единственный раз, только если у
-            // аккаунта ещё вообще нет ни одного trustedDevices записи (то
-            // есть он ни разу не проходил через новую схему). Любое
-            // следующее устройство того же аккаунта под грандфазер уже не
-            // попадёт — trustedDevices к тому моменту не пустой.
-            if (user.deviceToken) {
-              db.ref('users/' + myTelegramId + '/trustedDevices').once('value').then((allSnap) => {
-                if (allSnap.exists()) {
-                  pendingDeviceTrustUid = myTelegramId;
-                  showScreen('screen-device-trust');
-                  return;
-                }
-                db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceId).set({
-                  label: currentDeviceLabel(),
-                  pairedAt: Date.now(),
-                  grandfathered: true,
-                }).then(proceedToApp).catch((err) => {
-                  console.error('device grandfather failed:', err);
+            // Суперадмин внутри настоящего Telegram — личность уже доказана
+            // подписью бота (initData), поэтому доверять этому устройству
+            // он может сам, без чьего-либо одобрения: иначе после перехода
+            // на подписанные записи (см. trustDeviceViaGateway) ему было бы
+            // некому одобрить своё же первое устройство.
+            if (role === 'superadmin' && tg?.initData) {
+              trustDeviceViaGateway({ initData: tg.initData }, myTelegramId, deviceKey, currentDeviceLabel(), null)
+                .then(proceedToApp)
+                .catch((err) => {
+                  console.error('self-trust failed:', err);
                   pendingDeviceTrustUid = myTelegramId;
                   showScreen('screen-device-trust');
                 });
-              });
               return;
             }
             pendingDeviceTrustUid = myTelegramId;
             showScreen('screen-device-trust');
-          }).catch((err) => {
+          })).catch((err) => {
             console.error('trusted-device check failed:', err);
             document.getElementById('denied-text').textContent = 'Не удалось проверить доверенные устройства: ' + (err.message || err);
             showScreen('screen-denied');
@@ -1792,7 +1818,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const code = randomPairingCode();
     pairingRef = db.ref('devicePairings/' + code);
     startBtn.disabled = true;
-    pairingRef.set({ deviceId, device: currentDeviceLabel(), requestedAt: Date.now(), status: 'pending' })
+    // в заявку уходит только хэш (deviceKey) — сам deviceId остаётся в
+    // localStorage этого браузера, заявка читается всеми
+    deviceKeyOf(deviceId)
+      .then((deviceKey) => pairingRef.set({ deviceKey, device: currentDeviceLabel(), requestedAt: Date.now(), status: 'pending' }))
       .then(() => {
         codeDisplay.textContent = code;
         codeBlock.style.display = 'block';
@@ -1857,16 +1886,17 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     errEl.style.display = 'none';
     if (!pendingDeviceTrustUid) return;
     stopWaitingForDeviceTrust();
-    const deviceId = getOrCreateDeviceId();
     btn.disabled = true;
     btn.textContent = 'Отправляем запрос…';
     try {
+      // в заявке (её читают все) — только хэш, не сам deviceId
+      const deviceKey = await getDeviceKey();
       const userSnap = await db.ref('users/' + pendingDeviceTrustUid).once('value');
       const u = userSnap.val() || {};
       const reqRef = db.ref('deviceTrustRequests').push();
       await reqRef.set({
         uid: pendingDeviceTrustUid,
-        deviceId,
+        deviceKey,
         device: currentDeviceLabel(),
         firstName: u.firstName || null,
         playerId: u.playerId || null,
@@ -1932,8 +1962,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // молча по старому battleTelegramId, а выгоняем на экран входа.
       const savedDeviceId = window.localStorage.getItem('battleDeviceId');
       if (savedDeviceId) {
-        db.ref('users/' + savedTelegramId + '/trustedDevices/' + savedDeviceId).once('value').then((snap) => {
-          if (snap.exists()) {
+        deviceKeyOf(savedDeviceId).then((savedDeviceKey) => db.ref('users/' + savedTelegramId + '/trustedDevices/' + savedDeviceKey).once('value')).then((snap) => {
+          // sig — признак записи, созданной role-gateway; старая запись
+          // (ключ — сырой deviceId) под хэшем не найдётся вообще, и сессия
+          // уйдёт на экран входа — устройство нужно подключить заново
+          if (snap.exists() && snap.val().sig) {
             loadAccountAndShowApp(savedTelegramId);
           } else {
             window.localStorage.removeItem('battleTelegramId');
@@ -2292,13 +2325,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const devices = user.trustedDevices || {};
     const keys = Object.keys(devices);
     if (!keys.length) {
-      statusEl.innerHTML = user.deviceToken
-        ? 'Работает по старой схеме (общий токен на аккаунт, без привязки к устройству) — текущее устройство зачислится в новую схему автоматически при следующем входе.'
-        : '<strong style="color:var(--live);">Нет ни одного доверенного устройства — вход в панель для этого аккаунта запрещён</strong>, пока с него не запросят и не одобрят хотя бы одно (см. «Администрация» → «Запросы на устройства»).';
+      statusEl.innerHTML = '<strong style="color:var(--live);">Нет ни одного доверенного устройства — вход в панель для этого аккаунта запрещён</strong>, пока с него не запросят и не одобрят хотя бы одно (см. «Администрация» → «Запросы на устройства»). Старая схема с общим токеном (deviceToken) больше не действует.';
       listEl.innerHTML = '';
       return;
     }
-    statusEl.innerHTML = `<strong style="color:var(--gold);">Доверенных устройств: ${keys.length}</strong>`;
+    const validCount = keys.filter((k) => devices[k] && devices[k].sig).length;
+    statusEl.innerHTML = `<strong style="color:var(--gold);">Доверенных устройств: ${validCount}</strong>` + (validCount < keys.length ? ` · записей старого формата: ${keys.length - validCount} (не действуют — можно отозвать)` : '');
     listEl.innerHTML = keys.map((deviceId) => {
       const d = devices[deviceId] || {};
       const dateStr = d.pairedAt ? new Date(d.pairedAt).toLocaleString('ru-RU') : '—';
@@ -2306,7 +2338,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-top:8px;">
         <div style="flex:1; min-width:0;">
           <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
-          <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${formatExpiry(d.expiresAt)}</div>
+          <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${d.sig ? formatExpiry(d.expiresAt) : '<span style="color:var(--live);">старый формат — не действует, одобрить заново</span>'}</div>
         </div>
         <button type="button" class="admin-revoke-trusted-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
       </div>`;
@@ -2737,13 +2769,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         resultEl.textContent = 'Код не найден или уже использован — проверь, что переписал его без ошибок, и что он ещё не истёк (5 минут).';
         return null;
       }
-      return ref.update({ status: 'approved', telegramId: myTelegramId, approvedAt: Date.now() })
-        .then(() => db.ref('users/' + myTelegramId + '/trustedDevices/' + data.deviceId).set({
-          label: data.device || 'Устройство',
-          pairedAt: Date.now(),
-        }))
+      if (!/^[0-9a-f]{64}$/.test(data.deviceKey || '')) {
+        resultEl.style.color = 'var(--live)';
+        resultEl.textContent = 'Заявка в старом формате — на подключаемом устройстве обнови страницу и запроси код заново.';
+        return null;
+      }
+      // сначала подписанная запись через role-gateway, и только потом
+      // "approved": ожидающее устройство входит сразу по этому статусу и
+      // сразу проверяет доверие
+      return trustDeviceViaGateway(panelIdentityPayload(), myTelegramId, data.deviceKey, data.device, null)
+        .then(() => ref.update({ status: 'approved', telegramId: myTelegramId, approvedAt: Date.now() }))
         .then(() => {
-          logAction('device_paired', myTelegramId, null, null, `Подключено устройство: ${data.device || data.deviceId}`);
+          logAction('device_paired', myTelegramId, null, null, `Подключено устройство: ${data.device || 'без названия'}`);
           input.value = '';
           resultEl.style.color = 'var(--gold)';
           resultEl.textContent = '✅ Устройство подключено.';
@@ -2775,7 +2812,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
           <div style="flex:1; min-width:0;">
             <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
-            <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${formatExpiry(d.expiresAt)}</div>
+            <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${d.sig ? formatExpiry(d.expiresAt) : '<span style="color:var(--live);">старый формат — не действует, подключи заново</span>'}</div>
           </div>
           <button type="button" class="account-revoke-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
         </div>`;
@@ -4102,13 +4139,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         db.ref('deviceTrustRequests/' + key).once('value').then((snap) => {
           const r = snap.val();
           if (!r) return;
-          return db.ref('deviceTrustRequests/' + key).update({ status: 'approved' })
-            .then(() => db.ref('users/' + r.uid + '/trustedDevices/' + r.deviceId).set({
-              label: r.device || 'Устройство',
-              pairedAt: Date.now(),
-              expiresAt: durationMs ? Date.now() + durationMs : null,
-            }))
-            .then(() => logAction('device_trust_approved', r.uid, r.firstName, r.playerId, `Устройство одобрено (${durationLabel}): ${r.device || r.deviceId}`));
+          if (!/^[0-9a-f]{64}$/.test(r.deviceKey || '')) {
+            alert('Заявка в старом формате — пусть устройство обновит страницу и запросит одобрение заново.');
+            return;
+          }
+          // сначала подписанная запись через role-gateway, и только потом
+          // "approved": ожидающее устройство входит сразу по этому статусу
+          return trustDeviceViaGateway(panelIdentityPayload(), r.uid, r.deviceKey, r.device, durationMs)
+            .then(() => db.ref('deviceTrustRequests/' + key).update({ status: 'approved' }))
+            .then(() => logAction('device_trust_approved', r.uid, r.firstName, r.playerId, `Устройство одобрено (${durationLabel}): ${r.device || 'без названия'}`));
         }).catch((err) => alert('Не удалось одобрить: ' + (err.message || err)));
       });
     });

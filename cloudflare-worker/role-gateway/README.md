@@ -10,12 +10,12 @@ admin/superadmin, используя секретный ключ, зашитый
 
 `POST /grant-role` и `POST /set-status` — тело `{ initData, targetUserId,
 newRole }` / `{ initData, targetUserId, newStatus, restrictedUntil }`, но
-`initData` можно заменить на `{ telegramId, deviceId }` (см. `verifyIdentity`
-ниже — то же доверенное устройство, что и у бэкапов):
+`initData` можно заменить на `{ telegramId, deviceId }` (см. «Доверенные
+устройства» ниже — то же доверенное устройство, что и у бэкапов):
 1. Проверяет подпись `initData` (её даёт `Telegram.WebApp.initData` внутри
    мини-приложения) через `BOT_TOKEN` — подделать её без токена бота
-   невозможно — либо, если initData нет, `deviceId` по
-   `users/$uid/trustedDevices/$deviceId`.
+   невозможно — либо, если initData нет, подписанную запись
+   `users/$uid/trustedDevices/sha256($deviceId)`.
 2. Смотрит текущую роль подписавшегося в Firebase — для `/grant-role`
    должна быть `superadmin`, для `/set-status` — любая из
    moderator/admin/superadmin.
@@ -52,12 +52,39 @@ true` — то же делегируемое право, что admin.html уж�
 `{ telegramId, deviceId }` — второе нужно, чтобы все эти действия работали
 не только внутри настоящей Telegram-сессии, но и из desktop-приложения/
 обычного браузера (initData там физически недоступна — это не Telegram
-Mini App). `deviceId` проверяется по `users/$uid/trustedDevices/$deviceId`
-— тому же 128-битному случайному токену, что уже обязателен для самого
-входа в admin.html под admin/superadmin (см. код рядом с
-`protectedRoles`) — так что desktop/браузер, уже прошедшие этот вход, не
-теряют доступ к выдаче ролей/бану/бэкапам только из-за того, что это не
-настоящий Telegram Mini App.
+Mini App).
+
+### Доверенные устройства (`{ telegramId, deviceId }`)
+
+База читается и пишется всеми (`database.rules.json`), поэтому в ней
+нельзя хранить то, что одновременно служит доказательством личности.
+`deviceId` (128 бит случайности, `localStorage.battleDeviceId`) остаётся
+**только в браузере** и приходит сюда только в теле HTTPS-запроса. В базе
+лежит `deviceKey = sha256(deviceId)`:
+
+- запись `users/$uid/trustedDevices/$deviceKey` считается доверием, только
+  если несёт `sig = HMAC(ключ из BOT_TOKEN, uid|deviceKey|expiresAt)`;
+- создаёт такую запись только Worker — `POST /trust-device`
+  (`{ initData | telegramId+deviceId, targetUserId, deviceKey, label,
+  durationMs }`): либо владелец аккаунта (moderator/admin/superadmin)
+  одобряет своё устройство, личность подтверждена initData или уже
+  доверенным устройством (парный код «Подключить по коду», первый вход
+  суперадмина из Telegram), либо superadmin одобряет устройство другого
+  человека («Запросы на устройства»);
+- подделать запись прямой записью в открытую базу нельзя — без секрета
+  подпись не получить; срок (`expiresAt`) входит в подпись, так что его
+  тоже не продлить; запись другого аккаунта, скопированная на этот, не
+  проходит (в подписи `uid`).
+
+Записи старого формата (ключ — сырой `deviceId`, без `sig`) не принимаются:
+они были публично читаемы (по ним любой мог пройти проверку), поэтому
+устройства нужно одобрить заново. Новых секретов настраивать не нужно —
+ключ подписи выводится из `BOT_TOKEN`; смена `BOT_TOKEN` аннулирует все
+доверенные устройства.
+
+**Порядок выкладки:** сначала `npx wrangler deploy` (Worker), потом
+публикация нового `admin.html` — иначе новая панель будет вызывать ещё не
+существующий `/trust-device`.
 
 `restoreCode` кладёт текстовые файлы прямо в дерево коммита (Git Trees API
 принимает `content` вместо `sha` и создаёт блоб сам) — отдельный

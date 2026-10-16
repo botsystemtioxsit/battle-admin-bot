@@ -132,8 +132,9 @@ write). Никогда не расширяй его scope на "все репо�
 
 ## Выкладка без терминала (GitHub Actions)
 
-`.github/workflows/deploy-role-gateway.yml` (кнопка **Run workflow** на
-вкладке Actions репозитория `battle-admin-bot`) делает всё за вас:
+`.github/workflows/deploy-role-gateway.yml` запускается сам при слиянии
+изменений `cloudflare-worker/role-gateway/**` в `main` (или кнопкой **Run
+workflow** на вкладке Actions репозитория `battle-admin-bot`) и делает всё за вас:
 1. самотест — ключ сервисного аккаунта реально пишет в базу в обход правил
    (иначе выкладка останавливается ДО того, как что-то сломается);
 2. `wrangler deploy`;

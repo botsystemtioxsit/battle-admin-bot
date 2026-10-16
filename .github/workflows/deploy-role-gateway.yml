@@ -20,6 +20,14 @@ name: Deploy role-gateway Worker
 # переживают выкладку и здесь не трогаются.
 
 on:
+  # само при слиянии изменений Worker'а в main (терминал не нужен вообще)…
+  push:
+    branches:
+      - main
+    paths:
+      - 'cloudflare-worker/role-gateway/**'
+      - '.github/workflows/deploy-role-gateway.yml'
+  # …и вручную кнопкой "Run workflow" на вкладке Actions
   workflow_dispatch: {}
 
 concurrency:

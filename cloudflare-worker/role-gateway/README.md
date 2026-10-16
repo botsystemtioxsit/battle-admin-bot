@@ -132,31 +132,47 @@ write). Никогда не расширяй его scope на "все репо�
 
 ## Выкладка без терминала (GitHub Actions)
 
-`.github/workflows/deploy-role-gateway.yml` запускается сам при слиянии
-изменений `cloudflare-worker/role-gateway/**` в `main` (или кнопкой **Run
-workflow** на вкладке Actions репозитория `battle-admin-bot`) и делает всё за вас:
+Workflow **«Deploy role-gateway Worker»** живёт в репозитории **`index.html`**
+(`.github/workflows/deploy-role-gateway.yml`), а не здесь: секреты GitHub
+хранятся отдельно для каждого репозитория, а ключ сервисного аккаунта
+Firebase (`FIREBASE_SERVICE_ACCOUNT`) уже лежит именно там — его же использует
+выкладка правил базы. Запуск: GitHub → `index.html` → Actions → «Deploy
+role-gateway Worker» → **Run workflow** (поле `gateway_ref` — ветка/коммит этого
+репозитория, по умолчанию `main`). Он:
 1. самотест — ключ сервисного аккаунта реально пишет в базу в обход правил
    (иначе выкладка останавливается ДО того, как что-то сломается);
-2. `wrangler deploy`;
-3. кладёт ключ сервисного аккаунта Worker'у как секрет
-   `FIREBASE_SERVICE_ACCOUNT` — берёт его из уже существующего секрета
-   GitHub с тем же именем (тот самый, которым `index.html` выкладывает
-   правила), руками копировать JSON не нужно;
-4. проверяет `/health`: должно быть `firebaseAdminConfigured: true`.
+2. `wrangler deploy --keep-vars` (секреты и переменные Worker'а не трогает);
+3. кладёт ключ сервисного аккаунта Worker'у секретом `FIREBASE_SERVICE_ACCOUNT`
+   — берёт из секрета GitHub, руками копировать JSON не нужно;
+4. проверяет `/health`: `botTokenConfigured` и `firebaseAdminConfigured` — оба `true`.
 
-Разовая настройка — секрет репозитория `CLOUDFLARE_API_TOKEN` (токен
-Cloudflare по шаблону «Edit Cloudflare Workers»; `CLOUDFLARE_ACCOUNT_ID`
-нужен, только если токен видит несколько аккаунтов). Остальные секреты
-Worker'а (`BOT_TOKEN`, `GITHUB_TOKEN`) переживают выкладку.
+Разовая настройка — секрет **репозитория `index.html`** `CLOUDFLARE_API_TOKEN`
+(токен Cloudflare по шаблону «Edit Cloudflare Workers»; `CLOUDFLARE_ACCOUNT_ID`
+нужен, только если токен видит несколько аккаунтов). Остальные секреты Worker'а
+(`BOT_TOKEN`, `GITHUB_TOKEN`) переживают выкладку.
 
-**Порядок выкладки всего пакета:** 1) этот Worker (работает и со старыми, и с
-новыми правилами) → 2) панель (`main` → сборка `public/admin.html`) →
-3) `database.rules.json` в репозитории `index.html` (уходит в Firebase сам
-при пуше в `main`; не пускает клиентов писать `admin`/`superadmin`, чужие
-`status/points/starsBalance` owner-аккаунтов и `trustedDevices`). Правила
-раньше Worker'а выкладывать нельзя — выдача ролей и бан перестанут
-работать. Откат: вернуть прежние правила и убрать секрет
-`FIREBASE_SERVICE_ACCOUNT` (Worker вернётся в legacy-режим).
+**Порядок выкладки всего пакета:** 1) этот Worker из ветки (работает и со
+старыми, и с новыми правилами) → 2) панель (`main` → сборка `public/admin.html`)
+→ 3) `database.rules.json` в репозитории `index.html` (уходит в Firebase сам
+при пуше в `main`). Правила не пускают клиентов писать `admin`/`superadmin`,
+`status/points/starsBalance` owner-аккаунтов и `trustedDevices`; выложенные
+раньше Worker'а, они сломали бы выдачу ролей, бан, итоги боёв (`/finish-match`),
+доверие устройств и восстановление базы. Поэтому выкладка правил сама
+проверяет `/health` и без `firebaseAdminConfigured: true` останавливается
+(`skip_worker_check` — только аварийно).
+
+**После смены ключа сервисного аккаунта** в Google Cloud (новый ключ → обновить
+секрет `FIREBASE_SERVICE_ACCOUNT` в `index.html`) нужно заново запустить
+«Deploy role-gateway Worker» — у Worker'а своя копия ключа, `/health`
+покажет `firebaseAdminConfigured: true` и со старой, уже недействительной.
+
+**Откат:** вернуть **коммит ffed511 в `index.html` целиком** (кнопка Revert на
+GitHub — вместе с workflow), а не только файл правил: старый файл без
+подстановки секрета оставил бы в правилах публично известную строку
+`__ROLE_GRANT_KEY__` вместо ключа. Worker при этом остаётся в admin-режиме и
+работает со старыми правилами; в legacy-режим он вернётся, только если убрать
+секрет `FIREBASE_SERVICE_ACCOUNT` в Cloudflare (Workers → battle-role-gateway →
+Settings → Variables and secrets).
 
 Ключ сервисного аккаунта даёт полный доступ к базе, поэтому живёт только
 в секретах (GitHub и Worker) и не должен попадать в логи или код. Чем уже его
@@ -179,6 +195,12 @@ Admin» (самотест скажет, если её не хватает).
   (`role: 'moderator'` пишется без ключа, `permissions/backups` — любой
   булевой). Поэтому `/set-status` и бэкап-эндпоинты (включая
   `/restore-code`) доступны любому, у кого есть настоящая `initData`.
+- **`/finish-match` берёт полномочия из записи боя, которую вызывающий пишет
+  сам** (`battles/<id>.refereeId/hostId/guestId/league` — база открыта на
+  запись): любой игрок может записать «бой», где он судья, и начислить себе/снять
+  у другого очки одним вызовом. Не новая проблема (так было и с ключом), но
+  раньше она не была описана. Настоящее исправление — чтобы бой и назначение
+  судьи создавал и подписывал сам Worker.
 - Отзыв устройства нельзя сделать «липким»: подписанная запись публична
   и может быть записана обратно её владельцем.
 

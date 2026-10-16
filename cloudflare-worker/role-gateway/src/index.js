@@ -18,7 +18,7 @@
 // невозможно, не зная BOT_TOKEN (алгоритм — офиц. документация Telegram
 // Bot API, "Validating data received via the Mini App").
 
-import { getAdminAccessToken } from './firebase-admin.mjs';
+import { getAdminAccessToken, resetAdminTokenCache } from './firebase-admin.mjs';
 
 const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const GITHUB_OWNER = 'botsystemtioxsit';
@@ -209,7 +209,7 @@ async function verifyIdentity(body, env) {
 async function writeTrustedDevice(env, uid, deviceKey, { label, durationMs, approvedBy }) {
   const expiresAt = durationMs ? Date.now() + durationMs : null;
   const sig = await deviceTrustSig(env, uid, deviceKey, expiresAt);
-  const res = await fetch(await dbWriteUrl(env, `/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`), {
+  const res = await dbWrite(env, `/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ label, pairedAt: Date.now(), expiresAt, approvedBy, sig }),
@@ -280,6 +280,23 @@ async function dbWriteUrl(env, path) {
   return `${base}${base.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
 }
 
+// Запись в базу (fetch с нужным URL). В admin-режиме на 401/403 один раз
+// сбрасываем кэш токена и повторяем: ключ сервисного аккаунта могли
+// ротировать, токен — отозвать; без этого все записи падали бы до конца часа.
+async function dbWrite(env, path, init) {
+  const res = await fetch(await dbWriteUrl(env, path), init);
+  if (adminMode(env) && (res.status === 401 || res.status === 403)) {
+    resetAdminTokenCache();
+    return fetch(await dbWriteUrl(env, path), init);
+  }
+  return res;
+}
+
+// Идентификатор, который подставляется в путь к базе (id пользователя, боя).
+// С токеном сервисного аккаунта правила не действуют, поэтому путь не должен
+// строиться из непроверенного текста: ни слэшей, ни точек, ни спецсимволов.
+const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
 // Убирает служебный ключ (roleGrantKey/adminActionKey) из базы после записи
 // (только legacy-режим — в admin-режиме ключей в данных нет).
 // Пока он лежит в открытой базе, его видят все слушатели, поэтому повторяем
@@ -302,7 +319,7 @@ async function fbCleanup(url, init) {
 
 async function grantRole(env, requesterId, targetUserId, newRole) {
   const admin = adminMode(env);
-  const patchRes = await fetch(await dbWriteUrl(env, `/users/${encodeURIComponent(targetUserId)}.json`), {
+  const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(admin ? { role: newRole } : { role: newRole, roleGrantKey: env.ROLE_GRANT_KEY }),
@@ -328,7 +345,7 @@ async function setStatus(env, targetUserId, newStatus, restrictedUntil) {
   const admin = adminMode(env);
   const body = { status: newStatus, restrictedUntil: restrictedUntil ?? null };
   if (!admin) body.adminActionKey = env.ROLE_GRANT_KEY;
-  const patchRes = await fetch(await dbWriteUrl(env, `/users/${encodeURIComponent(targetUserId)}.json`), {
+  const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -441,7 +458,7 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     touchedKeys.push(refRec.key);
   }
 
-  const patchRes = await fetch(await dbWriteUrl(env, '/.json'), {
+  const patchRes = await dbWrite(env, '/.json', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -502,7 +519,7 @@ async function restoreDatabase(env, snapshot) {
     payload.users = usersCopy;
   }
 
-  const putRes = await fetch(await dbWriteUrl(env, '/.json'), {
+  const putRes = await dbWrite(env, '/.json', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -777,6 +794,9 @@ export default {
       if (!targetUserId || !newRole) {
         return jsonResponse({ error: 'нужны targetUserId, newRole' }, 400);
       }
+      if (!SAFE_ID_RE.test(String(targetUserId))) {
+        return jsonResponse({ error: 'некорректный targetUserId' }, 400);
+      }
       if (!ALLOWED_ROLES.has(newRole)) {
         return jsonResponse({ error: `newRole должен быть одним из: ${[...ALLOWED_ROLES].join(', ')}` }, 400);
       }
@@ -811,6 +831,12 @@ export default {
       const { targetUserId, newStatus, restrictedUntil } = body || {};
       if (!targetUserId || !newStatus) {
         return jsonResponse({ error: 'нужны targetUserId, newStatus' }, 400);
+      }
+      if (!SAFE_ID_RE.test(String(targetUserId))) {
+        return jsonResponse({ error: 'некорректный targetUserId' }, 400);
+      }
+      if (restrictedUntil != null && !(typeof restrictedUntil === 'number' && Number.isFinite(restrictedUntil))) {
+        return jsonResponse({ error: 'restrictedUntil должен быть числом (время в мс) или null' }, 400);
       }
       if (!ALLOWED_STATUSES.has(newStatus)) {
         return jsonResponse({ error: `newStatus должен быть одним из: ${[...ALLOWED_STATUSES].join(', ')}` }, 400);
@@ -931,6 +957,9 @@ export default {
       const { initData, matchId, winnerSide } = body || {};
       if (!initData || !matchId || (winnerSide !== 'host' && winnerSide !== 'guest')) {
         return jsonResponse({ error: 'нужны initData, matchId, winnerSide (host|guest)' }, 400);
+      }
+      if (!SAFE_ID_RE.test(String(matchId))) {
+        return jsonResponse({ error: 'некорректный matchId' }, 400);
       }
 
       const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);

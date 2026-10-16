@@ -186,7 +186,7 @@ async function verifyDeviceTrust(env, telegramId, deviceId) {
   if (val.expiresAt && val.expiresAt <= Date.now()) {
     return { ok: false, reason: 'доверие устройству истекло' };
   }
-  return { ok: true, userId: uid, via: 'device' };
+  return { ok: true, userId: uid, via: 'device', expiresAt: val.expiresAt || null };
 }
 
 // Общая точка входа для проверки личности: initData, если она есть
@@ -250,22 +250,29 @@ async function getUserByPlayerId(playerId) {
   return { key: keys[0], user: data[keys[0]] || {} };
 }
 
-// Реальный сквозной тест: пытается провести тестовую учётку через ровно
-// тот же путь, что и настоящая выдача роли (users/$uid/role +
-// roleGrantKey), и сразу убирает её независимо от результата — это не
-// настоящий игрок, ему не место в списке пользователей панели. Отвечает
-// true только если ROLE_GRANT_KEY в этом Worker'е реально совпадает с тем,
-// что сейчас задеплоено в database.rules.json (а не просто "оба заданы,
-// но разъехались" — именно так и ломалась выдача роли раньше).
-async function checkRoleGrantKeyMatchesRules(env) {
-  const testRes = await fetch(`${FIREBASE_DB_URL}/users/_role_gateway_healthcheck_.json`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'admin', roleGrantKey: env.ROLE_GRANT_KEY }),
-  });
-  const matches = testRes.ok;
-  await fetch(`${FIREBASE_DB_URL}/users/_role_gateway_healthcheck_.json`, { method: 'DELETE' }).catch(() => {});
-  return matches;
+// Раньше здесь была checkRoleGrantKeyMatchesRules: /health (без авторизации)
+// писал ROLE_GRANT_KEY в users/_role_gateway_healthcheck_ в открытой базе —
+// любой, кто слушает этот путь, получал ключ по первому же запросу. Проба
+// убрана; сверять ключ с правилами теперь можно только по факту: если они
+// разъехались, grant-role/set-status вернут "Firebase отказал".
+
+// Убирает служебный ключ (roleGrantKey/adminActionKey) из базы после записи.
+// Пока он лежит в открытой базе, его видят все слушатели, поэтому повторяем
+// при сбое, а не молча глотаем ошибку, как раньше: потерянная очистка с
+// ответом 200 оставляла ключ в базе навсегда (и в ежедневных снимках).
+async function fbCleanup(url, init) {
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok) return true;
+      lastErr = new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  console.error('role-gateway: не удалось убрать служебный ключ из базы', url, lastErr && lastErr.message);
+  return false;
 }
 
 async function grantRole(env, requesterId, targetUserId, newRole) {
@@ -279,9 +286,9 @@ async function grantRole(env, requesterId, targetUserId, newRole) {
   }
   // ключ был нужен только чтобы протолкнуть запись через database.rules.json —
   // сразу убираем его, в профиле ему делать нечего
-  await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/roleGrantKey.json`, {
+  await fbCleanup(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/roleGrantKey.json`, {
     method: 'DELETE',
-  }).catch(() => {});
+  });
 }
 
 // Бан/разбан чужого аккаунта — то же самое зеркало, что и grantRole, но
@@ -299,9 +306,9 @@ async function setStatus(env, targetUserId, newStatus, restrictedUntil) {
   if (!patchRes.ok) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
-  await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/adminActionKey.json`, {
+  await fbCleanup(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/adminActionKey.json`, {
     method: 'DELETE',
-  }).catch(() => {});
+  });
 }
 
 // Записывает итог боя — раньше это делал напрямую клиент СУДЬИ (см.
@@ -413,11 +420,11 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
 
   const cleanup = {};
   for (const key of touchedKeys) cleanup[`users/${key}/adminActionKey`] = null;
-  await fetch(`${FIREBASE_DB_URL}/.json`, {
+  await fbCleanup(`${FIREBASE_DB_URL}/.json`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(cleanup),
-  }).catch(() => {});
+  });
 
   return { winnerId, loserId, pointsAwarded, audienceVotes, trophyMultiplier: 1 };
 }
@@ -471,11 +478,11 @@ async function restoreDatabase(env, snapshot) {
   for (const uid of touchedForRole) cleanup[`users/${uid}/roleGrantKey`] = null;
   for (const uid of touchedForAction) cleanup[`users/${uid}/adminActionKey`] = null;
   if (Object.keys(cleanup).length) {
-    await fetch(`${FIREBASE_DB_URL}/.json`, {
+    await fbCleanup(`${FIREBASE_DB_URL}/.json`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cleanup),
-    }).catch(() => {});
+    });
   }
 }
 
@@ -702,12 +709,12 @@ export default {
 
     // Диагностика для админ-панели ("Система" → блок "role-gateway") —
     // отдаёт только true/false, реальные значения секретов наружу никогда
-    // не попадают.
+    // не попадают. Ничего не пишет в базу: эндпоинт открытый, и любая запись
+    // с секретом по запросу анонима выдавала бы этот секрет слушателям базы.
     if (url.pathname === '/health' && request.method === 'GET') {
       const botTokenConfigured = !!env.BOT_TOKEN;
       const roleGrantKeyConfigured = !!env.ROLE_GRANT_KEY;
-      const roleGrantKeyMatchesRules = roleGrantKeyConfigured ? await checkRoleGrantKeyMatchesRules(env) : false;
-      return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, roleGrantKeyMatchesRules });
+      return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);
@@ -807,8 +814,8 @@ export default {
       if (!/^\d+$/.test(String(targetUserId || ''))) {
         return jsonResponse({ error: 'нужен targetUserId (числовой telegramId)' }, 400);
       }
-      if (durationMs != null && !(typeof durationMs === 'number' && durationMs > 0 && durationMs <= MAX_TRUST_DURATION_MS)) {
-        return jsonResponse({ error: 'durationMs должен быть положительным числом (или null — навсегда)' }, 400);
+      if (durationMs != null && !(Number.isInteger(durationMs) && durationMs > 0 && durationMs <= MAX_TRUST_DURATION_MS)) {
+        return jsonResponse({ error: 'durationMs должен быть целым положительным числом миллисекунд (или null — навсегда)' }, 400);
       }
       const uid = String(targetUserId);
 
@@ -829,10 +836,19 @@ export default {
         return jsonResponse({ error: 'пользователь не найден' }, 404);
       }
 
+      // Устройство с временным доверием не может выдать больше, чем имеет
+      // само: иначе оно одним вызовом превращало себя (или новое устройство)
+      // в вечное. Вечное доверие передают только initData и вечные устройства.
+      let effectiveDurationMs = durationMs || null;
+      if (verified.via === 'device' && verified.expiresAt) {
+        const remainingMs = Math.max(1, verified.expiresAt - Date.now()); // 0 в writeTrustedDevice означало бы "навсегда"
+        effectiveDurationMs = effectiveDurationMs ? Math.min(effectiveDurationMs, remainingMs) : remainingMs;
+      }
+
       try {
         await writeTrustedDevice(env, uid, deviceKey, {
           label: typeof label === 'string' && label.trim() ? label.trim().slice(0, 64) : 'Устройство',
-          durationMs: durationMs || null,
+          durationMs: effectiveDurationMs,
           approvedBy: verified.userId,
         });
       } catch (err) {

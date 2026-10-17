@@ -2804,18 +2804,32 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // Ждущая заявка живёт столько же, сколько ждёт само устройство: 5 минут,
   // после чего оно удаляет её. Если страницу закрыли раньше, запись так и
   // остаётся status:'pending' — без отсечки по возрасту она вечно горела бы
-  // красной цифрой. 10 минут — 5 на ожидание плюс запас на разницу часов
-  // (requestedAt пишет браузер самого просителя).
+  // красной цифрой. Отсечка касается ТОЛЬКО цифры на вкладке и вибрации:
+  // в списках видны все ожидающие заявки (их можно и отклонить), как и раньше.
+  //
+  // requestedAt пишет браузер самого просителя, и его часы могут уходить.
+  // Поэтому заявка считается свежей, если (а) моложе 10 минут по requestedAt
+  // (в обе стороны: запись "из будущего" дальше чем на 10 минут не считается)
+  // ИЛИ (б) появилась, пока панель открыта, — для такой берём время получения
+  // у себя, чужие часы не важны.
   const REQUEST_FRESH_MS = 10 * 60 * 1000;
-  function isFreshPendingRequest(r) {
+  const requestFirstSeenLive = {}; // 'login:<ключ>' / 'device:<ключ>' → когда увидели живьём
+  function isFreshPendingRequest(kind, key, r) {
     if (!r || r.status !== 'pending') return false;
-    return !r.requestedAt || Date.now() - Number(r.requestedAt) < REQUEST_FRESH_MS;
+    const seen = requestFirstSeenLive[kind + ':' + key];
+    if (seen && Date.now() - seen < REQUEST_FRESH_MS) return true;
+    if (!r.requestedAt) return true;
+    const age = Date.now() - Number(r.requestedAt);
+    return age > -REQUEST_FRESH_MS && age < REQUEST_FRESH_MS;
+  }
+  function pendingLoginKeys() {
+    return Object.keys(latestLoginRequests).filter((key) => latestLoginRequests[key]?.status === 'pending');
   }
   function freshLoginRequestKeys() {
-    return Object.keys(latestLoginRequests).filter((key) => isFreshPendingRequest(latestLoginRequests[key]));
+    return pendingLoginKeys().filter((key) => isFreshPendingRequest('login', key, latestLoginRequests[key]));
   }
   function freshDeviceRequests() {
-    return latestPendingDeviceRequests.filter(([, r]) => isFreshPendingRequest(r));
+    return latestPendingDeviceRequests.filter(([key, r]) => isFreshPendingRequest('device', key, r));
   }
 
   // Заявки на вход (users/<я>/loginRequests) и заявки на подтверждение
@@ -2825,21 +2839,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // и подсвечена цифрой на вкладке. Узлы маленькие, лишнего трафика нет.
   // Слушатели висят до закрытия панели, поэтому подключаются один раз.
   let requestWatchersTimer = null;
-  let renderedLoginKeys = '';
-  let renderedDeviceKeys = '';
   function startLiveRequestWatchers() {
     if (!requestWatchersTimer) {
       // заявка может "протухнуть", пока в базе ничего не меняется, — раз в
-      // полминуты пересчитываем цифры и, только если набор свежих заявок
-      // изменился, перерисовываем списки (иначе сбросился бы выбранный срок)
+      // полминуты пересчитываем цифры на вкладках (списки от времени не зависят)
       requestWatchersTimer = setInterval(() => {
         setTabDot('account', freshLoginRequestKeys().length);
-        if (freshLoginRequestKeys().join('|') !== renderedLoginKeys) renderAccountLoginRequests();
-        if (deviceWatcherRef) {
-          const fresh = freshDeviceRequests();
-          setTabDot('super', fresh.length);
-          if (fresh.map(([key]) => key).join('|') !== renderedDeviceKeys) renderDeviceTrustRequests(fresh);
-        }
+        if (deviceWatcherRef) setTabDot('super', freshDeviceRequests().length);
       }, 30000);
     }
     if (myTelegramId && !loginWatcherRef) {
@@ -2848,12 +2854,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       let knownPending = new Set();
       loginWatcherCb = loginWatcherRef.on('value', (snap) => {
         latestLoginRequests = snap.val() || {};
-        const pendingKeys = freshLoginRequestKeys();
-        const hasNew = pendingKeys.some((key) => !knownPending.has(key));
+        const pendingKeys = pendingLoginKeys();
+        const newKeys = pendingKeys.filter((key) => !knownPending.has(key));
+        if (!firstSnapshot) newKeys.forEach((key) => { requestFirstSeenLive['login:' + key] = Date.now(); });
         knownPending = new Set(pendingKeys);
-        setTabDot('account', pendingKeys.length);
+        setTabDot('account', freshLoginRequestKeys().length);
         renderAccountLoginRequests();
-        if (hasNew && !firstSnapshot) tg?.HapticFeedback?.notificationOccurred?.('warning');
+        if (newKeys.length && !firstSnapshot) tg?.HapticFeedback?.notificationOccurred?.('warning');
         firstSnapshot = false;
       }, (err) => console.error('Заявки на вход', err));
     }
@@ -2866,12 +2873,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       deviceWatcherCb = deviceWatcherRef.on('value', (snap) => {
         const reqs = snap.val() || {};
         latestPendingDeviceRequests = Object.entries(reqs).filter(([, r]) => r?.status === 'pending');
-        const fresh = freshDeviceRequests();
-        const hasNew = fresh.some(([key]) => !knownPending.has(key));
-        knownPending = new Set(fresh.map(([key]) => key));
-        setTabDot('super', fresh.length);
-        renderDeviceTrustRequests(fresh);
-        if (hasNew && !firstSnapshot) tg?.HapticFeedback?.notificationOccurred?.('warning');
+        const newKeys = latestPendingDeviceRequests.map(([key]) => key).filter((key) => !knownPending.has(key));
+        if (!firstSnapshot) newKeys.forEach((key) => { requestFirstSeenLive['device:' + key] = Date.now(); });
+        knownPending = new Set(latestPendingDeviceRequests.map(([key]) => key));
+        setTabDot('super', freshDeviceRequests().length);
+        renderDeviceTrustRequests(latestPendingDeviceRequests);
+        if (newKeys.length && !firstSnapshot) tg?.HapticFeedback?.notificationOccurred?.('warning');
         firstSnapshot = false;
       }, (err) => console.error('Запросы на устройства', err));
     }
@@ -2889,8 +2896,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const emptyEl = document.getElementById('account-login-requests-empty');
     if (!listEl || !myTelegramId) return;
     const requests = latestLoginRequests;
-    const pending = freshLoginRequestKeys();
-    renderedLoginKeys = pending.join('|');
+    const pending = pendingLoginKeys();
     if (!pending.length) {
       listEl.innerHTML = '';
       emptyEl.style.display = 'block';
@@ -4280,13 +4286,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function loadDeviceTrustRequests() {
     if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
     startLiveRequestWatchers();
-    renderDeviceTrustRequests(freshDeviceRequests());
+    renderDeviceTrustRequests(latestPendingDeviceRequests);
   }
 
   function renderDeviceTrustRequests(pending) {
     const listEl = document.getElementById('device-trust-requests-list');
     const emptyEl = document.getElementById('device-trust-requests-empty');
-    renderedDeviceKeys = pending.map(([key]) => key).join('|');
     // список перерисовывается на каждое изменение в базе — не даём сбросить
     // срок ("На 7 дней"), который суперадмин уже выбрал у другой заявки
     const chosenDurations = {};

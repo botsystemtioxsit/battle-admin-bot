@@ -280,7 +280,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Скорость: на старте панель больше не скачивает всю таблицу игроков (число игроков и очистка гостей — отдельными лёгкими запросами), профиль/аварийный режим/доверие устройства читаются параллельно, список бэкапов грузится только на своей вкладке, JSZip — по требованию. Заявки на вход и на устройства теперь живые: появляются сразу, на вкладке красная цифра. Список «Администрация» берёт только персонал (нужен индекс users.role из database.rules.json).">v5.12</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Скорость: на старте панель больше не скачивает всю таблицу игроков (число игроков и очистка гостей — отдельными лёгкими запросами), профиль/аварийный режим/доверие устройства читаются параллельно, список бэкапов грузится только на своей вкладке, JSZip — по требованию. Заявки на вход и на устройства теперь живые: появляются сразу, на вкладке красная цифра. Заявки не светятся красным, если страницу просителя закрыли (отсечка 10 минут). «Администрация», никнеймы на проверке и поиск игрока по коду используют индексы базы (database.rules.json); «Аккаунт» читает только email, «Статистика» кэшируется на 90 с.">v5.12</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -2139,7 +2139,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (tab.dataset.tab === 'beta') showBetaSection(canManageBeta() ? 'beta' : 'clans');
       if (tab.dataset.tab === 'stats') loadStatsTab();
       if (tab.dataset.tab === 'super') showSuperSection(defaultSuperSection());
-      if (tab.dataset.tab === 'account' && myTelegramId) db.ref('users/' + myTelegramId).once('value').then((s) => renderAccountTab(s.val() || {}));
+      // нужен только привязанный email — целиком профиль (с аватаркой) не читаем
+      if (tab.dataset.tab === 'account' && myTelegramId) db.ref('users/' + myTelegramId + '/attachedEmail').once('value').then((s) => renderAccountTab({ attachedEmail: s.val() }));
       updateDbPeekVisibility();
     });
   });
@@ -2800,20 +2801,54 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }
   }
 
+  // Ждущая заявка живёт столько же, сколько ждёт само устройство: 5 минут,
+  // после чего оно удаляет её. Если страницу закрыли раньше, запись так и
+  // остаётся status:'pending' — без отсечки по возрасту она вечно горела бы
+  // красной цифрой. 10 минут — 5 на ожидание плюс запас на разницу часов
+  // (requestedAt пишет браузер самого просителя).
+  const REQUEST_FRESH_MS = 10 * 60 * 1000;
+  function isFreshPendingRequest(r) {
+    if (!r || r.status !== 'pending') return false;
+    return !r.requestedAt || Date.now() - Number(r.requestedAt) < REQUEST_FRESH_MS;
+  }
+  function freshLoginRequestKeys() {
+    return Object.keys(latestLoginRequests).filter((key) => isFreshPendingRequest(latestLoginRequests[key]));
+  }
+  function freshDeviceRequests() {
+    return latestPendingDeviceRequests.filter(([, r]) => isFreshPendingRequest(r));
+  }
+
   // Заявки на вход (users/<я>/loginRequests) и заявки на подтверждение
   // устройств (deviceTrustRequests, только Супердоступ) раньше читались один
   // раз при открытии вкладки — новая заявка не появлялась, пока вкладку не
   // откроешь заново. Теперь это живые слушатели, как в игре: заявка видна сразу
   // и подсвечена цифрой на вкладке. Узлы маленькие, лишнего трафика нет.
   // Слушатели висят до закрытия панели, поэтому подключаются один раз.
+  let requestWatchersTimer = null;
+  let renderedLoginKeys = '';
+  let renderedDeviceKeys = '';
   function startLiveRequestWatchers() {
+    if (!requestWatchersTimer) {
+      // заявка может "протухнуть", пока в базе ничего не меняется, — раз в
+      // полминуты пересчитываем цифры и, только если набор свежих заявок
+      // изменился, перерисовываем списки (иначе сбросился бы выбранный срок)
+      requestWatchersTimer = setInterval(() => {
+        setTabDot('account', freshLoginRequestKeys().length);
+        if (freshLoginRequestKeys().join('|') !== renderedLoginKeys) renderAccountLoginRequests();
+        if (deviceWatcherRef) {
+          const fresh = freshDeviceRequests();
+          setTabDot('super', fresh.length);
+          if (fresh.map(([key]) => key).join('|') !== renderedDeviceKeys) renderDeviceTrustRequests(fresh);
+        }
+      }, 30000);
+    }
     if (myTelegramId && !loginWatcherRef) {
       loginWatcherRef = db.ref('users/' + myTelegramId + '/loginRequests');
       let firstSnapshot = true;
       let knownPending = new Set();
       loginWatcherCb = loginWatcherRef.on('value', (snap) => {
         latestLoginRequests = snap.val() || {};
-        const pendingKeys = Object.keys(latestLoginRequests).filter((key) => latestLoginRequests[key]?.status === 'pending');
+        const pendingKeys = freshLoginRequestKeys();
         const hasNew = pendingKeys.some((key) => !knownPending.has(key));
         knownPending = new Set(pendingKeys);
         setTabDot('account', pendingKeys.length);
@@ -2831,10 +2866,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       deviceWatcherCb = deviceWatcherRef.on('value', (snap) => {
         const reqs = snap.val() || {};
         latestPendingDeviceRequests = Object.entries(reqs).filter(([, r]) => r?.status === 'pending');
-        const hasNew = latestPendingDeviceRequests.some(([key]) => !knownPending.has(key));
-        knownPending = new Set(latestPendingDeviceRequests.map(([key]) => key));
-        setTabDot('super', latestPendingDeviceRequests.length);
-        renderDeviceTrustRequests(latestPendingDeviceRequests);
+        const fresh = freshDeviceRequests();
+        const hasNew = fresh.some(([key]) => !knownPending.has(key));
+        knownPending = new Set(fresh.map(([key]) => key));
+        setTabDot('super', fresh.length);
+        renderDeviceTrustRequests(fresh);
         if (hasNew && !firstSnapshot) tg?.HapticFeedback?.notificationOccurred?.('warning');
         firstSnapshot = false;
       }, (err) => console.error('Запросы на устройства', err));
@@ -2853,7 +2889,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const emptyEl = document.getElementById('account-login-requests-empty');
     if (!listEl || !myTelegramId) return;
     const requests = latestLoginRequests;
-    const pending = Object.keys(requests).filter((key) => requests[key]?.status === 'pending');
+    const pending = freshLoginRequestKeys();
+    renderedLoginKeys = pending.join('|');
     if (!pending.length) {
       listEl.innerHTML = '';
       emptyEl.style.display = 'block';
@@ -3560,12 +3597,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // Игрок отправляет заявку из index.html (Настройки → Никнейм) —
   // пишет users/<uid>.pendingName/pendingNameStatus напрямую, без похода
   // сюда. firstName не трогается до одобрения — сам никнейм в игре не
-  // меняется, пока модератор не нажмёт "Одобрить" здесь. Раз это поле
-  // конкретного игрока, а не отдельная коллекция как clans, приходится
-  // читать весь users/ и фильтровать на клиенте — сознательный компромисс
-  // (см. README проекта про принятые здесь допущения по масштабируемости).
+  // меняется, пока модератор не нажмёт "Одобрить" здесь. Это поле конкретного
+  // игрока, а не отдельная коллекция как clans, поэтому ищем запросом по
+  // индексу users/.indexOn: pendingNameStatus (database.rules.json). Пока
+  // индекс не выложен, SDK отдаёт тот же результат, но скачав весь users/.
   function loadNicknameApprovalQueue() {
-    db.ref('users').once('value').then((snap) => {
+    db.ref('users').orderByChild('pendingNameStatus').equalTo('pending').once('value').then((snap) => {
       const users = snap.val() || {};
       const pending = Object.entries(users)
         .filter(([, u]) => u && u.pendingNameStatus === 'pending')
@@ -4219,14 +4256,17 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // С индексом список персонала берётся запросом "role от admin до
   // superadmin" — сервер отдаёт только сотрудников. Без индекса такой запрос
   // тянул бы ВСЕХ игроков, поэтому, если индекса ещё нет, остаёмся на старом
-  // способе. Проба — один маленький REST-запрос (без индекса база отвечает
-  // ошибкой "Index not defined"); результат запоминаем на сессию.
+  // способе. Проба — один REST-запрос по значению, которому не соответствует
+  // ни один игрок: без индекса база отвечает ошибкой "Index not defined", с
+  // индексом — 200 и пустым телом (профиль при этом не скачивается).
+  // Запоминаем ответ базы на сессию; сбой сети не запоминаем — в следующий раз
+  // спросим снова (а пока работает запасной способ).
   let usersRoleIndexProbe = null;
   function usersRoleIndexExists() {
     if (!usersRoleIndexProbe) {
-      usersRoleIndexProbe = fetch(firebaseConfig.databaseURL + '/users.json?orderBy=%22role%22&equalTo=%22superadmin%22&limitToFirst=1')
+      usersRoleIndexProbe = fetch(firebaseConfig.databaseURL + '/users.json?orderBy=%22role%22&equalTo=%22__index_probe__%22&limitToFirst=1')
         .then((r) => r.ok)
-        .catch(() => false);
+        .catch(() => { usersRoleIndexProbe = null; return false; });
     }
     return usersRoleIndexProbe;
   }
@@ -4240,12 +4280,17 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function loadDeviceTrustRequests() {
     if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
     startLiveRequestWatchers();
-    renderDeviceTrustRequests(latestPendingDeviceRequests);
+    renderDeviceTrustRequests(freshDeviceRequests());
   }
 
   function renderDeviceTrustRequests(pending) {
     const listEl = document.getElementById('device-trust-requests-list');
     const emptyEl = document.getElementById('device-trust-requests-empty');
+    renderedDeviceKeys = pending.map(([key]) => key).join('|');
+    // список перерисовывается на каждое изменение в базе — не даём сбросить
+    // срок ("На 7 дней"), который суперадмин уже выбрал у другой заявки
+    const chosenDurations = {};
+    listEl.querySelectorAll('select.device-trust-duration').forEach((sel) => { chosenDurations[sel.dataset.key] = sel.value; });
     document.getElementById('device-trust-requests-title').textContent = `Запросы на устройства (${pending.length})`;
     if (!pending.length) {
       listEl.innerHTML = '';
@@ -4269,6 +4314,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         <button type="button" class="device-trust-deny" data-key="${escapeHtml(key)}" style="background:none; border:1px solid var(--line); color:var(--muted); border-radius:100px; width:30px; height:30px; font-size:14px; cursor:pointer; flex-shrink:0;">✕</button>
       </div>
     `).join('');
+    listEl.querySelectorAll('select.device-trust-duration').forEach((sel) => {
+      if (chosenDurations[sel.dataset.key] != null) sel.value = chosenDurations[sel.dataset.key];
+    });
     listEl.querySelectorAll('.device-trust-approve').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (!canManageRoles()) return;
@@ -4413,9 +4461,19 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     return !!ev.active || !!ev.startsAt || !!ev.endsAt;
   }
 
+  // Статистика читает целиком users/presence/battles/matches/clans/events —
+  // это самая тяжёлая вкладка. Повторный заход в течение 90 секунд показывает
+  // уже посчитанное, а не перечитывает всё заново.
+  let statsLoadedAt = 0;
+  const STATS_CACHE_MS = 90 * 1000;
   function loadStatsTab() {
     const loadingEl = document.getElementById('stats-loading');
     const contentEl = document.getElementById('stats-content');
+    if (statsLoadedAt && Date.now() - statsLoadedAt < STATS_CACHE_MS) {
+      loadingEl.style.display = 'none';
+      contentEl.style.display = 'block';
+      return;
+    }
     loadingEl.style.display = 'block';
     loadingEl.textContent = 'Считаем показатели…';
     contentEl.style.display = 'none';
@@ -4435,6 +4493,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const clans = clansSnap.val() || {};
       const events = eventsSnap.val() || {};
       renderStatsTab({ users, presence, battles, matches, clans, events });
+      statsLoadedAt = Date.now();
       loadingEl.style.display = 'none';
       contentEl.style.display = 'block';
     }).catch((err) => {

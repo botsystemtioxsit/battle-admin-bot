@@ -414,8 +414,15 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
   const loserId = winnerSide === 'host' ? battle.guestId : battle.hostId;
   if (!winnerId || !loserId) throw new Error('В бою не хватает участника');
 
-  const winnerRec = await getUserByPlayerId(winnerId);
-  const loserRec = await getUserByPlayerId(loserId);
+  // Четыре чтения друг от друга не зависят (каждое — отдельный круг до базы),
+  // поэтому идут одновременно: профили победителя, проигравшего и судьи плюс
+  // лайки зрителей.
+  const [winnerRec, loserRec, refRec, likesRes] = await Promise.all([
+    getUserByPlayerId(winnerId),
+    getUserByPlayerId(loserId),
+    getUserByPlayerId(refereePlayerId),
+    fetch(`${FIREBASE_DB_URL}/battles/${encodeURIComponent(matchId)}/audienceLikes.json`),
+  ]);
   if (!winnerRec || !loserRec) throw new Error('Не найден профиль игрока');
 
   const pointsAwarded = {};
@@ -432,7 +439,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     pointsAwarded[loserId] = -delta;
   }
 
-  const likesRes = await fetch(`${FIREBASE_DB_URL}/battles/${encodeURIComponent(matchId)}/audienceLikes.json`);
   const likes = (await likesRes.json().catch(() => null)) || {};
   const audienceVotes = {};
   if (battle.hostId) audienceVotes[battle.hostId] = likes.host || 0;
@@ -470,7 +476,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     update[`users/${rec.key}/stats/audienceLikes`] = Number(stats.audienceLikes || 0) + likeDelta;
   }
 
-  const refRec = await getUserByPlayerId(refereePlayerId);
   if (refRec) {
     const u = refRec.user;
     update[`users/${refRec.key}/stats/refereeBattles`] = Number(u.stats?.refereeBattles || 0) + 1;

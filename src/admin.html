@@ -2903,7 +2903,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         renderAccountLoginRequests();
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
-          newKeys.forEach((key) => termNote('🔐 заявка на вход: ' + (latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — requests, approve/deny'));
+          newKeys.forEach((key) => termNote('🔐 заявка на вход: ' + termClean(latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — requests, approve/deny'));
         }
         firstSnapshot = false;
       }, (err) => console.error('Заявки на вход', err));
@@ -2925,7 +2925,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
           latestPendingDeviceRequests.filter(([key]) => newKeys.includes(key))
-            .forEach(([, r]) => termNote('📱 запрос устройства: ' + (r.device || 'неизвестное устройство') + ' — ' + (r.firstName || 'Игрок') + ' — requests, approve/deny'));
+            .forEach(([, r]) => termNote('📱 запрос устройства: ' + termClean(r.device || 'неизвестное устройство') + ' — ' + termClean(r.firstName || 'Игрок', 40) + ' — requests, approve/deny'));
         }
         firstSnapshot = false;
       }, (err) => console.error('Запросы на устройства', err));
@@ -3243,14 +3243,21 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     token_collision_detected: 'Обнаружен дублирующийся токен устройства — аккаунты заблокированы'
   };
 
+  // ключи записей, которые написала эта же вкладка — живая лента Терминала
+  // их не повторяет (по actorPlayerId это не определить: без Telegram он '—')
+  const ownLogKeys = new Set();
   function logAction(actionType, targetKey, targetName, targetPlayerId, details) {
-    db.ref('logs').push({
+    const entryRef = db.ref('logs').push({
       timestamp: Date.now(),
       actorPlayerId: (tgUser && myTelegramId) ? myTelegramId : '—',
       actorName: tgUser?.first_name || tgUser?.username || '—',
       actionType, targetKey, targetName, targetPlayerId,
       details: details || ''
     });
+    if (entryRef && entryRef.key) {
+      ownLogKeys.add(entryRef.key);
+      if (ownLogKeys.size > 200) ownLogKeys.delete(ownLogKeys.values().next().value);
+    }
   }
 
   function renderLogEntries(entries) {
@@ -4341,10 +4348,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // команды `approve` в терминале. Сначала подписанная запись через
   // role-gateway, и только потом "approved": ожидающее устройство входит
   // сразу по этому статусу.
-  function approveDeviceTrustRequest(key, durationMs, durationLabel) {
+  function approveDeviceTrustRequest(key, durationMs, durationLabel, expected) {
     return db.ref('deviceTrustRequests/' + key).once('value').then((snap) => {
       const r = snap.val();
       if (!r) throw new Error('заявка не найдена (возможно, её уже обработали)');
+      if (expected && (r.uid !== expected.uid || r.deviceKey !== expected.deviceKey)) {
+        throw new Error('заявка изменилась после того, как её показали, — выполни requests заново');
+      }
       if (!/^[0-9a-f]{64}$/.test(r.deviceKey || '')) {
         throw new Error('заявка в старом формате — пусть устройство обновит страницу и запросит одобрение заново');
       }
@@ -5373,16 +5383,29 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function termStamp() {
     return new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
+  // Всё, что пришло из базы (имена, названия устройств, details журнала),
+  // — чужой текст: любой может записать туда что угодно, включая переводы
+  // строк (подделать строки терминала) и мегабайты текста (подвесить панель).
+  // Поэтому перед выводом такое значение сжимается в одну короткую строку.
+  const TERM_FIELD_MAX = 120;
+  function termClean(value, max) {
+    const limit = max || TERM_FIELD_MAX;
+    const text = String(value == null ? '' : value).slice(0, limit * 4)
+      .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return text.length > limit ? text.slice(0, limit - 1) + '…' : text;
+  }
   function termPrint(text, kind) {
     const out = document.getElementById('term-out');
     if (!out) return;
-    String(text).split('\n').forEach((part) => {
+    // страховка на случай длинного вывода: не больше 80 строк и 4000 знаков за вызов
+    String(text).slice(0, 4000).split('\n').slice(0, 80).forEach((part) => {
       const line = document.createElement('div');
       line.className = 'term-line' + (kind ? ' term-' + kind : '');
       line.textContent = part === '' ? ' ' : part;
       out.appendChild(line);
     });
-    while (out.childElementCount > TERM_MAX_LINES) out.removeChild(out.firstChild);
+    let excess = out.childElementCount - TERM_MAX_LINES;
+    while (excess-- > 0) out.removeChild(out.firstChild);
     out.scrollTop = out.scrollHeight;
   }
   // событие "само пришло" — печатаем со временем; если вкладка закрыта,
@@ -5427,24 +5450,35 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
   function termStatusText(user) {
     if (user.status === 'banned') return 'забанен навсегда';
-    if (user.status === 'restricted' && user.restrictedUntil && user.restrictedUntil > Date.now()) return 'ограничен до ' + termFmtDate(user.restrictedUntil);
+    if (user.status === 'restricted' && Number(user.restrictedUntil) > Date.now()) return 'ограничен до ' + termFmtDate(Number(user.restrictedUntil));
     return 'активен';
   }
   function termPrintUser(key, user) {
     termPrint([
       'Telegram/uid:  ' + key,
-      'ID игрока:     ' + (user.playerId || '—'),
-      'Имя:           ' + (user.firstName || '—'),
-      'Роль:          ' + (user.role || 'user'),
+      'ID игрока:     ' + termClean(user.playerId || '—'),
+      'Имя:           ' + termClean(user.firstName || '—'),
+      'Роль:          ' + termClean(user.role || 'user'),
       'Статус:        ' + termStatusText(user),
-      'Очки (ELO):    ' + (user.points ?? '—'),
-      'Звёзды:        ' + (user.starsBalance ?? '—'),
+      'Очки (ELO):    ' + termClean(user.points ?? '—'),
+      'Звёзды:        ' + termClean(user.starsBalance ?? '—'),
     ].join('\n'));
   }
-  async function termRequireLiveRole(roles) {
+  // Роль (и, если нужно, переключаемое право) читаются заново перед
+  // записью в config/* — как делает "Система" при каждом открытии: у
+  // понижённого или лишённого права админа открытая панель не должна
+  // продолжать работать.
+  async function termRequireLiveRole(roles, needPermission) {
     if (!myTelegramId) throw new Error('нужен вход под аккаунтом (не по токену доступа)');
-    const role = (await db.ref('users/' + myTelegramId + '/role').once('value')).val();
+    const [roleSnap, permsSnap] = await Promise.all([
+      db.ref('users/' + myTelegramId + '/role').once('value'),
+      db.ref('users/' + myTelegramId + '/permissions').once('value'),
+    ]);
+    const role = roleSnap.val();
     if (!roles.includes(role)) throw new Error('недостаточно прав — роль изменилась?');
+    if (needPermission && !resolvePermissions({ role, permissions: permsSnap.val() })[needPermission]) {
+      throw new Error('право «' + needPermission + '» отозвано');
+    }
   }
   function termAsk(question, run) {
     termPending = { run };
@@ -5463,7 +5497,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
 
   async function termCmdBan(args) {
-    const reason = args.slice(1).join(' ').trim();
+    const reason = termClean(args.slice(1).join(' '), 200);
     const found = await termResolveUser(args[0]);
     if (!found) throw new Error('игрок не найден: ' + args[0]);
     if (found.key === myTelegramId) throw new Error('себя банить нельзя');
@@ -5471,14 +5505,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     termAsk('Забанить этого игрока навсегда?' + (reason ? ' (' + reason + ')' : ''), async () => {
       await setUserStatus(found.key, 'banned', null);
       logAction('ban_forever', found.key, found.user.firstName || '—', found.user.playerId || '—', 'Забанен навсегда (Терминал)' + (reason ? ': ' + reason : ''));
-      termPrint('Забанен: ' + found.key, 'ok');
+      termPrint('Забанен: ' + termClean(found.user.firstName || '—') + ' (' + found.key + ')', 'ok');
     });
   }
 
   async function termCmdRestrict(args) {
     const hours = Number(args[1]);
     if (!Number.isInteger(hours) || hours < 1 || hours > 24 * 365) throw new Error('укажи целое число часов от 1 до 8760: restrict <id> <часы> [причина]');
-    const reason = args.slice(2).join(' ').trim();
+    const reason = termClean(args.slice(2).join(' '), 200);
     const found = await termResolveUser(args[0]);
     if (!found) throw new Error('игрок не найден: ' + args[0]);
     if (found.key === myTelegramId) throw new Error('себя ограничивать нельзя');
@@ -5486,7 +5520,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     termAsk('Ограничить на ' + hours + ' ч.?' + (reason ? ' (' + reason + ')' : ''), async () => {
       await setUserStatus(found.key, 'restricted', Date.now() + hours * 3600000);
       logAction('ban_temp', found.key, found.user.firstName || '—', found.user.playerId || '—', 'Ограничение на ' + hours + ' ч. (Терминал)' + (reason ? ': ' + reason : ''));
-      termPrint('Ограничен на ' + hours + ' ч.: ' + found.key, 'ok');
+      termPrint('Ограничен на ' + hours + ' ч.: ' + termClean(found.user.firstName || '—') + ' (' + found.key + ')', 'ok');
     });
   }
 
@@ -5495,12 +5529,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!found) throw new Error('игрок не найден: ' + args[0]);
     await setUserStatus(found.key, 'active', null);
     logAction('unban', found.key, found.user.firstName || '—', found.user.playerId || '—', 'Бан/ограничение снято (Терминал)');
-    termPrint('Бан/ограничение снято: ' + found.key, 'ok');
+    termPrint('Бан/ограничение снято: ' + termClean(found.user.firstName || '—') + ' (' + found.key + ')', 'ok');
   }
 
   async function termCmdLockdown(args) {
     const on = termOnOff(args[0]);
-    const message = args.slice(1).join(' ').trim();
+    const message = termClean(args.slice(1).join(' '), 300);
     await termRequireLiveRole(['superadmin']);
     termAsk(on
       ? 'Включить АВАРИЙНЫЙ РЕЖИМ? Сайт и панель закроются для ВСЕХ, кроме Супердоступа, и остановятся автобэкапы.'
@@ -5522,9 +5556,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
   async function termCmdMaintenance(args) {
     const on = termOnOff(args[0]);
-    const message = args.slice(1).join(' ').trim();
-    await termRequireLiveRole(['moderator', 'admin', 'superadmin']);
+    const message = termClean(args.slice(1).join(' '), 300);
+    await termRequireLiveRole(['moderator', 'admin', 'superadmin'], 'danger');
     const apply = async () => {
+      await termRequireLiveRole(['moderator', 'admin', 'superadmin'], 'danger');
       await db.ref('config/maintenanceMode').set(on);
       logAction('maintenance_toggled', '—', '—', '—', (on ? 'Включён' : 'Выключен') + ' (Терминал)');
       if (on && message) {
@@ -5553,27 +5588,32 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     entries.forEach((e) => termPrint(termLogLine(e), 'dim'));
   }
   function termLogLine(e) {
-    const label = ACTION_LABELS[e.actionType] || e.actionType || '—';
-    const target = e.targetName && e.targetName !== '—' ? ' → ' + e.targetName : '';
-    return termFmtDate(e.timestamp) + ' · ' + label + ' · ' + (e.actorName || '—') + target + (e.details ? ' · ' + e.details : '');
+    const label = Object.prototype.hasOwnProperty.call(ACTION_LABELS, e.actionType) ? ACTION_LABELS[e.actionType] : termClean(e.actionType || '—', 40);
+    const target = e.targetName && e.targetName !== '—' ? ' → ' + termClean(e.targetName, 40) : '';
+    return termFmtDate(Number(e.timestamp)) + ' · ' + label + ' · ' + termClean(e.actorName || '—', 40) + target + (e.details ? ' · ' + termClean(e.details) : '');
   }
 
+  const TERM_REQUESTS_MAX = 30;
   function termCmdRequests() {
     termRequestIndex = [];
     const lines = [];
+    let hidden = 0;
+    const add = (item, text) => {
+      if (termRequestIndex.length >= TERM_REQUESTS_MAX) { hidden++; return; }
+      termRequestIndex.push(item);
+      lines.push(' ' + termRequestIndex.length + ') ' + text);
+    };
     pendingLoginKeys().forEach((key) => {
       const r = latestLoginRequests[key];
-      termRequestIndex.push({ kind: 'login', key });
-      lines.push(' ' + termRequestIndex.length + ') 🔐 вход · ' + (r.device || 'неизвестное устройство') + ' · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('login', key, r) ? '' : ' (давняя)'));
+      add({ kind: 'login', key }, '🔐 вход · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('login', key, r) ? '' : ' (давняя)'));
     });
     if (canManageRoles()) {
       latestPendingDeviceRequests.forEach(([key, r]) => {
-        termRequestIndex.push({ kind: 'device', key });
-        lines.push(' ' + termRequestIndex.length + ') 📱 устройство · ' + (r.device || 'неизвестное устройство') + ' · ' + (r.firstName || 'Игрок') + ' (' + (r.playerId || r.uid || '—') + ') · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('device', key, r) ? '' : ' (давняя)'));
+        add({ kind: 'device', key, uid: r.uid, deviceKey: r.deviceKey }, '📱 устройство · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || r.uid || '—', 40) + ') · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('device', key, r) ? '' : ' (давняя)'));
       });
     }
     if (!lines.length) { termPrint('Заявок нет.', 'dim'); return; }
-    termPrint('Ждут ответа:\n' + lines.join('\n') + '\napprove <номер> [24h|7d|30d|forever] — подтвердить   ·   deny <номер> — отклонить');
+    termPrint('Ждут ответа:\n' + lines.join('\n') + (hidden ? '\n…и ещё ' + hidden + ' (старые можно отклонить в «Супердоступ» → «Администрация»)' : '') + '\napprove <номер> [24h|7d|30d|forever] — подтвердить   ·   deny <номер> — отклонить');
   }
 
   const TERM_DURATIONS = { forever: null, '24h': 86400000, '7d': 604800000, '30d': 2592000000 };
@@ -5590,7 +5630,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (item.kind === 'login') {
       const r = latestLoginRequests[item.key];
       if (!r || r.status !== 'pending') throw new Error('заявка уже обработана');
-      termAsk('Разрешить вход с устройства «' + (r.device || 'неизвестное устройство') + '»?', async () => {
+      termAsk('Разрешить вход с устройства «' + termClean(r.device || 'неизвестное устройство') + '»?', async () => {
+        const live = latestLoginRequests[item.key];
+        if (!live || live.status !== 'pending') throw new Error('заявка уже обработана');
         await db.ref('users/' + myTelegramId + '/loginRequests/' + item.key).update({ status: 'approved' });
         termPrint('Вход разрешён.', 'ok');
       });
@@ -5602,18 +5644,24 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const durKey = (args[1] || 'forever').toLowerCase();
     if (!Object.prototype.hasOwnProperty.call(TERM_DURATIONS, durKey)) throw new Error('срок: 24h, 7d, 30d или forever');
     const r = entry[1];
-    termAsk('Подтвердить устройство «' + (r.device || 'неизвестное устройство') + '» (' + (r.firstName || 'Игрок') + ') — ' + TERM_DURATION_LABELS[durKey].toLowerCase() + '?', async () => {
-      await approveDeviceTrustRequest(item.key, TERM_DURATIONS[durKey], TERM_DURATION_LABELS[durKey]);
-      termPrint('Устройство подтверждено (' + TERM_DURATION_LABELS[durKey].toLowerCase() + ').', 'ok');
+    termAsk('Подтвердить устройство «' + termClean(r.device || 'неизвестное устройство') + '» аккаунта ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || r.uid || '—', 40) + ') — ' + termDurationLabel(durKey) + '?', async () => {
+      // одобряем ровно ту заявку, которую показали в вопросе: если за это время
+      // её содержимое (аккаунт, ключ устройства) кто-то подменил — отказ
+      await approveDeviceTrustRequest(item.key, TERM_DURATIONS[durKey], TERM_DURATION_LABELS[durKey], { uid: item.uid, deviceKey: item.deviceKey });
+      termPrint('Устройство подтверждено (' + termDurationLabel(durKey) + ').', 'ok');
     });
   }
+  function termDurationLabel(durKey) { return TERM_DURATION_LABELS[durKey].toLowerCase(); }
 
   async function termCmdDeny(args) {
     const item = termPickRequest(args[0]);
     if (item.kind === 'login') {
+      const r = latestLoginRequests[item.key];
+      if (!r || r.status !== 'pending') throw new Error('заявка уже обработана');
       await db.ref('users/' + myTelegramId + '/loginRequests/' + item.key).update({ status: 'denied' });
     } else {
       if (!canManageRoles()) throw new Error('устройства отклоняет только Супердоступ');
+      if (!latestPendingDeviceRequests.some(([key]) => key === item.key)) throw new Error('заявка уже обработана');
       await db.ref('deviceTrustRequests/' + item.key).update({ status: 'denied' });
     }
     termPrint('Отклонено.', 'ok');
@@ -5629,7 +5677,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const perms = Object.entries(myPermissions || {}).filter(([, on]) => on).map(([k]) => k);
     termPrint([
       'Аккаунт: ' + (myTelegramId || '— (токен доступа)'),
-      'Роль:    ' + (ROLE_LABELS[myRole] || myRole),
+      'Роль:    ' + termClean(ROLE_LABELS[myRole] || myRole, 40),
       'Права:   ' + (perms.length ? perms.join(', ') : '—'),
     ].join('\n'));
   }
@@ -5667,7 +5715,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   async function termRun(rawLine) {
     const line = rawLine.trim();
     if (!line) return;
-    termPrint('battle> ' + line, 'cmd');
+    termPrint('battle> ' + termClean(line, 500), 'cmd');
     if (termPending) {
       const pending = termPending;
       termPending = null;
@@ -5686,18 +5734,26 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     await def.run(tokens);
   }
 
+  const TERM_TIMEOUT_MS = 30000;
   async function termSubmit(rawLine) {
     if (termBusy) return;
     termBusy = true;
     const input = document.getElementById('term-input');
-    input.disabled = true;
+    // readOnly, а не disabled: отключённое поле теряет фокус, и на телефоне
+    // после каждой команды (и каждого y/N) закрывалась бы клавиатура
+    input.readOnly = true;
+    let timer = null;
     try {
-      await termRun(rawLine);
+      await Promise.race([
+        termRun(rawLine),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('команда не ответила за 30 секунд — проверь связь и повтори')), TERM_TIMEOUT_MS); }),
+      ]);
     } catch (err) {
-      termPrint('Ошибка: ' + (err && err.message ? err.message : err), 'err');
+      termPrint('Ошибка: ' + termClean(err && err.message ? err.message : err, 300), 'err');
     } finally {
+      clearTimeout(timer);
       termBusy = false;
-      input.disabled = false;
+      input.readOnly = false;
       if (termActive && window.matchMedia && window.matchMedia('(pointer: fine)').matches) input.focus();
     }
   }
@@ -5718,7 +5774,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (snap.key === lastKey) return;
         const e = snap.val();
         if (!e || !e.timestamp) return;
-        if (myTelegramId && e.actorPlayerId === myTelegramId) return; // собственные действия уже напечатаны командой
+        if (ownLogKeys.has(snap.key) || (myTelegramId && e.actorPlayerId === myTelegramId)) return; // собственные действия уже напечатаны командой
         termPrint('[' + termStamp() + '] 📜 ' + termLogLine(e), 'dim');
       }, (err) => console.error('Терминал: лента', err));
       termFeedRef = ref;
@@ -5750,6 +5806,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!termActive) return;
     termActive = false;
     termDetachFeed();
+    // вопрос y/N не переживает уход с вкладки: иначе следующая набранная
+    // команда была бы принята за ответ на давно забытый вопрос
+    if (termPending) { termPending = null; termPrint('Вопрос снят — вы ушли с вкладки.', 'dim'); }
   }
 
   document.getElementById('term-form').addEventListener('submit', (e) => {
@@ -5767,8 +5826,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       termHistoryPos = Math.max(0, termHistoryPos - 1);
       input.value = termHistory[termHistoryPos] || '';
     } else if (e.key === 'ArrowDown') {
+      if (termHistoryPos >= termHistory.length) return; // уже внизу истории — не стираем набранное
       e.preventDefault();
-      termHistoryPos = Math.min(termHistory.length, termHistoryPos + 1);
+      termHistoryPos++;
       input.value = termHistory[termHistoryPos] || '';
     } else if (e.key === 'Tab') {
       const typed = input.value;

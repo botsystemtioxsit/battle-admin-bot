@@ -10,6 +10,13 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>БАТТЛ — Админ-панель</title>
+<!-- Заранее открываем соединения (DNS + TLS) к тому, куда панель обратится в
+     первые секунды: база, role-gateway и скрипты SDK. Само по себе ничего не
+     загружает, но экономит несколько круговых обходов на старте. -->
+<link rel="preconnect" href="https://zolotaya-kletka-default-rtdb.firebaseio.com">
+<link rel="preconnect" href="https://battle-role-gateway.tioxsit.workers.dev">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://telegram.org" crossorigin>
 <style>
   /* Утилитарный интерфейс инструмента, а не витрины: системный шрифт вместо
      брендовых Bebas Neue/Inter, некрупный единый радиус вместо скруглений
@@ -46,6 +53,9 @@
   .tabs{ display:flex; flex-wrap:wrap; gap:4px 2px; border-bottom:1px solid var(--line); margin-bottom:16px; }
   .tab{ padding:8px 9px; font-size:12px; font-weight:600; cursor:pointer; color:var(--muted); user-select:none; border-bottom:2px solid transparent; white-space:nowrap; }
   .tab.active{ color:var(--text); border-bottom-color:var(--gold); }
+  /* красная точка-счётчик на вкладке: новая заявка на вход/устройство ждёт
+     ответа (см. startLiveRequestWatchers) */
+  .tab-dot{ display:inline-block; min-width:16px; height:16px; line-height:16px; padding:0 4px; margin-left:5px; border-radius:100px; background:var(--live); color:#fff; font-size:10px; font-weight:700; text-align:center; vertical-align:1px; }
 
   .screen{ display:none; }
   .screen.active{ display:block; }
@@ -270,7 +280,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Безопасность: доверенные устройства больше не открываются по deviceId, прочитанному из открытой базы — в базе только sha256(deviceId), а доверенная запись несёт подпись role-gateway (/trust-device). Старые записи и старые deviceId не действуют — устройства одобрить заново. Экранирование данных из базы в списках/журнале. Worker пишет в базу токеном сервисного аккаунта — служебный ключ больше не попадает в открытую базу; бэкапы, выдача ролей и бан — только Супердоступ и админ (статус — «Система» → role-gateway).">v5.11</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Скорость: на старте панель больше не скачивает всю таблицу игроков (число игроков и очистка гостей — отдельными лёгкими запросами), профиль/аварийный режим/доверие устройства читаются параллельно, список бэкапов грузится только на своей вкладке, JSZip — по требованию. Заявки на вход и на устройства теперь живые: появляются сразу, на вкладке красная цифра. Список «Администрация» берёт только персонал (нужен индекс users.role из database.rules.json).">v5.12</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1318,8 +1328,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<!-- только для "Восстановление" (код) — распаковка zip-снимка battle-data-admin-bot в браузере -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- JSZip (распаковка zip-снимка при "Восстановление" → код) здесь НЕ подключается обычным тегом
+     скрипта: он блокировал разбор страницы и запуск панели ради библиотеки, нужной раз в месяц.
+     Подгружается по требованию — см. loadJSZip(). -->
 <script>
   // ===== Видимый баннер JS-ошибок — диагностика для случаев вроде Android
   // APK, где нет доступа к DevTools/chrome://inspect (плеер просто видит
@@ -1615,6 +1626,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
 
   let myTelegramId = null;
+  // живые заявки (см. startLiveRequestWatchers): последнее известное содержимое
+  let latestLoginRequests = {};          // users/<я>/loginRequests (все статусы)
+  let latestPendingDeviceRequests = [];  // [[key, заявка]] со status === 'pending'
+  let loginWatcherRef = null;
+  let loginWatcherCb = null;
+  let deviceWatcherRef = null;
+  let deviceWatcherCb = null;
   let myRole = 'user';
   let myPermissions = { ...ALL_PERMISSIONS_OFF };
   let foundUserKey = null;
@@ -1646,7 +1664,20 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // входом, либо экран screen-login (см. ниже).
   function loadAccountAndShowApp(telegramId) {
     myTelegramId = telegramId;
-    db.ref('users/' + myTelegramId).once('value').then((snap) => {
+    // Три чтения не зависят друг от друга, поэтому уходят сразу все, а не
+    // цепочкой "одно за другим" (каждое — отдельный круг до базы): профиль,
+    // аварийный режим и — если в этом браузере уже есть deviceId — запись о
+    // доверии устройства. Без deviceId (первый вход) trust-чтение, как и
+    // раньше, делается позже и создаёт deviceId лениво, см. getDeviceKey.
+    const userRead = db.ref('users/' + myTelegramId).once('value');
+    const lockdownRead = db.ref('config/emergencyLockdown').once('value');
+    lockdownRead.catch(() => {}); // ошибку обработает основная цепочка ниже; здесь — только чтобы не было "unhandled rejection", пока ждём профиль
+    const prefetchedDeviceId = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    const trustRead = prefetchedDeviceId
+      ? deviceKeyOf(prefetchedDeviceId).then((deviceKey) => db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceKey).once('value').then((trustSnap) => ({ deviceKey, trustSnap })))
+      : null;
+    if (trustRead) trustRead.catch(() => {}); // нужен только admin/superadmin — у остальных результат не читается
+    userRead.then((snap) => {
       const user = snap.val();
       const role = user?.role || (user?.isAdmin ? 'admin' : 'user');
       myRole = role;
@@ -1662,7 +1693,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // в "Правилах платформы"). Проверяем отдельным запросом, а не
       // держим это поле в правилах доступа — так снятие режима действует
       // сразу при следующем открытии панели, без переиздания правил.
-      db.ref('config/emergencyLockdown').once('value').then((lockdownSnap) => {
+      lockdownRead.then((lockdownSnap) => {
         if (lockdownSnap.val() && role !== 'superadmin') {
           showScreen('screen-emergency');
           return;
@@ -1679,15 +1710,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
           applyRoleUI();
           showScreen('screen-app');
+          startLiveRequestWatchers();
           loadUserList(false);
           loadBadgeDefs();
           renderAccountTab(user);
-          // "Бэкапы"/"Восстановление" — только superadmin (см. canManageRoles),
-          // не тратим лишний запрос к GitHub API на роли, которым вкладки
-          // всё равно скрыты в applyRoleUI
-          if (canManageRoles()) {
-            loadAllBackupLists().catch((err) => console.error('Бэкапы: первичная загрузка', err));
-          }
+          // Список бэкапов больше не грузится на старте: это вызов role-gateway
+          // с тремя запросами к GitHub, а нужен он только на вкладке
+          // "Супердоступ → Бэкапы" — showSuperSection('backups') сам вызывает
+          // loadAllBackupLists() при открытии.
         }
 
         // защита от угона доступа — см. комментарий у #screen-device-trust.
@@ -1702,7 +1732,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         // и "Администрация" → "Запросы на устройства").
         const protectedRoles = ['admin', 'superadmin'];
         if (protectedRoles.includes(role)) {
-          getDeviceKey().then((deviceKey) => db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceKey).once('value').then((trustSnap) => {
+          (trustRead || getDeviceKey().then((deviceKey) => db.ref('users/' + myTelegramId + '/trustedDevices/' + deviceKey).once('value').then((trustSnap) => ({ deviceKey, trustSnap })))).then(({ deviceKey, trustSnap }) => {
             const trust = trustSnap.val();
             // sig есть только у записей, созданных role-gateway — запись
             // без неё (старого формата, либо дописанная в открытую базу
@@ -1740,7 +1770,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
             }
             pendingDeviceTrustUid = myTelegramId;
             showScreen('screen-device-trust');
-          })).catch((err) => {
+          }).catch((err) => {
             console.error('trusted-device check failed:', err);
             document.getElementById('denied-text').textContent = 'Не удалось проверить доверенные устройства: ' + (err.message || err);
             showScreen('screen-denied');
@@ -2102,7 +2132,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (tab.dataset.tab !== 'super') {
         detachAllDbLiveBranches(dbTreeState);
         detachAdminsLiveListener();
-        detachDeviceTrustRequestsListener();
         detachAccessTokensListener();
       }
       if (tab.dataset.tab === 'logs') showLogsSection('actions');
@@ -2130,7 +2159,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function showSuperSection(section) {
     detachAllDbLiveBranches(dbTreeState);
     detachAdminsLiveListener();
-    detachDeviceTrustRequestsListener();
     detachAccessTokensListener();
     ['admins', 'tokens', 'backups', 'danger'].forEach((s) => {
       document.getElementById('super-sub-' + s).className = 'btn ' + (s === section ? 'btn-gold' : 'btn-line');
@@ -2221,7 +2249,25 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!isOpen) loadUserList(true);
   });
 
+  function setUserCount(count) {
+    document.getElementById('user-list-label').textContent = `Все игроки (${count})`;
+    document.getElementById('user-count-badge').textContent = count.toLocaleString('ru-RU');
+  }
+
   function loadUserList(renderList = true) {
+    cleanupStaleGuests();
+
+    if (!renderList) {
+      // На старте нужно только число игроков — его даёт один дешёвый запрос
+      // ?shallow=true (только ключи, без самих записей). Раньше тут целиком
+      // скачивалась вся таблица users (со всеми аватарками) ради одной цифры.
+      fetch(firebaseConfig.databaseURL + '/users.json?shallow=true')
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((keys) => setUserCount(Object.keys(keys || {}).length))
+        .catch((err) => console.error('Число игроков', err));
+      return;
+    }
+
     Promise.all([
       db.ref('users').once('value'),
       db.ref('presence').once('value')
@@ -2231,9 +2277,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const listEl = document.getElementById('user-list');
       const entries = Object.entries(users).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
 
-      document.getElementById('user-list-label').textContent = `Все игроки (${entries.length})`;
-      document.getElementById('user-count-badge').textContent = entries.length.toLocaleString('ru-RU');
-      if (!renderList) return;
+      setUserCount(entries.length);
       listEl.innerHTML = '';
 
       entries.forEach(([key, user]) => {
@@ -2258,22 +2302,30 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         listEl.appendChild(row);
       });
     });
-
-    cleanupStaleGuests();
   }
 
+  // Гости живут сутки. Чистим один раз за сессию панели (гостей удаляют ещё и
+  // вручную, см. "Система"), и читаем только ключи guest_* — диапазонным
+  // запросом по ключу, а не всю таблицу users: ключи в Realtime Database
+  // индексированы всегда, отдельное правило не нужно.
+  let guestCleanupDone = false;
   function cleanupStaleGuests() {
+    if (guestCleanupDone) return;
+    guestCleanupDone = true;
     const GUEST_TTL_MS = 24 * 60 * 60 * 1000;
-    db.ref('users').once('value').then((snap) => {
+    db.ref('users').orderByKey().startAt('guest_').endAt('guest_\uf8ff').once('value').then((snap) => {
       const users = snap.val() || {};
       const now = Date.now();
       Object.entries(users).forEach(([key, user]) => {
-        if (!key.startsWith('guest_')) return;
-        if (now - (user.createdAt || 0) > GUEST_TTL_MS) {
+        if (!key.startsWith('guest_')) return; // запрос уже отдаёт только guest_*, но удаляем по ключу только их в любом случае
+        if (now - ((user && user.createdAt) || 0) > GUEST_TTL_MS) {
           db.ref('users/' + key).remove();
           db.ref('presence/' + key).remove();
         }
       });
+    }).catch((err) => {
+      guestCleanupDone = false; // не вышло — попробуем при следующем вызове
+      console.error('Очистка гостей', err);
     });
   }
 
@@ -2734,39 +2786,100 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }
   });
 
+  // Красная цифра на вкладке — сколько заявок ждут ответа. count = 0 убирает её.
+  function setTabDot(tabName, count) {
+    const tab = document.querySelector('.tab[data-tab="' + tabName + '"]');
+    if (!tab) return;
+    const old = tab.querySelector('.tab-dot');
+    if (old) old.remove();
+    if (count > 0) {
+      const dot = document.createElement('span');
+      dot.className = 'tab-dot';
+      dot.textContent = String(count);
+      tab.appendChild(dot);
+    }
+  }
+
+  // Заявки на вход (users/<я>/loginRequests) и заявки на подтверждение
+  // устройств (deviceTrustRequests, только Супердоступ) раньше читались один
+  // раз при открытии вкладки — новая заявка не появлялась, пока вкладку не
+  // откроешь заново. Теперь это живые слушатели, как в игре: заявка видна сразу
+  // и подсвечена цифрой на вкладке. Узлы маленькие, лишнего трафика нет.
+  // Слушатели висят до закрытия панели, поэтому подключаются один раз.
+  function startLiveRequestWatchers() {
+    if (myTelegramId && !loginWatcherRef) {
+      loginWatcherRef = db.ref('users/' + myTelegramId + '/loginRequests');
+      let firstSnapshot = true;
+      let knownPending = new Set();
+      loginWatcherCb = loginWatcherRef.on('value', (snap) => {
+        latestLoginRequests = snap.val() || {};
+        const pendingKeys = Object.keys(latestLoginRequests).filter((key) => latestLoginRequests[key]?.status === 'pending');
+        const hasNew = pendingKeys.some((key) => !knownPending.has(key));
+        knownPending = new Set(pendingKeys);
+        setTabDot('account', pendingKeys.length);
+        renderAccountLoginRequests();
+        if (hasNew && !firstSnapshot) tg?.HapticFeedback?.notificationOccurred?.('warning');
+        firstSnapshot = false;
+      }, (err) => console.error('Заявки на вход', err));
+    }
+    if (canManageRoles() && !deviceWatcherRef) {
+      // с индексом status (database.rules.json → deviceTrustRequests) сервер
+      // присылает только ожидающие заявки; без него SDK фильтрует на клиенте
+      deviceWatcherRef = db.ref('deviceTrustRequests').orderByChild('status').equalTo('pending');
+      let firstSnapshot = true;
+      let knownPending = new Set();
+      deviceWatcherCb = deviceWatcherRef.on('value', (snap) => {
+        const reqs = snap.val() || {};
+        latestPendingDeviceRequests = Object.entries(reqs).filter(([, r]) => r?.status === 'pending');
+        const hasNew = latestPendingDeviceRequests.some(([key]) => !knownPending.has(key));
+        knownPending = new Set(latestPendingDeviceRequests.map(([key]) => key));
+        setTabDot('super', latestPendingDeviceRequests.length);
+        renderDeviceTrustRequests(latestPendingDeviceRequests);
+        if (hasNew && !firstSnapshot) tg?.HapticFeedback?.notificationOccurred?.('warning');
+        firstSnapshot = false;
+      }, (err) => console.error('Запросы на устройства', err));
+    }
+  }
+
   // заявки на вход можно подтвердить прямо тут (не только в игре) — тот же
   // users/<myTelegramId>/loginRequests, что слушает ожидающий браузер
   function loadAccountLoginRequests() {
+    startLiveRequestWatchers();
+    renderAccountLoginRequests();
+  }
+
+  function renderAccountLoginRequests() {
     const listEl = document.getElementById('account-login-requests-list');
     const emptyEl = document.getElementById('account-login-requests-empty');
     if (!listEl || !myTelegramId) return;
-    db.ref('users/' + myTelegramId + '/loginRequests').once('value').then((snap) => {
-      const requests = snap.val() || {};
-      const pending = Object.keys(requests).filter((key) => requests[key]?.status === 'pending');
-      if (!pending.length) {
-        listEl.innerHTML = '';
-        emptyEl.style.display = 'block';
-        return;
-      }
-      emptyEl.style.display = 'none';
-      listEl.innerHTML = pending.map((key) => `
-        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-          <div style="flex:1; min-width:0; font-size:13px; font-weight:600;">🔐 ${escapeHtml(requests[key].device || 'неизвестное устройство')}</div>
-          <button type="button" class="account-approve-login" data-key="${escapeHtml(key)}" style="background:var(--gold); border:none; color:#0B0B0D; border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">✓ Разрешить</button>
-          <button type="button" class="account-deny-login" data-key="${escapeHtml(key)}" style="background:none; border:1px solid var(--line); color:var(--muted); border-radius:100px; width:30px; height:30px; font-size:14px; cursor:pointer; flex-shrink:0;">✕</button>
-        </div>
-      `).join('');
-      listEl.querySelectorAll('.account-approve-login').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          db.ref('users/' + myTelegramId + '/loginRequests/' + btn.dataset.key).update({ status: 'approved' }).then(loadAccountLoginRequests);
-        });
+    const requests = latestLoginRequests;
+    const pending = Object.keys(requests).filter((key) => requests[key]?.status === 'pending');
+    if (!pending.length) {
+      listEl.innerHTML = '';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    listEl.innerHTML = pending.map((key) => `
+      <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+        <div style="flex:1; min-width:0; font-size:13px; font-weight:600;">🔐 ${escapeHtml(requests[key].device || 'неизвестное устройство')}</div>
+        <button type="button" class="account-approve-login" data-key="${escapeHtml(key)}" style="background:var(--gold); border:none; color:#0B0B0D; border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">✓ Разрешить</button>
+        <button type="button" class="account-deny-login" data-key="${escapeHtml(key)}" style="background:none; border:1px solid var(--line); color:var(--muted); border-radius:100px; width:30px; height:30px; font-size:14px; cursor:pointer; flex-shrink:0;">✕</button>
+      </div>
+    `).join('');
+    // список обновится сам: локальная запись сразу вызывает живой слушатель
+    listEl.querySelectorAll('.account-approve-login').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        db.ref('users/' + myTelegramId + '/loginRequests/' + btn.dataset.key).update({ status: 'approved' })
+          .catch((err) => alert('Не удалось разрешить: ' + (err.message || err)));
       });
-      listEl.querySelectorAll('.account-deny-login').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          db.ref('users/' + myTelegramId + '/loginRequests/' + btn.dataset.key).update({ status: 'denied' }).then(loadAccountLoginRequests);
-        });
+    });
+    listEl.querySelectorAll('.account-deny-login').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        db.ref('users/' + myTelegramId + '/loginRequests/' + btn.dataset.key).update({ status: 'denied' })
+          .catch((err) => alert('Не удалось отклонить: ' + (err.message || err)));
       });
-    }).catch((err) => console.error('Заявки на вход', err));
+    });
   }
 
   // ===== подключение устройства по коду — подтверждение и список =====
@@ -4093,35 +4206,41 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // и "Настроить права" в карточке — один путь записи на оба UI.
   let adminsListRef = null;
   let adminsListCb = null;
+  let adminsLoadToken = 0; // чтобы запоздавший ответ пробы не подключил слушатель после ухода с вкладки
 
   function detachAdminsLiveListener() {
+    adminsLoadToken++;
     if (adminsListRef && adminsListCb) adminsListRef.off('value', adminsListCb);
     adminsListRef = null;
     adminsListCb = null;
+  }
+
+  // Есть ли в базе индекс users по role (database.rules.json → users/.indexOn).
+  // С индексом список персонала берётся запросом "role от admin до
+  // superadmin" — сервер отдаёт только сотрудников. Без индекса такой запрос
+  // тянул бы ВСЕХ игроков, поэтому, если индекса ещё нет, остаёмся на старом
+  // способе. Проба — один маленький REST-запрос (без индекса база отвечает
+  // ошибкой "Index not defined"); результат запоминаем на сессию.
+  let usersRoleIndexProbe = null;
+  function usersRoleIndexExists() {
+    if (!usersRoleIndexProbe) {
+      usersRoleIndexProbe = fetch(firebaseConfig.databaseURL + '/users.json?orderBy=%22role%22&equalTo=%22superadmin%22&limitToFirst=1')
+        .then((r) => r.ok)
+        .catch(() => false);
+    }
+    return usersRoleIndexProbe;
   }
 
   // ===== "Запросы на устройства" — тот же экран "Администрация", над
   // таблицей. См. #screen-device-trust: глобальный список (не привязан к
   // конкретному uid заранее), поэтому одобрить/отклонить запрос может
   // любой Супердоступ, не обязательно владелец того аккаунта.
-  let deviceTrustRequestsRef = null;
-  let deviceTrustRequestsCb = null;
-
-  function detachDeviceTrustRequestsListener() {
-    if (deviceTrustRequestsRef && deviceTrustRequestsCb) deviceTrustRequestsRef.off('value', deviceTrustRequestsCb);
-    deviceTrustRequestsRef = null;
-    deviceTrustRequestsCb = null;
-  }
-
+  // Слушатель заявок живёт всю сессию (startLiveRequestWatchers) — он же
+  // рисует красную цифру на вкладке "Супердоступ". Здесь только показ.
   function loadDeviceTrustRequests() {
     if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
-    detachDeviceTrustRequestsListener();
-    deviceTrustRequestsRef = db.ref('deviceTrustRequests');
-    deviceTrustRequestsCb = deviceTrustRequestsRef.on('value', (snap) => {
-      const reqs = snap.val() || {};
-      const pending = Object.entries(reqs).filter(([, r]) => r?.status === 'pending');
-      renderDeviceTrustRequests(pending);
-    }, (err) => console.error('Запросы на устройства', err));
+    startLiveRequestWatchers();
+    renderDeviceTrustRequests(latestPendingDeviceRequests);
   }
 
   function renderDeviceTrustRequests(pending) {
@@ -4185,13 +4304,23 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function loadAdminsTab() {
     if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
     detachAdminsLiveListener();
-    adminsListRef = db.ref('users');
-    adminsListCb = adminsListRef.on('value', (snap) => {
-      const users = snap.val() || {};
-      const staff = Object.entries(users).filter(([, u]) => ['moderator', 'admin', 'superadmin'].includes(u?.role));
-      staff.sort((a, b) => (a[1].firstName || '').localeCompare(b[1].firstName || '', 'ru'));
-      renderAdminsTable(staff);
-    }, (err) => console.error('Администрация: список', err));
+    const myToken = adminsLoadToken;
+    usersRoleIndexExists().then((indexed) => {
+      if (myToken !== adminsLoadToken) return; // вкладку уже покинули или открыли заново
+      // 'admin' < 'moderator' < 'superadmin' < 'user' по алфавиту: диапазон
+      // admin…superadmin — ровно три роли персонала, остальные игроки ('user')
+      // в выборку не попадают. Отдельный фильтр ниже страхует от других
+      // значений role, случайно оказавшихся внутри диапазона.
+      adminsListRef = indexed
+        ? db.ref('users').orderByChild('role').startAt('admin').endAt('superadmin')
+        : db.ref('users');
+      adminsListCb = adminsListRef.on('value', (snap) => {
+        const users = snap.val() || {};
+        const staff = Object.entries(users).filter(([, u]) => ['moderator', 'admin', 'superadmin'].includes(u?.role));
+        staff.sort((a, b) => (a[1].firstName || '').localeCompare(b[1].firstName || '', 'ru'));
+        renderAdminsTable(staff);
+      }, (err) => console.error('Администрация: список', err));
+    });
   }
 
   function renderAdminsTable(staff) {
@@ -4431,6 +4560,23 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // hasBackupsAccess в Worker'е). Восстановление базы отдельно идёт через
   // уже существующий /restore-database — тот строго superadmin-only. =====
   const ROLE_GATEWAY_BASE = ROLE_GATEWAY_URL.replace(/\/grant-role$/, '');
+
+  // JSZip нужен только для распаковки снимка кода при восстановлении, поэтому
+  // тянем его в тот момент, когда он понадобился, а не тегом скрипта на старте.
+  let jszipPromise = null;
+  function loadJSZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (!jszipPromise) {
+      jszipPromise = new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        el.onload = () => (window.JSZip ? resolve(window.JSZip) : reject(new Error('JSZip не инициализировался')));
+        el.onerror = () => { jszipPromise = null; reject(new Error('Не удалось загрузить JSZip (нет доступа к cdnjs.cloudflare.com)')); };
+        document.head.appendChild(el);
+      });
+    }
+    return jszipPromise;
+  }
 
   function formatBackupSize(bytes) {
     if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
@@ -4685,7 +4831,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       });
       if (!zipRes.ok) throw new Error((await zipRes.json().catch(() => ({}))).error || `HTTP ${zipRes.status}`);
       const zipBuffer = await zipRes.arrayBuffer();
-      const zip = await JSZip.loadAsync(zipBuffer);
+      const JSZipLib = await loadJSZip();
+      const zip = await JSZipLib.loadAsync(zipBuffer);
       const entries = Object.values(zip.files).filter((f) => !f.dir);
       if (!entries.length) throw new Error('Архив пуст.');
 

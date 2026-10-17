@@ -195,13 +195,41 @@ async function verifyDeviceTrust(env, telegramId, deviceId) {
   return { ok: true, userId: uid, via: 'device', expiresAt: val.expiresAt || null };
 }
 
+// Какой бот у Worker'а в BOT_TOKEN (публичное имя и id, сам токен наружу не
+// уходит). Нужен для диагностики: если панель открыта через другого бота, подпись
+// initData не сойдётся, и без этого понять причину нельзя. Кэш на 10 минут.
+let botInfoCache = { token: null, at: 0, info: null };
+async function getBotInfo(env) {
+  const now = Date.now();
+  if (botInfoCache.token === env.BOT_TOKEN && now - botInfoCache.at < 10 * 60 * 1000) return botInfoCache.info;
+  let info;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getMe`, { signal: AbortSignal.timeout(5000) });
+    const data = await res.json().catch(() => null);
+    info = data && data.ok && data.result
+      ? { valid: true, username: data.result.username || null, id: data.result.id || null }
+      : { valid: false }; // Telegram ответил отказом: токен неверный или отозван
+  } catch {
+    info = { valid: null }; // не дозвонились — неизвестно
+  }
+  botInfoCache = { token: env.BOT_TOKEN, at: now, info };
+  return info;
+}
+
 // Общая точка входа для проверки личности: initData, если она есть
 // (сильнее — подпись Telegram), иначе deviceId (см. выше). `via` говорит,
 // каким из двух способов личность подтверждена.
 async function verifyIdentity(body, env) {
   if (body.initData) {
     const verified = await verifyTelegramInitData(body.initData, env.BOT_TOKEN);
-    return verified.ok ? { ...verified, via: 'telegram' } : verified;
+    if (verified.ok) return { ...verified, via: 'telegram' };
+    if (verified.reason === 'подпись не совпала') {
+      // самая частая причина — панель открыта через бота, чей токен не у Worker'а
+      const bot = await getBotInfo(env);
+      if (bot.username) verified.reason += ` (Worker проверяет подпись бота @${bot.username} — панель нужно открывать через него)`;
+      else if (bot.valid === false) verified.reason += ' (токен бота в Worker\'е недействителен: отозван или задан неверно)';
+    }
+    return verified;
   }
   if (body.telegramId && body.deviceId) return verifyDeviceTrust(env, body.telegramId, body.deviceId);
   return { ok: false, reason: 'нужны initData либо telegramId+deviceId' };
@@ -694,7 +722,10 @@ export default {
       // true — Worker пишет в базу токеном сервисного аккаунта; без него все
       // эндпоинты (кроме этого) отвечают 500
       const firebaseAdminConfigured = !!env.FIREBASE_SERVICE_ACCOUNT;
-      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured });
+      // какой бот у Worker'а (публичное имя/id, не токен): botTokenValid —
+      // принимает ли Telegram токен (null — не удалось спросить)
+      const bot = botTokenConfigured ? await getBotInfo(env) : { valid: false };
+      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);

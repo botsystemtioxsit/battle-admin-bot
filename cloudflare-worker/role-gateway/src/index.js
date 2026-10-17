@@ -206,9 +206,15 @@ async function getBotInfo(env) {
   try {
     const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getMe`, { signal: AbortSignal.timeout(5000) });
     const data = await res.json().catch(() => null);
-    info = data && data.ok && data.result
-      ? { valid: true, username: data.result.username || null, id: data.result.id || null }
-      : { valid: false }; // Telegram ответил отказом: токен неверный или отозван
+    if (data && data.ok && data.result) {
+      info = { valid: true, username: data.result.username || null, id: data.result.id || null };
+    } else if (data && data.ok === false) {
+      // Telegram явно отказал (401 Unauthorized / 404 Not Found для неверного
+      // токена) — токен неверный или отозван
+      info = { valid: false, error: String(data.description || data.error_code || 'отказ').slice(0, 80) };
+    } else {
+      info = { valid: null }; // ответ не от Bot API (сбой/блокировка по пути) — неизвестно
+    }
   } catch {
     info = { valid: null }; // не дозвонились — неизвестно
   }
@@ -227,7 +233,7 @@ async function verifyIdentity(body, env) {
       // самая частая причина — панель открыта через бота, чей токен не у Worker'а
       const bot = await getBotInfo(env);
       if (bot.username) verified.reason += ` (Worker проверяет подпись бота @${bot.username} — панель нужно открывать через него)`;
-      else if (bot.valid === false) verified.reason += ' (токен бота в Worker\'е недействителен: отозван или задан неверно)';
+      else if (bot.valid === false) verified.reason += ` (Telegram не принимает токен бота, заданный у Worker'а: ${bot.error || 'отказ'}; токен отозван или задан неверно)`;
     }
     return verified;
   }
@@ -725,7 +731,7 @@ export default {
       // какой бот у Worker'а (публичное имя/id, не токен): botTokenValid —
       // принимает ли Telegram токен (null — не удалось спросить)
       const bot = botTokenConfigured ? await getBotInfo(env) : { valid: false };
-      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null });
+      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null, botError: bot.error || null });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);

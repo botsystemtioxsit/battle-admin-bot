@@ -10,18 +10,26 @@ admin/superadmin, используя секретный ключ, зашитый
 
 `POST /grant-role` и `POST /set-status` — тело `{ initData, targetUserId,
 newRole }` / `{ initData, targetUserId, newStatus, restrictedUntil }`, но
-`initData` можно заменить на `{ telegramId, deviceId }` (см. `verifyIdentity`
-ниже — то же доверенное устройство, что и у бэкапов):
+`initData` можно заменить на `{ telegramId, deviceId }` (см. «Доверенные
+устройства» ниже — то же доверенное устройство, что и у бэкапов):
 1. Проверяет подпись `initData` (её даёт `Telegram.WebApp.initData` внутри
    мини-приложения) через `BOT_TOKEN` — подделать её без токена бота
-   невозможно — либо, если initData нет, `deviceId` по
-   `users/$uid/trustedDevices/$deviceId`.
-2. Смотрит текущую роль подписавшегося в Firebase — для `/grant-role`
-   должна быть `superadmin`, для `/set-status` — любая из
-   moderator/admin/superadmin.
-3. Если всё сошлось — пишет `role`/`status` + служебный ключ
-   (`roleGrantKey`/`adminActionKey`) в Firebase, нужный только чтобы пройти
-   `database.rules.json`, сразу стирается.
+   невозможно — либо, если initData нет, подписанную запись
+   `users/$uid/trustedDevices/sha256($deviceId)`.
+2. Определяет, кто подписавшийся: для `/grant-role` нужен **superadmin** (см.
+   `OWNER_IDS` ниже), для `/set-status` — admin или superadmin. Роль
+   `moderator` персоналом не считается: её игрок может записать себе сам.
+3. Если всё сошлось — пишет `role`/`status` в Firebase токеном сервисного
+   аккаунта (`FIREBASE_SERVICE_ACCOUNT`): такая запись идёт в обход
+   `database.rules.json`, никаких секретов в данные не кладётся.
+
+**Кто такой superadmin для Worker'а.** `wrangler.toml` → `[vars] OWNER_IDS`
+(telegram-id через запятую; не секрет). Если задан — superadmin это ТОЛЬКО эти
+id, а роль в базе для выдачи ролей, `/restore-database` и бэкапов не
+используется: её можно стереть (`DELETE` пропускает `.validate`) или подсадить.
+Заодно это аварийный вход: после порчи базы владелец всё равно может
+восстановить её через панель. Добавить второго superadmin = дописать его id и
+выложить Worker заново. Если `OWNER_IDS` пуст — по роли в базе, как раньше.
 
 `POST /backup-now` (`{ initData }`), `POST /restore-code` (`{ initData,
 repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
@@ -30,10 +38,11 @@ repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
 снимка), `POST /download-backup` и `POST /delete-backup` (оба — `{
 initData, path }`, path — `code-backups/<repo>/<файл>.zip` или
 `db-snapshots/<файл>.json`; download отдаёт сырые байты файла, delete
-удаляет его из репозитория навсегда): проверка `initData` +
-`hasBackupsAccess` (superadmin или `users/$uid/permissions/backups ===
-true` — то же делегируемое право, что admin.html уже проверяет на
-клиенте), сам вызов GitHub API идёт с `GITHUB_TOKEN` этого Worker'а.
+удаляет его из репозитория навсегда): проверка `initData` + только
+**superadmin**, сам вызов GitHub API идёт с `GITHUB_TOKEN` этого Worker'а.
+Делегируемого права `permissions/backups` больше нет: правила базы
+позволяют записать его кому угодно, и любой игрок через `/restore-code`
+(файлы берутся из запроса) подменял бы код игры и панели.
 `battle-data-admin-bot` — приватный репозиторий, так что и листинг, и
 скачивание снимков требуют авторизации;
 раньше это делалось PAT, вставленным прямо в браузер оператора
@@ -42,9 +51,8 @@ true` — то же делегируемое право, что admin.html уж�
 любому, кто физически сидит за тем же компьютером. Теперь его знает
 только этот Worker, а обе панели ходят через него.
 
-`/restore-database` — исключение из `hasBackupsAccess`: остаётся строго
-`superadmin`-only (полная перезапись базы — самое разрушительное действие
-из всех, сознательно не делегируется).
+`/restore-database` — тоже строго superadmin (полная перезапись базы —
+самое разрушительное действие из всех).
 
 Все шесть бэкап-эндпоинтов (`/backup-now`, `/restore-code`,
 `/restore-database`, `/list-backups`, `/download-backup`, `/delete-backup`)
@@ -52,12 +60,39 @@ true` — то же делегируемое право, что admin.html уж�
 `{ telegramId, deviceId }` — второе нужно, чтобы все эти действия работали
 не только внутри настоящей Telegram-сессии, но и из desktop-приложения/
 обычного браузера (initData там физически недоступна — это не Telegram
-Mini App). `deviceId` проверяется по `users/$uid/trustedDevices/$deviceId`
-— тому же 128-битному случайному токену, что уже обязателен для самого
-входа в admin.html под admin/superadmin (см. код рядом с
-`protectedRoles`) — так что desktop/браузер, уже прошедшие этот вход, не
-теряют доступ к выдаче ролей/бану/бэкапам только из-за того, что это не
-настоящий Telegram Mini App.
+Mini App).
+
+### Доверенные устройства (`{ telegramId, deviceId }`)
+
+База читается и пишется всеми (`database.rules.json`), поэтому в ней
+нельзя хранить то, что одновременно служит доказательством личности.
+`deviceId` (128 бит случайности, `localStorage.battleDeviceId`) остаётся
+**только в браузере** и приходит сюда только в теле HTTPS-запроса. В базе
+лежит `deviceKey = sha256(deviceId)`:
+
+- запись `users/$uid/trustedDevices/$deviceKey` считается доверием, только
+  если несёт `sig = HMAC(ключ из BOT_TOKEN, uid|deviceKey|expiresAt)`;
+- создаёт такую запись только Worker — `POST /trust-device`
+  (`{ initData | telegramId+deviceId, targetUserId, deviceKey, label,
+  durationMs }`): либо владелец аккаунта (moderator/admin/superadmin)
+  одобряет своё устройство, личность подтверждена initData или уже
+  доверенным устройством (парный код «Подключить по коду», первый вход
+  суперадмина из Telegram), либо superadmin одобряет устройство другого
+  человека («Запросы на устройства»);
+- подделать запись прямой записью в открытую базу нельзя — без секрета
+  подпись не получить; срок (`expiresAt`) входит в подпись, так что его
+  тоже не продлить; запись другого аккаунта, скопированная на этот, не
+  проходит (в подписи `uid`).
+
+Записи старого формата (ключ — сырой `deviceId`, без `sig`) не принимаются:
+они были публично читаемы (по ним любой мог пройти проверку), поэтому
+устройства нужно одобрить заново. Новых секретов настраивать не нужно —
+ключ подписи выводится из `BOT_TOKEN`; смена `BOT_TOKEN` аннулирует все
+доверенные устройства.
+
+**Порядок выкладки:** сначала `npx wrangler deploy` (Worker), потом
+публикация нового `admin.html` — иначе новая панель будет вызывать ещё не
+существующий `/trust-device`.
 
 `restoreCode` кладёт текстовые файлы прямо в дерево коммита (Git Trees API
 принимает `content` вместо `sha` и создаёт блоб сам) — отдельный
@@ -67,35 +102,22 @@ Cloudflare Worker ограничивает число исходящих зап�
 (полсотни+ файлов) падало с "Too many subrequests by single Worker
 invocation" ещё до того, как вообще пытался собраться коммит.
 
-## Разовая настройка (сделать один раз)
+## Секреты Worker'а
 
-Требуется Node.js. `wrangler` ставить отдельно не нужно — `npx` подтянет
-сам при первом запуске.
+Нужны три: `BOT_TOKEN` (токен бота от @BotFather), `GITHUB_TOKEN` (см. ниже) и
+`FIREBASE_SERVICE_ACCOUNT` (JSON-ключ сервисного аккаунта Firebase). Первые два
+задавались один раз (`npx wrangler secret put <ИМЯ>` из этого каталога либо
+Cloudflare → Workers → battle-role-gateway → Settings → Variables and secrets);
+третий кладёт workflow выкладки (ниже), руками его не вставлять. Все они
+переживают `wrangler deploy`. Без `FIREBASE_SERVICE_ACCOUNT` Worker на всё,
+кроме `/health`, отвечает 500 — и **не** возвращается к схеме с общим ключом в
+данных.
 
-```bash
-cd cloudflare-worker/role-gateway
-npx wrangler login          # откроет браузер, авторизует Cloudflare-аккаунт
-npx wrangler secret put BOT_TOKEN         # вставить токен бота от @BotFather
-npx wrangler secret put ROLE_GRANT_KEY    # вставить значение из чата с Claude / см. ниже
-npx wrangler secret put GITHUB_TOKEN      # fine-grained PAT, см. ниже
-npx wrangler deploy
-```
-
-После `deploy` в терминале появится адрес вида
-`https://battle-role-gateway.<твой-поддомен>.workers.dev` — его нужно
-вписать в `src/admin.html` (переменная `ROLE_GATEWAY_URL`, см. коммент
-рядом с ней).
-
-**`ROLE_GRANT_KEY` — НИКОГДА не коммитить в этот файл или куда-либо ещё
-в репозитории** (он публичный) — значение существует только в двух
-местах: здесь через `wrangler secret put` (хранится в Cloudflare, не в
-git) и как GitHub Actions secret `ROLE_GRANT_KEY` в репозитории
-`index.html` (Settings → Secrets and variables → Actions) — оттуда
-`firebase-database-deploy.yml` подставляет его в `database.rules.json`
-только в момент деплоя, сам файл в git всегда содержит только
-плейсхолдер `__ROLE_GRANT_KEY__`. Значения в обоих местах должны
-совпадать один в один — при смене меняешь сразу оба, иначе выдача роли
-перестанет работать у всех.
+**`ROLE_GRANT_KEY` больше не используется.** Раньше им Worker «подписывал»
+записи через правила базы, но для этого ключ приходилось класть в читаемую всеми
+базу. Секрет можно удалить из Cloudflare и из GitHub (`index.html` → Settings →
+Secrets) — после того как правила без ключа выложены (см. порядок ниже).
+Считайте прежнее значение скомпрометированным.
 
 **`GITHUB_TOKEN`** — fine-grained Personal Access Token
 (github.com → Settings → Developer settings → Fine-grained tokens),
@@ -103,12 +125,92 @@ git) и как GitHub Actions secret `ROLE_GRANT_KEY` в репозитории
 and write), `index.html` и `battle-admin-bot` (оба — Contents: Read and
 write). Никогда не расширяй его scope на "все репозитории".
 
+## Выкладка без терминала (GitHub Actions)
+
+Workflow **«Deploy role-gateway Worker»** живёт в репозитории **`index.html`**
+(`.github/workflows/deploy-role-gateway.yml`), а не здесь: секреты GitHub
+хранятся отдельно для каждого репозитория, а ключ сервисного аккаунта
+Firebase (`FIREBASE_SERVICE_ACCOUNT`) уже лежит именно там — его же использует
+выкладка правил базы. Запуск: GitHub → `index.html` → Actions → «Deploy
+role-gateway Worker» → **Run workflow** (поле `gateway_ref` — ветка/коммит этого
+репозитория, по умолчанию `main`). Он:
+1. самотест — ключ сервисного аккаунта реально пишет в базу в обход правил
+   (иначе выкладка останавливается ДО того, как что-то сломается);
+2. `wrangler deploy --keep-vars` (секреты и переменные Worker'а не трогает);
+3. кладёт ключ сервисного аккаунта Worker'у секретом `FIREBASE_SERVICE_ACCOUNT`
+   — берёт из секрета GitHub, руками копировать JSON не нужно;
+4. проверяет `/health`: `botTokenConfigured` и `firebaseAdminConfigured` — оба `true`.
+
+Разовая настройка — секрет **репозитория `index.html`** `CLOUDFLARE_API_TOKEN`
+(токен Cloudflare по шаблону «Edit Cloudflare Workers»; `CLOUDFLARE_ACCOUNT_ID`
+нужен, только если токен видит несколько аккаунтов). Остальные секреты Worker'а
+(`BOT_TOKEN`, `GITHUB_TOKEN`) переживают выкладку.
+
+**Порядок выкладки всего пакета:** 1) этот Worker из ветки (работает и со
+старыми, и с новыми правилами) → 2) панель (`main` → сборка `public/admin.html`)
+→ 3) `database.rules.json` в репозитории `index.html` (уходит в Firebase сам
+при пуше в `main`). Правила не пускают клиентов писать `admin`/`superadmin`,
+`status/points/starsBalance` owner-аккаунтов и `trustedDevices`; выложенные
+раньше Worker'а, они сломали бы выдачу ролей, бан, итоги боёв (`/finish-match`),
+доверие устройств и восстановление базы. Поэтому выкладка правил сама
+проверяет `/health` и без `firebaseAdminConfigured: true` останавливается
+(`skip_worker_check` — только аварийно).
+
+**После смены ключа сервисного аккаунта** в Google Cloud (новый ключ → обновить
+секрет `FIREBASE_SERVICE_ACCOUNT` в `index.html`) нужно заново запустить
+«Deploy role-gateway Worker» — у Worker'а своя копия ключа, `/health`
+покажет `firebaseAdminConfigured: true` и со старой, уже недействительной.
+
+**Откат:** вернуть **коммит ffed511 в `index.html` целиком** (кнопка Revert на
+GitHub — вместе с workflow), а не только файл правил: старый файл без
+подстановки секрета оставил бы в правилах публично известную строку
+`__ROLE_GRANT_KEY__` вместо ключа. Сам Worker откатывать не нужно: он пишет токеном
+сервисного аккаунта и работает и со старыми правилами. Если нужна прежняя версия
+кода Worker'а — запустить «Deploy role-gateway Worker» с нужным `gateway_ref`.
+
+**После выкладки правил — проверка:** в панели («Администрация») просмотрите
+список admin/superadmin и разжалуйте тех, кого не знаете. Пока ключ мог
+утекать, любой слушатель базы мог записать роль себе; новые правила
+блокируют только новые записи, а уже записанные остаются (для Worker'а они
+ничего не значат при заданном `OWNER_IDS`, но панель их увидит).
+
+Ключ сервисного аккаунта даёт полный доступ к базе, поэтому живёт только
+в секретах (GitHub и Worker) и не должен попадать в логи или код. Чем уже его
+роли в Google Cloud, тем лучше: для работы нужна «Firebase Realtime Database
+Admin» (самотест скажет, если её не хватает).
+
+## Известные ограничения
+
+- **Исправлено кодом, ждёт выкладки:** `ROLE_GRANT_KEY` на мгновение лежал в
+  открытой базе. `.validate` в `database.rules.json` умеет только сравнивать
+  данные с литералом, поэтому Worker клал ключ в саму запись
+  (`roleGrantKey`/`adminActionKey`) и стирал отдельным запросом. База читается
+  всеми — любой подключённый слушатель видел этот промежуточный коммит (при
+  выдаче роли, бане, каждом завершённом бое, восстановлении базы). Теперь Worker
+  пишет токеном сервисного аккаунта: такой запрос идёт в обход правил, и
+  никакой секрет в данные не попадает.
+- **Исправлено кодом, ждёт выкладки:** права брались из полей, которые игрок
+  пишет себе сам (`role: 'moderator'`, `permissions/backups`). Теперь модератор
+  персоналом не считается, а бэкапы, выдача ролей и восстановление базы — только
+  superadmin (`OWNER_IDS`).
+- **Осталось: `/finish-match` берёт полномочия из записи боя, которую
+  вызывающий пишет сам** (`battles/<id>.refereeId/hostId/guestId/league` — база
+  открыта на запись, как и профили игроков с `playerId`): игрок может записать
+  «бой», где он судья, и начислить себе очки/звёзды или снять у другого. Отсечена
+  только явная подделка (судья — участник боя, бой с самим собой). Настоящее
+  исправление — чтобы бой и назначение судьи создавал и подписывал сам Worker
+  (HMAC, как у доверенных устройств); это изменение игры, а не только Worker'а.
+- **Исправлено правилами (после их выкладки):** отзыв устройства теперь «липкий».
+  Подписанная запись публична, но клиентам запрещено создавать и менять записи
+  `trustedDevices` (`.validate: false`, удалять можно) — отозванное устройство не
+  может вернуть свою запись. Пока правила не выложены, может.
+- **Осталось (по замыслу проекта):** база по-прежнему открыта на чтение и
+  запись целиком, в том числе удаление: любой может стереть данные
+  (`DELETE /`). Восстановление — «Восстановить базу» в панели (владелец из
+  `OWNER_IDS` пройдёт, даже если роль в базе стёрта) или, в крайнем случае,
+  импорт JSON снимка в Firebase Console → Realtime Database.
+
 ## Обновление кода Worker'а
 
-```bash
-cd cloudflare-worker/role-gateway
-npx wrangler deploy
-```
-
-Секреты (`wrangler secret put`) трогать заново не нужно — они хранятся в
-Cloudflare отдельно от кода и переживают деплои.
+Через workflow «Deploy role-gateway Worker» в репозитории `index.html` (см.
+выше). Секреты Worker'а переживают выкладку.

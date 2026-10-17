@@ -8,7 +8,7 @@
 // зашитый в его JS, виден любому через DevTools/просмотр исходного кода
 // страницы, поэтому такая защита не настоящая (см. переписку/аудит).
 //
-// Здесь секрет (ROLE_GRANT_KEY) и токен бота (BOT_TOKEN) — переменные
+// Здесь ключ сервисного аккаунта (FIREBASE_SERVICE_ACCOUNT) и токен бота (BOT_TOKEN) — переменные
 // окружения Worker'а, они физически никогда не попадают ни в один файл,
 // который отдаётся браузеру. Единственное, что видит клиент — HTTP-ответ
 // "успех/ошибка".
@@ -18,13 +18,19 @@
 // невозможно, не зная BOT_TOKEN (алгоритм — офиц. документация Telegram
 // Bot API, "Validating data received via the Mini App").
 
+import { getAdminAccessToken, resetAdminTokenCache } from './firebase-admin.mjs';
+
 const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const GITHUB_OWNER = 'botsystemtioxsit';
 const DATA_REPO = 'battle-data-admin-bot';
 const CODE_REPOS = new Set(['index.html', 'battle-admin-bot']);
 const ALLOWED_ROLES = new Set(['admin', 'superadmin']);
 const ALLOWED_STATUSES = new Set(['active', 'restricted', 'banned']);
-const STAFF_ROLES = new Set(['moderator', 'admin', 'superadmin']);
+// Кто считается "персоналом" для Worker'а. 'moderator' сюда НЕ входит: это
+// легаси-значение (панель новых модераторов не назначает, в базе их нет), а
+// запись role:'moderator' в users/<id> клиенту разрешена правилами — значит,
+// любой игрок мог бы сам стать "персоналом" и банить кого угодно.
+const STAFF_ROLES = new Set(['admin', 'superadmin']);
 const MAX_INITDATA_AGE_SECONDS = 5 * 60; // initData даётся один раз на открытие — 5 минут более чем достаточно
 
 // Дублирует ELO_K/ELO_BASELINE и стоимость лиг из index.html (LEAGUES,
@@ -115,26 +121,68 @@ async function verifyTelegramInitData(initData, botToken) {
   return { ok: true, userId: String(user.id) };
 }
 
-// Проверка через доверенное устройство (users/$uid/trustedDevices/$deviceId)
-// — альтернатива initData для бэкапов, чтобы они работали не только внутри
+// Проверка через доверенное устройство (users/$uid/trustedDevices/$deviceKey)
+// — альтернатива initData, чтобы бэкапы/роли работали не только внутри
 // настоящей Telegram-сессии, но и из desktop-приложения/обычного браузера
 // (проект кроссплатформенный, initData там принципиально недоступен — это
-// не Telegram Mini App). deviceId — 128 бит случайности
-// (crypto.getRandomValues, см. randomToken в admin.html), известен только
-// тому браузеру, для которого он сгенерирован, и попадает в trustedDevices
-// только через явное одобрение существующим Супердоступом (см.
-// "Администрация" → "Запросы на устройства") — то же самое доказательство
-// личности, которое уже требуется для входа в панель под admin/superadmin
-// вообще (см. комментарий у protectedRoles в admin.html), просто теперь
-// проверяется ещё и здесь, а не только на клиенте.
-// Не подменяет initData для /grant-role и /set-status — эти два трогать не
-// просили, и там цена ошибки (выдать чужую роль) выше.
-async function verifyDeviceTrust(telegramId, deviceId) {
+// не Telegram Mini App).
+//
+// База читается целиком всеми (database.rules.json: .read: true) и пишется
+// всеми (.write: true), поэтому в ней нельзя хранить ничего, что одновременно
+// является доказательством личности. Раньше ключом записи был сам сырой
+// deviceId — и любой, кто просто прочитал users/<id>/trustedDevices (или
+// devicePairings/deviceTrustRequests, куда deviceId тоже попадал), получал
+// готовое "доказательство" чужого устройства и мог вызывать /grant-role,
+// /restore-database, /restore-code от имени суперадмина. Теперь:
+//  - сырой deviceId живёт только в localStorage браузера и приходит сюда
+//    только в теле HTTPS-запроса — в базу он не пишется нигде;
+//  - в базе лежит deviceKey = sha256(deviceId): по нему deviceId не
+//    восстановить (128 бит случайности), а сам по себе он ничего не даёт;
+//  - запись считается доверенной, только если в ней есть sig =
+//    HMAC(секрет Worker'а, uid|deviceKey|expiresAt). Такую запись умеет
+//    создавать только этот Worker (POST /trust-device); подделать её прямой
+//    записью в открытую базу нельзя — подпись не угадать, а expiresAt в неё
+//    входит, так что срок доверия тоже не продлить.
+// Записи старого формата (ключ — сырой deviceId, без sig) не проходят —
+// они были публично прочитаны, устройства надо одобрить заново.
+const DEVICE_KEY_RE = /^[0-9a-f]{64}$/;
+const MAX_TRUST_DURATION_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+
+async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Ключ подписи выводится из BOT_TOKEN с отдельным контекстом — отдельный
+// секрет заводить не нужно (wrangler secret put не требуется), а подпись
+// доверия при этом не пересекается ни с чем, что подписывается BOT_TOKEN
+// напрямую (initData).
+async function deviceTrustSig(env, uid, deviceKey, expiresAt) {
+  const keyBytes = await hmacSha256Bytes(new TextEncoder().encode(env.BOT_TOKEN), 'battle-role-gateway/device-trust/v1');
+  return hmacSha256Hex(keyBytes, `${uid}|${deviceKey}|${expiresAt || 0}`);
+}
+
+function safeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function verifyDeviceTrust(env, telegramId, deviceId) {
   if (!telegramId || !deviceId) return { ok: false, reason: 'нужны telegramId и deviceId' };
-  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}/trustedDevices/${encodeURIComponent(deviceId)}.json`);
+  if (typeof deviceId !== 'string' || deviceId.length < 16 || deviceId.length > 128) {
+    return { ok: false, reason: 'некорректный deviceId' };
+  }
+  const uid = String(telegramId);
+  const deviceKey = await sha256Hex(deviceId);
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`);
   if (!res.ok) return { ok: false, reason: 'Firebase недоступен' };
   const val = await res.json();
   if (!val) return { ok: false, reason: 'устройство не доверено' };
+  if (typeof val.sig !== 'string') return { ok: false, reason: 'устройство не доверено (запись старого формата — нужно одобрить заново)' };
+  const expected = await deviceTrustSig(env, uid, deviceKey, val.expiresAt);
+  if (!safeEqualHex(val.sig, expected)) return { ok: false, reason: 'подпись доверия не совпала' };
   // Временное доверие (см. "Запросы на устройства" в admin.html) —
   // expiresAt задаётся при одобрении, null/отсутствует значит "навсегда".
   // Проверяем именно здесь, а не только на клиенте: клиентская проверка —
@@ -144,15 +192,33 @@ async function verifyDeviceTrust(telegramId, deviceId) {
   if (val.expiresAt && val.expiresAt <= Date.now()) {
     return { ok: false, reason: 'доверие устройству истекло' };
   }
-  return { ok: true, userId: String(telegramId) };
+  return { ok: true, userId: uid, via: 'device', expiresAt: val.expiresAt || null };
 }
 
-// Общая точка входа для проверки личности на бэкап-эндпоинтах: initData,
-// если она есть (сильнее — подпись Telegram), иначе deviceId (см. выше).
+// Общая точка входа для проверки личности: initData, если она есть
+// (сильнее — подпись Telegram), иначе deviceId (см. выше). `via` говорит,
+// каким из двух способов личность подтверждена.
 async function verifyIdentity(body, env) {
-  if (body.initData) return verifyTelegramInitData(body.initData, env.BOT_TOKEN);
-  if (body.telegramId && body.deviceId) return verifyDeviceTrust(body.telegramId, body.deviceId);
+  if (body.initData) {
+    const verified = await verifyTelegramInitData(body.initData, env.BOT_TOKEN);
+    return verified.ok ? { ...verified, via: 'telegram' } : verified;
+  }
+  if (body.telegramId && body.deviceId) return verifyDeviceTrust(env, body.telegramId, body.deviceId);
   return { ok: false, reason: 'нужны initData либо telegramId+deviceId' };
+}
+
+// Единственное место, где в trustedDevices появляется доверенная запись.
+// Писать её вызывающий напрямую в базу не может — без sig запись не
+// считается доверенной (см. verifyDeviceTrust).
+async function writeTrustedDevice(env, uid, deviceKey, { label, durationMs, approvedBy }) {
+  const expiresAt = durationMs ? Date.now() + durationMs : null;
+  const sig = await deviceTrustSig(env, uid, deviceKey, expiresAt);
+  const res = await dbWrite(env, `/users/${encodeURIComponent(uid)}/trustedDevices/${deviceKey}.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label, pairedAt: Date.now(), expiresAt, approvedBy, sig }),
+  });
+  if (!res.ok) throw new Error(`Firebase PUT ${res.status}: ${await res.text()}`);
 }
 
 async function getRole(userId) {
@@ -167,14 +233,33 @@ async function getUser(telegramId) {
   return res.json();
 }
 
-// Бэкапы/восстановление — не только для superadmin: admin.html позволяет
-// делегировать это конкретному admin через users/$uid/permissions/backups
-// (canManageEvent/canManageClans и т.п. — тот же паттерн), поэтому гейт
-// здесь шире, чем строгий superadmin у /restore-database ниже (это самое
-// разрушительное действие из всех — полная перезапись базы — его сознательно
-// не делегируем).
-function hasBackupsAccess(user) {
-  return !!user && (user.role === 'superadmin' || (user.permissions && user.permissions.backups === true));
+// Кто для Worker'а superadmin. Если в конфиге задан OWNER_IDS (список
+// telegram-id через запятую, см. wrangler.toml), то ТОЛЬКО они: роль в базе
+// (users/<id>/role) — данные, которые любой может стереть (DELETE
+// пропускает .validate) или, до исправления правил, подделать, поэтому на неё
+// нельзя опираться как на единственное основание для выдачи ролей, полной
+// перезаписи базы и бэкапов (GITHUB_TOKEN). Без OWNER_IDS — как раньше, по роли.
+function ownerIds(env) {
+  return new Set(String(env.OWNER_IDS || '').split(',').map((x) => x.trim()).filter(Boolean));
+}
+
+function isSuperadmin(env, userId, role) {
+  const owners = ownerIds(env);
+  return owners.size > 0 ? owners.has(String(userId)) : role === 'superadmin';
+}
+
+function isStaff(env, userId, role) {
+  return isSuperadmin(env, userId, role) || STAFF_ROLES.has(role);
+}
+
+// Бэкапы/восстановление — ТОЛЬКО superadmin. Раньше можно было делегировать
+// конкретному admin через users/<id>/permissions/backups, но правила
+// разрешают записать это поле кому угодно: любой игрок выдавал себе право и
+// через /restore-code (файлы берутся из запроса!) подменял код игры и панели
+// токеном Worker'а. В панели такого права у admin нет (его нет в
+// PERMISSION_DEFS), в базе его не было ни у кого.
+function hasBackupsAccess(env, userId, user) {
+  return isSuperadmin(env, userId, user && user.role);
 }
 
 // playerId (вида "PLR-XXXXXX") — внутренний игровой id, отдельный от
@@ -190,58 +275,63 @@ async function getUserByPlayerId(playerId) {
   return { key: keys[0], user: data[keys[0]] || {} };
 }
 
-// Реальный сквозной тест: пытается провести тестовую учётку через ровно
-// тот же путь, что и настоящая выдача роли (users/$uid/role +
-// roleGrantKey), и сразу убирает её независимо от результата — это не
-// настоящий игрок, ему не место в списке пользователей панели. Отвечает
-// true только если ROLE_GRANT_KEY в этом Worker'е реально совпадает с тем,
-// что сейчас задеплоено в database.rules.json (а не просто "оба заданы,
-// но разъехались" — именно так и ломалась выдача роли раньше).
-async function checkRoleGrantKeyMatchesRules(env) {
-  const testRes = await fetch(`${FIREBASE_DB_URL}/users/_role_gateway_healthcheck_.json`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'admin', roleGrantKey: env.ROLE_GRANT_KEY }),
-  });
-  const matches = testRes.ok;
-  await fetch(`${FIREBASE_DB_URL}/users/_role_gateway_healthcheck_.json`, { method: 'DELETE' }).catch(() => {});
-  return matches;
+// Раньше Worker доказывал базе "запись разрешил я", кладя общий секрет
+// (ROLE_GRANT_KEY) в саму запись и стирая его вторым запросом. База читается
+// всеми, поэтому слушатель видел ключ в этот промежуток (а анонимный /health
+// мог запустить такую запись по запросу). Теперь все записи идут с OAuth-токеном
+// сервисного аккаунта (секрет FIREBASE_SERVICE_ACCOUNT): правила для него не
+// действуют, никакой секрет в данные не попадает, очищать нечего. Старого
+// режима нет намеренно — без секрета Worker отвечает 500, а не молча
+// возвращается к схеме с утечкой.
+
+// URL записи в базу; `path` — от корня, с `.json` (например '/users/1.json').
+async function dbWriteUrl(env, path) {
+  const token = await getAdminAccessToken(env.FIREBASE_SERVICE_ACCOUNT);
+  return `${FIREBASE_DB_URL}${path}?access_token=${encodeURIComponent(token)}`;
 }
+
+// Запись в базу. На 401/403 один раз сбрасываем кэш токена и повторяем: ключ
+// сервисного аккаунта могли ротировать, токен — отозвать; без этого все
+// записи падали бы до конца часа.
+async function dbWrite(env, path, init) {
+  const res = await fetch(await dbWriteUrl(env, path), init);
+  if (res.status === 401 || res.status === 403) {
+    resetAdminTokenCache();
+    return fetch(await dbWriteUrl(env, path), init);
+  }
+  return res;
+}
+
+// Идентификатор, который подставляется в путь к базе (id пользователя, боя).
+// С токеном сервисного аккаунта правила не действуют, поэтому путь не должен
+// строиться из непроверенного текста: ни слэшей, ни точек, ни спецсимволов.
+const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 async function grantRole(env, requesterId, targetUserId, newRole) {
-  const patchRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}.json`, {
+  const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: newRole, roleGrantKey: env.ROLE_GRANT_KEY }),
+    body: JSON.stringify({ role: newRole }),
   });
   if (!patchRes.ok) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
-  // ключ был нужен только чтобы протолкнуть запись через database.rules.json —
-  // сразу убираем его, в профиле ему делать нечего
-  await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/roleGrantKey.json`, {
-    method: 'DELETE',
-  }).catch(() => {});
 }
 
-// Бан/разбан чужого аккаунта — то же самое зеркало, что и grantRole, но
-// для users/$uid/status. Нужен отдельно от прямой записи из admin.html,
-// потому что для аккаунтов с owners-записью (см. index.html, Anonymous
-// Auth) database.rules.json больше не пускает чужой auth.uid менять
-// status без adminActionKey — тот самый секрет, который знает только этот
-// Worker.
+// Бан/разбан чужого аккаунта — то же самое зеркало, что и grantRole, но для
+// users/$uid/status. Нужен отдельно от прямой записи из admin.html, потому что
+// для аккаунтов с owners-записью (см. index.html, Anonymous Auth)
+// database.rules.json не пускает чужой auth.uid менять status — а запись
+// токеном сервисного аккаунта правила обходит.
 async function setStatus(env, targetUserId, newStatus, restrictedUntil) {
-  const patchRes = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}.json`, {
+  const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: newStatus, restrictedUntil: restrictedUntil ?? null, adminActionKey: env.ROLE_GRANT_KEY }),
+    body: JSON.stringify({ status: newStatus, restrictedUntil: restrictedUntil ?? null }),
   });
   if (!patchRes.ok) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
-  await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(targetUserId)}/adminActionKey.json`, {
-    method: 'DELETE',
-  }).catch(() => {});
 }
 
 // Записывает итог боя — раньше это делал напрямую клиент СУДЬИ (см.
@@ -268,6 +358,11 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
   const battle = await battleRes.json();
   if (!battle) throw new Error('Бой не найден');
   if (battle.status === 'finished') throw new Error('Бой уже завершён');
+  // Записи боя и игроков в базе пишет кто угодно, поэтому "я судья этого боя"
+  // этим не доказать (см. README, известные ограничения). Хотя бы явную
+  // подделку отсекаем: судья не может быть участником боя, а бой — с самим собой.
+  if (battle.hostId && battle.hostId === battle.guestId) throw new Error('Некорректный бой');
+  if (refereePlayerId === battle.hostId || refereePlayerId === battle.guestId) throw new Error('Судья не может быть участником боя');
   if (battle.refereeId !== refereePlayerId) throw new Error('Вы не назначены судьёй этого боя');
 
   const winnerId = winnerSide === 'host' ? battle.hostId : battle.guestId;
@@ -315,7 +410,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     [`matches/${matchId}/finishedAt`]: finishedAt,
   };
 
-  const touchedKeys = [];
   for (const [playerId, rec] of [[winnerId, winnerRec], [loserId, loserRec]]) {
     const u = rec.user;
     const delta = Number(pointsAwarded[playerId] || 0);
@@ -329,8 +423,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     update[`users/${rec.key}/stats/wins`] = Number(stats.wins || 0) + (winnerId === playerId ? 1 : 0);
     update[`users/${rec.key}/stats/losses`] = Number(stats.losses || 0) + (loserId === playerId ? 1 : 0);
     update[`users/${rec.key}/stats/audienceLikes`] = Number(stats.audienceLikes || 0) + likeDelta;
-    update[`users/${rec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
-    touchedKeys.push(rec.key);
   }
 
   const refRec = await getUserByPlayerId(refereePlayerId);
@@ -338,11 +430,9 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     const u = refRec.user;
     update[`users/${refRec.key}/stats/refereeBattles`] = Number(u.stats?.refereeBattles || 0) + 1;
     update[`users/${refRec.key}/starsBalance`] = Number(u.starsBalance || 0) + REFEREE_STARS_REWARD;
-    update[`users/${refRec.key}/adminActionKey`] = env.ROLE_GRANT_KEY;
-    touchedKeys.push(refRec.key);
   }
 
-  const patchRes = await fetch(`${FIREBASE_DB_URL}/.json`, {
+  const patchRes = await dbWrite(env, '/.json', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -351,71 +441,24 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     throw new Error(`Firebase PATCH ${patchRes.status}: ${await patchRes.text()}`);
   }
 
-  const cleanup = {};
-  for (const key of touchedKeys) cleanup[`users/${key}/adminActionKey`] = null;
-  await fetch(`${FIREBASE_DB_URL}/.json`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cleanup),
-  }).catch(() => {});
 
   return { winnerId, loserId, pointsAwarded, audienceVotes, trophyMultiplier: 1 };
 }
 
 // Полное восстановление базы из снимка (battle-data-admin-bot, вкладка
-// «Восстановление» → «Восстановить базу»). Раньше это был прямой
-// db.ref('/').set(data) с клиента — работало, пока database.rules.json не
-// обзавёлся .validate-правилами на users/$uid/role (нужен roleGrantKey для
-// admin/superadmin) и на status/points/starsBalance (нужен adminActionKey
-// для аккаунтов с owners-записью). Снимок этих служебных полей не содержит
-// (они одноразовые и стираются сразу после использования — см. grantRole/
-// setStatus выше), поэтому голый set(data) с любым непустым снимком реальных
-// пользователей стал отклоняться правилами. Чинится тем же приёмом, что и
-// остальной файл: секрет знает только Worker, поэтому restore идёт через
-// него — перед записью подмешивает roleGrantKey/adminActionKey в те записи
-// users/$uid, которым он понадобится, пишет весь снимок одним PUT в корень,
-// затем чистит подмешанные поля отдельным PATCH.
+// «Восстановление» → «Восстановить базу»). Пишется одним PUT в корень токеном
+// сервисного аккаунта: правила для него не действуют, поэтому снимок кладётся
+// как есть — раньше приходилось подмешивать в записи users/<id> служебные ключи
+// и потом стирать их (и они на время оказывались в открытой базе).
 async function restoreDatabase(env, snapshot) {
-  const payload = snapshot && typeof snapshot === 'object' ? { ...snapshot } : {};
-  const touchedForRole = [];
-  const touchedForAction = [];
-
-  if (payload.users && typeof payload.users === 'object') {
-    const usersCopy = {};
-    for (const [uid, rec] of Object.entries(payload.users)) {
-      if (!rec || typeof rec !== 'object') { usersCopy[uid] = rec; continue; }
-      const u = { ...rec };
-      if (u.role === 'admin' || u.role === 'superadmin') {
-        u.roleGrantKey = env.ROLE_GRANT_KEY;
-        touchedForRole.push(uid);
-      }
-      if (u.status !== undefined || u.points !== undefined || u.starsBalance !== undefined) {
-        u.adminActionKey = env.ROLE_GRANT_KEY;
-        touchedForAction.push(uid);
-      }
-      usersCopy[uid] = u;
-    }
-    payload.users = usersCopy;
-  }
-
-  const putRes = await fetch(`${FIREBASE_DB_URL}/.json`, {
+  const payload = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const putRes = await dbWrite(env, '/.json', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!putRes.ok) {
     throw new Error(`Firebase PUT ${putRes.status}: ${await putRes.text()}`);
-  }
-
-  const cleanup = {};
-  for (const uid of touchedForRole) cleanup[`users/${uid}/roleGrantKey`] = null;
-  for (const uid of touchedForAction) cleanup[`users/${uid}/adminActionKey`] = null;
-  if (Object.keys(cleanup).length) {
-    await fetch(`${FIREBASE_DB_URL}/.json`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanup),
-    }).catch(() => {});
   }
 }
 
@@ -439,14 +482,16 @@ async function notifyLoginRequest(env, telegramId, requestId) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: telegramId,
-      text: 'Запрос на вход в твой аккаунт: ' + (req.device || 'неизвестное устройство') + '. Если это не ты - отклони.',
+      // заявку (и её device) пишет кто угодно — подставляем только короткую
+      // метку из безопасных символов, а не произвольный текст от имени бота
+      text: 'Запрос на вход в твой аккаунт: ' + (/^[A-Za-z0-9 ._()\/-]{1,40}$/.test(String(req.device || '')) ? req.device : 'неизвестное устройство') + '. Если это не ты - отклони.',
       reply_markup: { inline_keyboard: [[{ text: 'Разрешить', callback_data: 'la:' + requestId }, { text: 'Отклонить', callback_data: 'ld:' + requestId }]] },
     }),
   });
   const data = await res.json();
   // 403 = человек ни разу не запускал бота или заблокировал его — не ошибка
   // вызывающего, заявку всё равно можно подтвердить в игре/панели
-  if (!data.ok) return { sent: false, reason: data.description };
+  if (!data.ok) return { sent: false };
   return { sent: true };
 }
 
@@ -642,16 +687,18 @@ export default {
 
     // Диагностика для админ-панели ("Система" → блок "role-gateway") —
     // отдаёт только true/false, реальные значения секретов наружу никогда
-    // не попадают.
+    // не попадают. Ничего не пишет в базу: эндпоинт открытый, и любая запись
+    // с секретом по запросу анонима выдавала бы этот секрет слушателям базы.
     if (url.pathname === '/health' && request.method === 'GET') {
       const botTokenConfigured = !!env.BOT_TOKEN;
-      const roleGrantKeyConfigured = !!env.ROLE_GRANT_KEY;
-      const roleGrantKeyMatchesRules = roleGrantKeyConfigured ? await checkRoleGrantKeyMatchesRules(env) : false;
-      return jsonResponse({ botTokenConfigured, roleGrantKeyConfigured, roleGrantKeyMatchesRules });
+      // true — Worker пишет в базу токеном сервисного аккаунта; без него все
+      // эндпоинты (кроме этого) отвечают 500
+      const firebaseAdminConfigured = !!env.FIREBASE_SERVICE_ACCOUNT;
+      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);
-    if (!env.BOT_TOKEN || !env.ROLE_GRANT_KEY || (needsGithubToken && !env.GITHUB_TOKEN)) {
+    if (!env.BOT_TOKEN || !env.FIREBASE_SERVICE_ACCOUNT || (needsGithubToken && !env.GITHUB_TOKEN)) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
 
@@ -667,6 +714,9 @@ export default {
       if (!targetUserId || !newRole) {
         return jsonResponse({ error: 'нужны targetUserId, newRole' }, 400);
       }
+      if (!SAFE_ID_RE.test(String(targetUserId))) {
+        return jsonResponse({ error: 'некорректный targetUserId' }, 400);
+      }
       if (!ALLOWED_ROLES.has(newRole)) {
         return jsonResponse({ error: `newRole должен быть одним из: ${[...ALLOWED_ROLES].join(', ')}` }, 400);
       }
@@ -677,7 +727,7 @@ export default {
       }
 
       const requesterRole = await getRole(verified.userId);
-      if (requesterRole !== 'superadmin') {
+      if (!isSuperadmin(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Выдавать admin/superadmin может только существующий superadmin' }, 403);
       }
 
@@ -702,6 +752,12 @@ export default {
       if (!targetUserId || !newStatus) {
         return jsonResponse({ error: 'нужны targetUserId, newStatus' }, 400);
       }
+      if (!SAFE_ID_RE.test(String(targetUserId))) {
+        return jsonResponse({ error: 'некорректный targetUserId' }, 400);
+      }
+      if (restrictedUntil != null && !(typeof restrictedUntil === 'number' && Number.isFinite(restrictedUntil))) {
+        return jsonResponse({ error: 'restrictedUntil должен быть числом (время в мс) или null' }, 400);
+      }
       if (!ALLOWED_STATUSES.has(newStatus)) {
         return jsonResponse({ error: `newStatus должен быть одним из: ${[...ALLOWED_STATUSES].join(', ')}` }, 400);
       }
@@ -712,12 +768,78 @@ export default {
       }
 
       const requesterRole = await getRole(verified.userId);
-      if (!STAFF_ROLES.has(requesterRole)) {
-        return jsonResponse({ error: 'Менять статус может только модератор/админ/супердоступ' }, 403);
+      if (!isStaff(env, verified.userId, requesterRole)) {
+        return jsonResponse({ error: 'Менять статус может только админ/супердоступ' }, 403);
       }
 
       try {
         await setStatus(env, String(targetUserId), newStatus, restrictedUntil ?? null);
+      } catch (err) {
+        return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true });
+    }
+
+    // Одобрение устройства — единственный способ получить доверенную запись
+    // (см. комментарий у verifyDeviceTrust). Одобряет либо сам владелец
+    // аккаунта (его личность подтверждена initData или уже доверенным
+    // устройством — это парный код "Подключить по коду" и первый вход
+    // суперадмина из Telegram), либо любой superadmin за другого человека
+    // ("Администрация" → "Запросы на устройства"). deviceKey приходит уже
+    // хэшем — сырой deviceId в базу и в заявки не попадает.
+    if (url.pathname === '/trust-device' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { targetUserId, deviceKey, label, durationMs } = body || {};
+      if (typeof deviceKey !== 'string' || !DEVICE_KEY_RE.test(deviceKey)) {
+        return jsonResponse({ error: 'нужен deviceKey (sha256 в hex, 64 символа)' }, 400);
+      }
+      if (!/^\d+$/.test(String(targetUserId || ''))) {
+        return jsonResponse({ error: 'нужен targetUserId (числовой telegramId)' }, 400);
+      }
+      if (durationMs != null && !(Number.isInteger(durationMs) && durationMs > 0 && durationMs <= MAX_TRUST_DURATION_MS)) {
+        return jsonResponse({ error: 'durationMs должен быть целым положительным числом миллисекунд (или null — навсегда)' }, 400);
+      }
+      const uid = String(targetUserId);
+
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      const isSelf = verified.userId === uid;
+      if (!(isSuperadmin(env, verified.userId, requesterRole) || (isSelf && STAFF_ROLES.has(requesterRole)))) {
+        return jsonResponse({ error: 'Одобрять устройство может сам владелец аккаунта (модератор/админ/супердоступ) либо superadmin' }, 403);
+      }
+
+      // не плодим "пустые" users/<id> с одной лишь trustedDevices внутри
+      const target = await getUser(uid);
+      if (!target) {
+        return jsonResponse({ error: 'пользователь не найден' }, 404);
+      }
+
+      // Устройство с временным доверием не может выдать больше, чем имеет
+      // само: иначе оно одним вызовом превращало себя (или новое устройство)
+      // в вечное. Вечное доверие передают только initData и вечные устройства.
+      let effectiveDurationMs = durationMs || null;
+      if (verified.via === 'device' && verified.expiresAt) {
+        const remainingMs = Math.max(1, verified.expiresAt - Date.now()); // 0 в writeTrustedDevice означало бы "навсегда"
+        effectiveDurationMs = effectiveDurationMs ? Math.min(effectiveDurationMs, remainingMs) : remainingMs;
+      }
+
+      try {
+        await writeTrustedDevice(env, uid, deviceKey, {
+          label: typeof label === 'string' && label.trim() ? label.trim().slice(0, 64) : 'Устройство',
+          durationMs: effectiveDurationMs,
+          approvedBy: verified.userId,
+        });
       } catch (err) {
         return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
       }
@@ -755,6 +877,9 @@ export default {
       const { initData, matchId, winnerSide } = body || {};
       if (!initData || !matchId || (winnerSide !== 'host' && winnerSide !== 'guest')) {
         return jsonResponse({ error: 'нужны initData, matchId, winnerSide (host|guest)' }, 400);
+      }
+      if (!SAFE_ID_RE.test(String(matchId))) {
+        return jsonResponse({ error: 'некорректный matchId' }, 400);
       }
 
       const verified = await verifyTelegramInitData(initData, env.BOT_TOKEN);
@@ -794,7 +919,7 @@ export default {
       }
 
       const requesterRole = await getRole(verified.userId);
-      if (requesterRole !== 'superadmin') {
+      if (!isSuperadmin(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Восстанавливать базу может только superadmin' }, 403);
       }
 
@@ -821,7 +946,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -853,7 +978,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -880,7 +1005,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -911,7 +1036,7 @@ export default {
       // Жёсткий allowlist путей — это единственная защита от того, чтобы
       // через этот прокси не читали произвольные файлы приватного
       // репозитория (например, секреты в других ветках/папках).
-      if (!/^(code-backups\/(index\.html|battle-admin-bot)\/[^/]+\.zip|db-snapshots\/[^/]+\.json)$/.test(path)) {
+      if (typeof path !== 'string' || path.includes('..') || !/^(code-backups\/(index\.html|battle-admin-bot)\/[A-Za-z0-9._-]+\.zip|db-snapshots\/[A-Za-z0-9._-]+\.json)$/.test(path)) {
         return jsonResponse({ error: 'путь недопустим' }, 400);
       }
 
@@ -921,7 +1046,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -957,7 +1082,7 @@ export default {
       }
       // Тот же allowlist, что и у download-backup — удалять из приватного
       // репозитория можно только сами снимки, ничего больше.
-      if (!/^(code-backups\/(index\.html|battle-admin-bot)\/[^/]+\.zip|db-snapshots\/[^/]+\.json)$/.test(path)) {
+      if (typeof path !== 'string' || path.includes('..') || !/^(code-backups\/(index\.html|battle-admin-bot)\/[A-Za-z0-9._-]+\.zip|db-snapshots\/[A-Za-z0-9._-]+\.json)$/.test(path)) {
         return jsonResponse({ error: 'путь недопустим' }, 400);
       }
 
@@ -967,7 +1092,7 @@ export default {
       }
 
       const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(requester)) {
+      if (!hasBackupsAccess(env, verified.userId, requester)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 

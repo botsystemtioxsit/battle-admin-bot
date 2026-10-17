@@ -2,5 +2,16 @@ name = "battle-role-gateway"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 
-# Секреты (BOT_TOKEN, ROLE_GRANT_KEY) сюда НЕ пишутся — задаются отдельно
-# командой `wrangler secret put`, см. README.md рядом.
+# Секреты (BOT_TOKEN, GITHUB_TOKEN, FIREBASE_SERVICE_ACCOUNT) сюда НЕ пишутся —
+# задаются отдельно (`wrangler secret put` либо workflow "Deploy role-gateway
+# Worker" в репозитории index.html), см. README.md рядом.
+
+[vars]
+# Telegram-id тех, кого Worker считает superadmin: выдача ролей admin/superadmin,
+# полная перезапись базы (/restore-database), бэкапы и восстановление кода
+# (GITHUB_TOKEN). Это НЕ секрет (id виден всем в базе, а подлинность проверяет
+# подпись initData). Роль в базе (users/<id>/role) для этих действий не
+# используется: её любой может стереть, а до исправления правил — подделать.
+# Несколько id — через запятую. Чтобы добавить второго superadmin, допишите
+# его id сюда и выложите Worker заново.
+OWNER_IDS = "871656058"

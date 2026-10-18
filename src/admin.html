@@ -2132,6 +2132,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // ждём, пока её подтвердят — либо в игре (Сообщество → Запросы), либо
   // прямо здесь же (вкладка "Аккаунт", см. loadAccountLoginRequests ниже).
   // Тайм-аут ожидания — 5 минут.
+  // Куда входят: поле app в заявке пишет сама страница (игра — 'game', панель —
+  // 'admin'). Выводим только из белого списка; нет поля — подпись как раньше.
+  function loginTargetLabel(req) {
+    const app = req && req.app;
+    return app === 'game' ? 'в игру' : app === 'admin' ? 'в админ-панель' : '';
+  }
   // Метка устройства в заявке — её видит владелец аккаунта в сообщении бота и
   // решает, разрешать ли вход. Только короткий безопасный текст (Worker всё
   // равно проверяет).
@@ -2976,7 +2982,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         renderAccountLoginRequests();
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
-          newKeys.forEach((key) => liveEmit('requests', '🔐 заявка на вход: ' + termClean(latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — подтвердить: вкладка «Аккаунт»'));
+          newKeys.forEach((key) => liveEmit('requests', '🔐 заявка на вход' + (loginTargetLabel(latestLoginRequests[key]) ? ' ' + loginTargetLabel(latestLoginRequests[key]) : '') + ': ' + termClean(latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — подтвердить: вкладка «Аккаунт»'));
         }
         firstSnapshot = false;
       }, (err) => console.error('Заявки на вход', err));
@@ -3026,7 +3032,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     emptyEl.style.display = 'none';
     listEl.innerHTML = pending.map((key) => `
       <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-        <div style="flex:1; min-width:0; font-size:13px; font-weight:600;">🔐 ${escapeHtml(requests[key].device || 'неизвестное устройство')}</div>
+        <div style="flex:1; min-width:0; font-size:13px; font-weight:600;">🔐 ${escapeHtml((loginTargetLabel(requests[key]) ? 'Вход ' + loginTargetLabel(requests[key]) + ' · ' : '') + (requests[key].device || 'неизвестное устройство'))}</div>
         <button type="button" class="account-approve-login" data-key="${escapeHtml(key)}" style="background:var(--gold); border:none; color:#0B0B0D; border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">✓ Разрешить</button>
         <button type="button" class="account-deny-login" data-key="${escapeHtml(key)}" style="background:none; border:1px solid var(--line); color:var(--muted); border-radius:100px; width:30px; height:30px; font-size:14px; cursor:pointer; flex-shrink:0;">✕</button>
       </div>
@@ -5718,7 +5724,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     };
     pendingLoginKeys().forEach((key) => {
       const r = latestLoginRequests[key];
-      add({ kind: 'login', key }, '🔐 вход · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('login', key, r) ? '' : ' (давняя)'));
+      add({ kind: 'login', key }, '🔐 вход' + (loginTargetLabel(r) ? ' ' + loginTargetLabel(r) : '') + ' · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('login', key, r) ? '' : ' (давняя)'));
     });
     if (canManageRoles()) {
       latestPendingDeviceRequests.forEach(([key, r]) => {
@@ -5743,7 +5749,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (item.kind === 'login') {
       const r = latestLoginRequests[item.key];
       if (!r || r.status !== 'pending') throw new Error('заявка уже обработана');
-      await termAsk(ctx, 'Разрешить вход с устройства «' + termClean(r.device || 'неизвестное устройство') + '»?', async () => {
+      await termAsk(ctx, 'Разрешить вход' + (loginTargetLabel(r) ? ' ' + loginTargetLabel(r) : '') + ' с устройства «' + termClean(r.device || 'неизвестное устройство') + '»?', async () => {
         const live = latestLoginRequests[item.key];
         if (!live || live.status !== 'pending') throw new Error('заявка уже обработана');
         await db.ref('users/' + myTelegramId + '/loginRequests/' + item.key).update({ status: 'approved' });

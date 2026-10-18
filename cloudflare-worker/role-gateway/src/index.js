@@ -542,13 +542,20 @@ function safeDeviceLabel(value) {
   return /^[\p{L}\p{N} ._(),\/-]{1,40}$/u.test(s) ? s : 'неизвестное устройство';
 }
 
+// app пишет кто угодно — берём только два известных значения (иначе 'constructor'
+// и прочие ключи прототипа дали бы мусор в тексте)
+function loginApp(req) {
+  const key = req && req.app;
+  return key === 'game' || key === 'admin' ? LOGIN_APPS[key] : null;
+}
+
 function loginRequestTitle(req) {
-  const app = LOGIN_APPS[req && req.app];
+  const app = loginApp(req);
   return app ? `Вход в ${app.name}` : 'Вход в аккаунт';
 }
 
 function loginRequestText(req) {
-  const app = LOGIN_APPS[req && req.app];
+  const app = loginApp(req);
   const head = app ? `${app.emoji} Запросили вход в ${app.name}` : '🔑 Запросили вход в твой аккаунт';
   return `${head}\nУстройство: ${safeDeviceLabel(req && req.device)}\n\nРазрешить вход? Если это не ты — нажми «Отклонить».`;
 }
@@ -723,8 +730,18 @@ async function handleBotMessage(env, message) {
 }
 
 async function handleTelegramUpdate(env, update) {
-  if (update && update.callback_query) await handleLoginCallback(env, update.callback_query);
-  else if (update && update.message) await handleBotMessage(env, update.message);
+  if (update && update.callback_query) {
+    try {
+      await handleLoginCallback(env, update.callback_query);
+    } catch (err) {
+      // сбой Google (токен сервисного аккаунта), сети и т.п.: человек не должен
+      // остаться с бесконечным «часиками» на кнопке и без объяснения
+      console.error('login callback:', err && err.message);
+      await tgApi(env, 'answerCallbackQuery', { callback_query_id: update.callback_query.id, text: 'Что-то пошло не так, попробуй ещё раз.' });
+    }
+  } else if (update && update.message) {
+    await handleBotMessage(env, update.message);
+  }
 }
 
 async function ghApi(path, token, options = {}) {

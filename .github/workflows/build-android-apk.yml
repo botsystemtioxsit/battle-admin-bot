@@ -31,9 +31,39 @@ jobs:
         with:
           gradle-version: 8.7
 
+      # Постоянный ключ подписи берётся из секрета репозитория
+      # ANDROID_KEYSTORE_BASE64 (файл ключа в base64). Без него каждая сборка
+      # подписывалась бы новым случайным отладочным ключом: Android не даёт
+      # поставить такой APK поверх предыдущего, а Google Play Защита каждый раз
+      # видит «нового, незнакомого разработчика» и блокирует установку.
+      # Пароль и алиас не секретны (секретен сам файл ключа).
+      - name: Prepare signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/battle-signing.p12"
+            {
+              echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/battle-signing.p12"
+              echo "ANDROID_KEYSTORE_PASSWORD=battle-android"
+              echo "ANDROID_KEY_ALIAS=battle"
+              echo "ANDROID_KEY_PASSWORD=battle-android"
+              echo "SIGNING=stable"
+            } >> "$GITHUB_ENV"
+          else
+            echo "SIGNING=debug" >> "$GITHUB_ENV"
+            echo "::warning::Секрет ANDROID_KEYSTORE_BASE64 не задан: APK подписан одноразовым отладочным ключом (см. android/README.md, «Подпись APK»)."
+          fi
+
       - name: Build debug APK
         working-directory: android
         run: gradle assembleDebug --no-daemon
+
+      - name: Show signing certificate
+        run: |
+          APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$APK" | grep -E "certificate (DN|SHA-256)"
+          echo "Подпись: $SIGNING"
 
       - name: Read version
         id: ver
@@ -54,6 +84,7 @@ jobs:
           EOF
 
       - name: Publish GitHub Release with APK attached
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest

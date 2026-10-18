@@ -5511,8 +5511,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (parsed.plr) {
       const pid = parsed.plr;
       const snap = await db.ref('users').orderByChild('playerId').equalTo(pid).once('value');
-      const entry = Object.entries(snap.val() || {}).find(([, u]) => u && u.playerId === pid);
-      return entry ? { key: entry[0], user: entry[1] } : null;
+      const matches = Object.entries(snap.val() || {}).filter(([, u]) => u && u.playerId === pid);
+      // playerId — поле, которое игрок пишет сам: два аккаунта с одним ID — повод
+      // остановиться, а не выбрать "первого"
+      if (matches.length > 1) throw new Error('ID ' + pid + ' есть у ' + matches.length + ' аккаунтов — укажи telegram-id нужного игрока');
+      return matches.length ? { key: matches[0][0], user: matches[0][1] } : null;
     }
     const snap = await db.ref('users/' + parsed.id).once('value');
     return snap.exists() ? { key: parsed.id, user: snap.val() } : null;
@@ -5557,8 +5560,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // делает (иначе она могла бы выполниться без вопроса внутри чужого пакета или
   // подсунуть вопрос посреди другой работы). Возвращает промис выполнения (или
   // undefined, если ждём ответа); вызывающие ждут результат через await.
+  function termAssertLive(ctx) {
+    if (ctx && ctx.cancelled) throw new Error('команда отменена: она слишком долго не отвечала — повтори её');
+  }
   function termAsk(ctx, question, run) {
-    if (ctx.cancelled) throw new Error('команда отменена: она слишком долго не отвечала — повтори её');
+    termAssertLive(ctx);
+    // вопрос, который ждёт ответа, не задаём, если владелец уже ушёл с вкладки
+    // (команда запущена, он переключился, а чтение ответило позже)
+    if (!ctx.auto && !termActive) throw new Error('вы ушли с вкладки — команда отменена, повтори её');
     if (ctx.auto) {
       termPrint(question + ' → да (пакет подтверждён)', 'warn');
       return run();
@@ -5606,9 +5615,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
   }
 
-  async function termCmdUnban(args) {
+  async function termCmdUnban(args, ctx) {
     const found = await termResolveUser(args[0]);
     if (!found) throw new Error('игрок не найден: ' + args[0]);
+    termAssertLive(ctx); // после долгого чтения команда могла уже "умереть" по таймауту
     await setUserStatus(found.key, 'active', null);
     logAction('unban', found.key, found.user.firstName || '—', found.user.playerId || '—', 'Бан/ограничение снято (Терминал)');
     termPrint('Бан/ограничение снято: ' + termClean(found.user.firstName || '—') + ' (' + found.key + ')', 'ok');
@@ -5622,6 +5632,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       ? 'Включить АВАРИЙНЫЙ РЕЖИМ? Сайт и панель закроются для ВСЕХ, кроме Супердоступа, и остановятся автобэкапы.'
       : 'Выключить аварийный режим, вернуть доступ всем и возобновить автобэкапы?', async () => {
       await termRequireLiveRole(['superadmin']);
+      termAssertLive(ctx);
       // как тумблер в "Системе": режим и автобэкапы переключаются вместе
       await Promise.all([
         db.ref('config/emergencyLockdown').set(on),
@@ -5642,6 +5653,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     await termRequireLiveRole(['moderator', 'admin', 'superadmin'], 'danger');
     const apply = async () => {
       await termRequireLiveRole(['moderator', 'admin', 'superadmin'], 'danger');
+      termAssertLive(ctx);
       await db.ref('config/maintenanceMode').set(on);
       logAction('maintenance_toggled', '—', '—', '—', (on ? 'Включён' : 'Выключен') + ' (Терминал)');
       if (on && message) {
@@ -5738,7 +5750,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
   function termDurationLabel(durKey) { return TERM_DURATION_LABELS[durKey].toLowerCase(); }
 
-  async function termCmdDeny(args) {
+  async function termCmdDeny(args, ctx) {
     const item = termPickRequest(args[0]);
     if (item.kind === 'login') {
       const r = latestLoginRequests[item.key];
@@ -5747,6 +5759,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     } else {
       if (!canManageRoles()) throw new Error('устройства отклоняет только Супердоступ');
       if (!latestPendingDeviceRequests.some(([key]) => key === item.key)) throw new Error('заявка уже обработана');
+      termAssertLive(ctx);
       await db.ref('deviceTrustRequests/' + item.key).update({ status: 'denied' });
     }
     termPrint('Отклонено.', 'ok');
@@ -5767,8 +5780,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     ['requests',    { usage: 'requests',                                desc: 'заявки на вход и на устройства',                   allowed: () => !!myTelegramId,                         run: termCmdRequests }],
     ['approve',     { usage: 'approve <номер> [24h|7d|30d|forever]',    desc: 'подтвердить заявку (срок — для устройств)',        allowed: () => !!myTelegramId,                         run: termCmdApprove }],
     ['deny',        { usage: 'deny <номер>',                            desc: 'отклонить заявку',                                 allowed: () => !!myTelegramId,                         run: termCmdDeny }],
-    ['ban',         { usage: 'ban <id> [причина]',                      desc: 'бан навсегда (спросит подтверждение)',             allowed: () => canManageBans(),                        check: (args) => { termParseUserArg(args[0]); }, run: termCmdBan }],
-    ['restrict',    { usage: 'restrict <id> <часы> [причина]',          desc: 'временное ограничение',                            allowed: () => canManageBans(),                        check: (args) => { termParseUserArg(args[0]); const h = Number(args[1]); if (!Number.isInteger(h) || h < 1 || h > 24 * 365) throw new Error('часы — целое число от 1 до 8760'); }, run: termCmdRestrict }],
+    ['ban',         { usage: 'ban <id> [причина]',                      desc: 'бан навсегда (спросит подтверждение)',             allowed: () => canManageBans(),                        check: (args) => { if (termParseUserArg(args[0]).id === myTelegramId) throw new Error('себя банить нельзя'); }, run: termCmdBan }],
+    ['restrict',    { usage: 'restrict <id> <часы> [причина]',          desc: 'временное ограничение',                            allowed: () => canManageBans(),                        check: (args) => { if (termParseUserArg(args[0]).id === myTelegramId) throw new Error('себя ограничивать нельзя'); const h = Number(args[1]); if (!Number.isInteger(h) || h < 1 || h > 24 * 365) throw new Error('часы — целое число от 1 до 8760'); }, run: termCmdRestrict }],
     ['unban',       { usage: 'unban <id>',                              desc: 'снять бан/ограничение',                            allowed: () => canManageBans(),                        check: (args) => { termParseUserArg(args[0]); }, run: termCmdUnban }],
     ['log',         { usage: 'log [N]',                                 desc: 'последние N записей журнала (по умолчанию 10)',    allowed: () => true,                                   check: (args) => { if (args[0] != null) { const n = Number(args[0]); if (!Number.isInteger(n) || n < 1 || n > 50) throw new Error('log [N], где N от 1 до 50'); } }, run: termCmdLog }],
     ['online',      { usage: 'online',                                  desc: 'сколько игроков онлайн',                           allowed: () => true,                                   run: termCmdOnline }],
@@ -5840,6 +5853,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // `approve 1` в пакете после `requests` подтвердила бы то, что окажется
   // под номером 1 уже после общего "y" — например, подброшенную чужую заявку.
   const TERM_NO_BATCH = new Set(['approve', 'deny']);
+  const TERM_ID_ONLY_IN_BATCH = new Set(['ban', 'restrict', 'unban']); // PLR-ID разрешается уже после общего «y»
   const TERM_LINE_MAX = 300; // длиннее — не принимаем: в списке строка видна целиком
 
   function termPlanBatch(lines) {
@@ -5856,6 +5870,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const def = TERM_COMMANDS.get(name);
       if (!def) { problems.push(where + 'неизвестная команда «' + termClean(name, 30) + '»'); return; }
       if (!def.allowed()) { problems.push(where + 'нет прав на «' + name + '»'); return; }
+      if (TERM_ID_ONLY_IN_BATCH.has(name) && /^PLR-/i.test(tokens[0] || '')) { problems.push(where + '«' + name + '» в пакете принимает только telegram-id: игрока по PLR-ID сначала найди (find), чтобы видеть, кто это'); return; }
       if (TERM_NO_BATCH.has(name)) { problems.push(where + '«' + name + '» нельзя в пакете — сначала посмотри заявку (requests), потом ' + name + ' отдельной строкой: так виден тот, о ком речь'); return; }
       if (def.check) {
         try { def.check(tokens); } catch (err) { problems.push(where + termClean(err && err.message ? err.message : err, 200)); }
@@ -6126,9 +6141,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   async function liveWatchNewByTime(path, field, label, sinceMs, onChild, attempt) {
     const exists = await rtdbIndexExists(path, field);
     if (exists === null) {
-      // проверить не удалось (нет связи?) — это не "индекса нет"; один повтор через минуту
-      liveEmit('system', 'ℹ️ «' + label + '»: не удалось проверить индекс ' + path + '.' + field + ' — попробую ещё раз через минуту.');
-      if (!attempt) setTimeout(() => liveWatchNewByTime(path, field, label, Date.now() - 30000, onChild, 1), 60000);
+      // проверить не удалось (нет связи?) — это не "индекса нет"; один повтор через
+      // минуту с ТЕМ ЖЕ sinceMs, чтобы не потерять события, пришедшие за это время
+      if (!attempt) {
+        liveEmit('system', 'ℹ️ «' + label + '»: не удалось проверить индекс ' + path + '.' + field + ' — попробую ещё раз через минуту.');
+        setTimeout(() => liveWatchNewByTime(path, field, label, sinceMs, onChild, 1), 60000);
+      } else {
+        liveEmit('system', 'ℹ️ «' + label + '» в эфире отключены: индекс ' + path + '.' + field + ' так и не удалось проверить — обновите страницу.');
+      }
       return;
     }
     if (!exists) {
@@ -6153,7 +6173,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
     liveWatchNewByKey('logs', (key, e) => {
       if (!e || !e.timestamp) return;
-      liveEmit('actions', '📜 ' + termLogBody(e) + (ownLogKeys.has(key) || (myTelegramId && e.actorPlayerId === myTelegramId) ? ' · вы' : ''));
+      liveEmit('actions', '📜 ' + termLogBody(e) + (ownLogKeys.has(key) ? ' · вы' : ''));
     });
     liveWatchNewByKey('errorReports', (key, r) => {
       if (!r) return;
@@ -6174,13 +6194,22 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
 
     // связь с базой: если пропала, лента молчит не потому, что тихо, — скажем об этом
-    let wasConnected = null;
+    // Настоящий SDK сначала отдаёт false (ещё подключается) и только потом true,
+    // поэтому "потеря связи" — это false ПОСЛЕ того, как связь уже была.
+    let everConnected = false;
+    let lostReported = false;
     db.ref('.info/connected').on('value', (snap) => {
       const connected = snap.val() !== false; // null (нет данных) считаем "на связи"
       document.getElementById('live-badge').classList.toggle('offline', !connected);
-      document.getElementById('live-badge-text').textContent = connected ? 'ПРЯМОЙ ЭФИР' : 'НЕТ СВЯЗИ';
-      if (wasConnected !== null && connected !== wasConnected) liveEmit('system', connected ? '🟢 связь с базой восстановлена' : '🔴 связь с базой потеряна — новые события не приходят', connected ? 'ok' : 'err');
-      wasConnected = connected;
+      document.getElementById('live-badge-text').textContent = connected ? 'ПРЯМОЙ ЭФИР' : (everConnected ? 'НЕТ СВЯЗИ' : 'ПОДКЛЮЧЕНИЕ…');
+      if (connected) {
+        if (lostReported) liveEmit('system', '🟢 связь с базой восстановлена', 'ok');
+        lostReported = false;
+        everConnected = true;
+      } else if (everConnected && !lostReported) {
+        lostReported = true;
+        liveEmit('system', '🔴 связь с базой потеряна — новые события не приходят', 'err');
+      }
     });
 
     db.ref('presence').on('value', (snap) => {

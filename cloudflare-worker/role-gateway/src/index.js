@@ -512,37 +512,236 @@ async function restoreDatabase(env, snapshot) {
   }
 }
 
-// Пишет владельцу аккаунта в Telegram "кто-то входит" с кнопками
-// Разрешить/Отклонить — их нажатия обрабатывает Telegram Serverless
-// (telegram-serverless/handlers/callback_query.js, callback_data la:/ld:).
-// Вызывает браузер, который только что положил заявку в loginRequests —
-// он не в Telegram, initData у него нет, поэтому ничего не берём на веру:
-// заявка должна реально существовать, быть pending и свежей, и по каждой
-// уведомляем ровно один раз (notifiedAt) — так через этот маршрут нельзя
-// слать людям произвольные сообщения или спамить одной заявкой.
-async function notifyLoginRequest(env, telegramId, requestId) {
+// ===== Заявки на вход: уведомление в Telegram и кнопки «Разрешить/Отклонить» =====
+//
+// Заявку кладёт в users/<id>/loginRequests страница, откуда входят (игра или
+// админ-панель; поле app: 'game' | 'admin' — только для текста сообщения,
+// никаких прав оно не даёт, как и device — их пишет кто угодно). Страница
+// сразу дёргает /login-notify, Worker пишет владельцу аккаунта от имени бота
+// (BOT_TOKEN) с кнопками. Нажатия кнопок Telegram присылает вебхуком на
+// /telegram-webhook — раньше их ловил Telegram Serverless игрового бота, но
+// сообщение уходит от бота-терминала (токен в BOT_TOKEN), а нажатие всегда
+// приходит тому боту, который отправил сообщение, — поэтому «Разрешить» молча
+// не срабатывало. Теперь получатель — сам Worker (см. ensureTelegramWebhook).
+
+const TELEGRAM_WEBHOOK_PATH = '/telegram-webhook';
+// Кнопка «Открыть админ-панель» в /start и /admin (тот же адрес, что и в
+// telegram-serverless/handlers/message.js)
+const ADMIN_PANEL_URL = 'https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html';
+// Заявка живёт 5 минут на стороне страницы; с запасом на разницу часов
+const LOGIN_REQUEST_TTL_MS = 10 * 60 * 1000;
+const LOGIN_APPS = {
+  game: { emoji: '🎮', name: 'ИГРУ' },
+  admin: { emoji: '🛠', name: 'АДМИН-ПАНЕЛЬ' },
+};
+
+// Метка устройства попадает в сообщение бота — только короткий безопасный
+// текст (буквы любого языка, цифры, пробел и . _ ( ) , / -), не произвольная строка
+function safeDeviceLabel(value) {
+  const s = String(value || '');
+  return /^[\p{L}\p{N} ._(),\/-]{1,40}$/u.test(s) ? s : 'неизвестное устройство';
+}
+
+// app пишет кто угодно — берём только два известных значения (иначе 'constructor'
+// и прочие ключи прототипа дали бы мусор в тексте)
+function loginApp(req) {
+  const key = req && req.app;
+  return key === 'game' || key === 'admin' ? LOGIN_APPS[key] : null;
+}
+
+function loginRequestTitle(req) {
+  const app = loginApp(req);
+  return app ? `Вход в ${app.name}` : 'Вход в аккаунт';
+}
+
+function loginRequestText(req) {
+  const app = loginApp(req);
+  const head = app ? `${app.emoji} Запросили вход в ${app.name}` : '🔑 Запросили вход в твой аккаунт';
+  return `${head}\nУстройство: ${safeDeviceLabel(req && req.device)}\n\nРазрешить вход? Если это не ты — нажми «Отклонить».`;
+}
+
+function loginRequestKeyboard(requestId) {
+  return { inline_keyboard: [[{ text: '✅ Разрешить', callback_data: 'la:' + requestId }, { text: '❌ Отклонить', callback_data: 'ld:' + requestId }]] };
+}
+
+async function tgApi(env, method, payload, timeoutMs = 8000) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return await res.json().catch(() => ({ ok: false, description: 'ответ не JSON' }));
+  } catch (err) {
+    return { ok: false, description: String((err && err.message) || err) };
+  }
+}
+
+// Секрет вебхука выводится из BOT_TOKEN — новых секретов заводить не нужно.
+// Telegram присылает его в заголовке X-Telegram-Bot-Api-Secret-Token на каждый
+// запрос: без него /telegram-webhook не принимает ничего (иначе любой мог бы
+// слать «нажатия кнопок» от чужого имени).
+async function telegramWebhookSecret(env) {
+  return hmacSha256Hex(new TextEncoder().encode(String(env.BOT_TOKEN)), 'telegram-webhook-v1');
+}
+
+function constantTimeEqual(a, b) {
+  const x = String(a || '');
+  const y = String(b || '');
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+// Делает Worker получателем обновлений бота. Бот может иметь только один
+// вебхук: прежние получатели (функция на Vercel, long polling, Telegram
+// Serverless) отключаются — поэтому /start, /admin, /help обрабатываются тут же.
+// setWebhook идемпотентен, так что повторный вызов безвреден; в пределах одного
+// экземпляра Worker'а он делается не чаще раза в 30 минут.
+let webhookEnsured = { key: null, at: 0 };
+async function ensureTelegramWebhook(env, origin) {
+  const key = origin + '|' + env.BOT_TOKEN;
+  if (webhookEnsured.key === key && Date.now() - webhookEnsured.at < 30 * 60 * 1000) return true;
+  const data = await tgApi(env, 'setWebhook', {
+    url: origin + TELEGRAM_WEBHOOK_PATH,
+    secret_token: await telegramWebhookSecret(env),
+    allowed_updates: ['message', 'callback_query'],
+    max_connections: 10,
+  }, 5000);
+  if (!data.ok) {
+    console.error('setWebhook не удался:', data.description);
+    return false;
+  }
+  webhookEnsured = { key, at: Date.now() };
+  return true;
+}
+
+// Для /health: чей вебхук у бота (адрес целиком не отдаём — в чужом он может
+// содержать секрет, только хост)
+async function getWebhookSummary(env, origin) {
+  const data = await tgApi(env, 'getWebhookInfo', {}, 5000);
+  if (!data.ok || !data.result) return { ours: null, error: String(data.description || 'нет ответа').slice(0, 80) };
+  const info = data.result;
+  let host = null;
+  try { host = info.url ? new URL(info.url).host : null; } catch { host = null; }
+  return {
+    ours: info.url === origin + TELEGRAM_WEBHOOK_PATH,
+    host,
+    pending: info.pending_update_count || 0,
+    lastError: info.last_error_message ? String(info.last_error_message).slice(0, 120) : null,
+  };
+}
+
+async function notifyLoginRequest(env, telegramId, requestId, origin) {
   const reqUrl = `${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}/loginRequests/${encodeURIComponent(requestId)}.json`;
   const req = await (await fetch(reqUrl)).json();
   if (!req || req.status !== 'pending') throw new Error('заявка не найдена или уже обработана');
   if (Date.now() - (req.requestedAt || 0) > 5 * 60 * 1000) throw new Error('заявка устарела');
   if (req.notifiedAt) return { alreadyNotified: true };
   await fetch(reqUrl, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notifiedAt: Date.now() }) });
-  const res = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: telegramId,
-      // заявку (и её device) пишет кто угодно — подставляем только короткую
-      // метку из безопасных символов, а не произвольный текст от имени бота
-      text: 'Запрос на вход в твой аккаунт: ' + (/^[A-Za-z0-9 ._()\/-]{1,40}$/.test(String(req.device || '')) ? req.device : 'неизвестное устройство') + '. Если это не ты - отклони.',
-      reply_markup: { inline_keyboard: [[{ text: 'Разрешить', callback_data: 'la:' + requestId }, { text: 'Отклонить', callback_data: 'ld:' + requestId }]] },
-    }),
+  // получатель кнопок — этот Worker; без этого «Разрешить» ничего не сделает
+  await ensureTelegramWebhook(env, origin);
+  const data = await tgApi(env, 'sendMessage', {
+    chat_id: telegramId,
+    text: loginRequestText(req),
+    reply_markup: loginRequestKeyboard(requestId),
   });
-  const data = await res.json();
   // 403 = человек ни разу не запускал бота или заблокировал его — не ошибка
   // вызывающего, заявку всё равно можно подтвердить в игре/панели
   if (!data.ok) return { sent: false };
   return { sent: true };
+}
+
+// Нажатие «Разрешить/Отклонить». Кто нажал, знаем от Telegram (query.from.id —
+// запрос подписан секретом вебхука), поэтому путь берётся из него, а не из
+// callback_data: подтвердить можно только заявки на свой собственный аккаунт.
+async function handleLoginCallback(env, query) {
+  const answer = (text) => tgApi(env, 'answerCallbackQuery', { callback_query_id: query.id, text });
+  const m = /^(la|ld):([A-Za-z0-9_-]{1,128})$/.exec(String(query.data || ''));
+  const fromId = String((query.from && query.from.id) || '');
+  if (!m || !/^\d+$/.test(fromId)) { await answer(); return; }
+  const reqUrl = `${FIREBASE_DB_URL}/users/${fromId}/loginRequests/${m[2]}.json`;
+  let req;
+  try {
+    req = await (await fetch(reqUrl)).json();
+  } catch {
+    await answer('Не удалось связаться с базой, попробуй ещё раз.');
+    return;
+  }
+  const age = Date.now() - Number((req && req.requestedAt) || 0);
+  let resultText;
+  if (!req || req.status !== 'pending' || !(Math.abs(age) <= LOGIN_REQUEST_TTL_MS)) {
+    resultText = 'Запрос уже обработан или устарел.';
+    await answer(resultText);
+  } else {
+    const approved = m[1] === 'la';
+    const patch = await dbWrite(env, `/users/${fromId}/loginRequests/${m[2]}.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: approved ? 'approved' : 'denied' }),
+    });
+    if (!patch.ok) {
+      await answer('Не получилось записать ответ, попробуй ещё раз.');
+      return;
+    }
+    resultText = `${approved ? '✅' : '⛔'} ${loginRequestTitle(req)} ${approved ? 'разрешён' : 'отклонён'}.\nУстройство: ${safeDeviceLabel(req.device)}`;
+    await answer(approved ? 'Вход разрешён.' : 'Вход отклонён.');
+  }
+  if (query.message && query.message.chat && query.message.message_id) {
+    // editMessageText без reply_markup убирает кнопки
+    await tgApi(env, 'editMessageText', { chat_id: query.message.chat.id, message_id: query.message.message_id, text: resultText });
+  }
+}
+
+// Команды бота. Раньше их обслуживали функция на Vercel / long polling /
+// Telegram Serverless (api/telegram-webhook.js, bot/index.js,
+// telegram-serverless/handlers/message.js) — теперь тот же набор живёт тут,
+// потому что вебхук у бота один.
+async function handleBotMessage(env, message) {
+  if (!message || !message.chat || message.chat.type !== 'private' || typeof message.text !== 'string') return;
+  const chatId = message.chat.id;
+  const command = message.text.trim().split(/\s+/)[0].split('@')[0];
+  if (command === '/start' || command === '/admin') {
+    await tgApi(env, 'sendMessage', {
+      chat_id: chatId,
+      text: 'Открой панель управления БАТТЛ. Доступ проверяется по твоей роли в базе — если её ещё не выдали, страница сама покажет «доступ запрещён».',
+      reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
+    });
+  } else if (command === '/help') {
+    await tgApi(env, 'sendMessage', {
+      chat_id: chatId,
+      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».',
+    });
+  } else if (command === '/requests') {
+    const fromId = String((message.from && message.from.id) || '');
+    if (!/^\d+$/.test(fromId)) return;
+    const all = (await (await fetch(`${FIREBASE_DB_URL}/users/${fromId}/loginRequests.json`)).json()) || {};
+    const pending = Object.keys(all).filter((k) => /^[A-Za-z0-9_-]{1,128}$/.test(k) && all[k] && all[k].status === 'pending' && Math.abs(Date.now() - Number(all[k].requestedAt || 0)) <= 5 * 60 * 1000);
+    if (!pending.length) {
+      await tgApi(env, 'sendMessage', { chat_id: chatId, text: 'Нет ожидающих запросов на вход.' });
+      return;
+    }
+    for (const k of pending.slice(0, 10)) {
+      await tgApi(env, 'sendMessage', { chat_id: chatId, text: loginRequestText(all[k]), reply_markup: loginRequestKeyboard(k) });
+    }
+  }
+}
+
+async function handleTelegramUpdate(env, update) {
+  if (update && update.callback_query) {
+    try {
+      await handleLoginCallback(env, update.callback_query);
+    } catch (err) {
+      // сбой Google (токен сервисного аккаунта), сети и т.п.: человек не должен
+      // остаться с бесконечным «часиками» на кнопке и без объяснения
+      console.error('login callback:', err && err.message);
+      await tgApi(env, 'answerCallbackQuery', { callback_query_id: update.callback_query.id, text: 'Что-то пошло не так, попробуй ещё раз.' });
+    }
+  } else if (update && update.message) {
+    await handleBotMessage(env, update.message);
+  }
 }
 
 async function ghApi(path, token, options = {}) {
@@ -747,7 +946,10 @@ export default {
       // какой бот у Worker'а (публичное имя/id, не токен): botTokenValid —
       // принимает ли Telegram токен (null — не удалось спросить)
       const bot = botTokenConfigured ? await getBotInfo(env) : { valid: false };
-      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null, botError: bot.error || null });
+      // кто получает обновления бота (кнопки «Разрешить/Отклонить», команды):
+      // ours: true — этот Worker; host — куда указывает чужой вебхук
+      const telegramWebhook = botTokenConfigured && bot.valid ? await getWebhookSummary(env, url.origin) : null;
+      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null, botError: bot.error || null, telegramWebhook });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);
@@ -901,6 +1103,23 @@ export default {
       return jsonResponse({ ok: true });
     }
 
+    // Обновления от Telegram (нажатия кнопок, команды бота). Telegram шлёт POST
+    // с секретом в заголовке — без него запрос отклоняется. Всегда отвечаем 200
+    // после проверки секрета: на ошибку Telegram стал бы без конца повторять
+    // то же обновление.
+    if (url.pathname === TELEGRAM_WEBHOOK_PATH && request.method === 'POST') {
+      if (!constantTimeEqual(request.headers.get('X-Telegram-Bot-Api-Secret-Token'), await telegramWebhookSecret(env))) {
+        return new Response('unauthorized', { status: 401 });
+      }
+      if (Number(request.headers.get('Content-Length') || 0) > 64 * 1024) return new Response('too large', { status: 413 });
+      try {
+        await handleTelegramUpdate(env, await request.json());
+      } catch (err) {
+        console.error('telegram-webhook:', err && err.message);
+      }
+      return new Response('ok', { status: 200 });
+    }
+
     if (url.pathname === '/login-notify' && request.method === 'POST') {
       let body;
       try {
@@ -913,7 +1132,7 @@ export default {
         return jsonResponse({ error: 'нужны telegramId (число) и requestId' }, 400);
       }
       try {
-        const result = await notifyLoginRequest(env, String(telegramId), String(requestId));
+        const result = await notifyLoginRequest(env, String(telegramId), String(requestId), url.origin);
         return jsonResponse({ ok: true, ...result });
       } catch (err) {
         return jsonResponse({ error: err.message }, 400);

@@ -35,7 +35,7 @@ public class MainActivity extends Activity {
     private static final String RELEASE_BASE =
             "https://github.com/botsystemtioxsit/battle-admin-bot/releases/download/android-latest/";
     private static final String VERSION_JSON_URL = RELEASE_BASE + "version.json";
-    private static final String APK_URL = RELEASE_BASE + "app-debug.apk";
+    private static final String APK_URL = RELEASE_BASE + "battle-admin.apk";
 
     private WebView webView;
 

@@ -10,11 +10,32 @@ android {
         applicationId "com.tioxsit.battleadmin"
         minSdk 24
         targetSdk 34
-        versionCode 7
-        versionName "1.1.4"
+        versionCode 8
+        versionName "1.1.5"
+    }
+
+    signingConfigs {
+        // Постоянный ключ подписи. Файл ключа CI достаёт из секрета
+        // ANDROID_KEYSTORE_BASE64 (см. README → «Подпись APK»). Без секрета
+        // блок пустой, и сборка подписывается одноразовым отладочным ключом,
+        // как раньше.
+        stable {
+            def ksFile = System.getenv('ANDROID_KEYSTORE_FILE')
+            if (ksFile) {
+                storeFile file(ksFile)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            if (System.getenv('ANDROID_KEYSTORE_FILE')) {
+                signingConfig signingConfigs.stable
+            }
+        }
         release {
             minifyEnabled false
         }

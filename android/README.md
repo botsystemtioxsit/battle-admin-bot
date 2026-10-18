@@ -13,7 +13,7 @@
 
 Собирается через GitHub Actions (Android SDK + Gradle не нужны локально):
 вкладка **Actions** → **Build Android APK** → **Run workflow**. Готовый
-`app-debug.apk` публикуется как файл к GitHub Release этого репозитория.
+`battle-admin.apk` публикуется как файл к GitHub Release этого репозитория.
 
 Это debug-сборка (не для Google Play), подписанная постоянным ключом — см.
 «Подпись APK» ниже. Этого достаточно, чтобы установить APK на телефон
@@ -22,7 +22,7 @@
 
 Релиз всегда публикуется под одним и тем же фиксированным тегом
 `android-latest` — прямая ссылка на APK не меняется между сборками:
-`https://github.com/botsystemtioxsit/battle-admin-bot/releases/download/android-latest/app-debug.apk`
+`https://github.com/botsystemtioxsit/battle-admin-bot/releases/download/android-latest/battle-admin.apk`
 
 ## Проверка обновлений
 

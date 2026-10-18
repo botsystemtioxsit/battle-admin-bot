@@ -65,6 +65,12 @@ jobs:
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$APK" | grep -E "certificate (DN|SHA-256)"
           echo "Подпись: $SIGNING"
 
+      # Файл в релизе называется по приложению, а не app-debug.apk: у игры и
+      # панели иначе одно и то же имя, и в «Загрузках» телефона их не отличить
+      # (легко поставить старый файл вместо нового).
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/battle-admin.apk
+
       - name: Read version
         id: ver
         run: |
@@ -90,8 +96,16 @@ jobs:
           tag_name: android-latest
           name: БАТТЛ Админ (Android) — последняя сборка
           files: |
-            android/app/build/outputs/apk/debug/*.apk
+            android/battle-admin.apk
             android/version.json
           body: |
             Версия ${{ steps.ver.outputs.name }}, сборка ${{ github.run_number }}, из коммита ${{ github.sha }}.
             Этот релиз всегда переиспользуется под фиксированным тегом `android-latest` — ссылка на него не меняется между сборками.
+
+      # Старый файл app-debug.apk в релизе больше не обновляется — убираем его,
+      # чтобы по нему не скачали устаревшую сборку.
+      - name: Remove the old app-debug.apk asset
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete-asset android-latest app-debug.apk --yes --repo "$GITHUB_REPOSITORY" || true

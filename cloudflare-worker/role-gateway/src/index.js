@@ -261,10 +261,21 @@ async function getRole(userId) {
   return res.json();
 }
 
-async function getUser(telegramId) {
-  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}.json`);
+// Одно поле игрока. Запись users/<id> целиком тяжёлая (в ней аватарка
+// base64, друзья, статистика), а большинству проверок нужен один ключ
+// (role, playerId) — читаем только его.
+async function getUserField(telegramId, field) {
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}/${field}.json`);
   if (!res.ok) return null;
   return res.json();
+}
+
+// Существует ли users/<id>. ?shallow=true отдаёт только имена полей, без
+// значений, — для проверки наличия записи этого хватает.
+async function userExists(telegramId) {
+  const res = await fetch(`${FIREBASE_DB_URL}/users/${encodeURIComponent(telegramId)}.json?shallow=true`);
+  if (!res.ok) return false;
+  return (await res.json()) != null;
 }
 
 // Кто для Worker'а superadmin. Если в конфиге задан OWNER_IDS (список
@@ -292,8 +303,8 @@ function isStaff(env, userId, role) {
 // через /restore-code (файлы берутся из запроса!) подменял код игры и панели
 // токеном Worker'а. В панели такого права у admin нет (его нет в
 // PERMISSION_DEFS), в базе его не было ни у кого.
-function hasBackupsAccess(env, userId, user) {
-  return isSuperadmin(env, userId, user && user.role);
+function hasBackupsAccess(env, userId, role) {
+  return isSuperadmin(env, userId, role);
 }
 
 // playerId (вида "PLR-XXXXXX") — внутренний игровой id, отдельный от
@@ -403,8 +414,15 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
   const loserId = winnerSide === 'host' ? battle.guestId : battle.hostId;
   if (!winnerId || !loserId) throw new Error('В бою не хватает участника');
 
-  const winnerRec = await getUserByPlayerId(winnerId);
-  const loserRec = await getUserByPlayerId(loserId);
+  // Четыре чтения друг от друга не зависят (каждое — отдельный круг до базы),
+  // поэтому идут одновременно: профили победителя, проигравшего и судьи плюс
+  // лайки зрителей.
+  const [winnerRec, loserRec, refRec, likesRes] = await Promise.all([
+    getUserByPlayerId(winnerId),
+    getUserByPlayerId(loserId),
+    getUserByPlayerId(refereePlayerId),
+    fetch(`${FIREBASE_DB_URL}/battles/${encodeURIComponent(matchId)}/audienceLikes.json`),
+  ]);
   if (!winnerRec || !loserRec) throw new Error('Не найден профиль игрока');
 
   const pointsAwarded = {};
@@ -421,7 +439,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     pointsAwarded[loserId] = -delta;
   }
 
-  const likesRes = await fetch(`${FIREBASE_DB_URL}/battles/${encodeURIComponent(matchId)}/audienceLikes.json`);
   const likes = (await likesRes.json().catch(() => null)) || {};
   const audienceVotes = {};
   if (battle.hostId) audienceVotes[battle.hostId] = likes.host || 0;
@@ -459,7 +476,6 @@ async function finishMatch(env, refereePlayerId, matchId, winnerSide) {
     update[`users/${rec.key}/stats/audienceLikes`] = Number(stats.audienceLikes || 0) + likeDelta;
   }
 
-  const refRec = await getUserByPlayerId(refereePlayerId);
   if (refRec) {
     const u = refRec.user;
     update[`users/${refRec.key}/stats/refereeBattles`] = Number(u.stats?.refereeBattles || 0) + 1;
@@ -850,15 +866,16 @@ export default {
         return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
-      const requesterRole = await getRole(verified.userId);
+      // роль запрашивающего и наличие целевой записи не зависят друг от друга —
+      // читаем параллельно (каждое чтение — отдельный круг до базы)
+      const [requesterRole, targetExists] = await Promise.all([getRole(verified.userId), userExists(uid)]);
       const isSelf = verified.userId === uid;
       if (!(isSuperadmin(env, verified.userId, requesterRole) || (isSelf && STAFF_ROLES.has(requesterRole)))) {
         return jsonResponse({ error: 'Одобрять устройство может сам владелец аккаунта (модератор/админ/супердоступ) либо superadmin' }, 403);
       }
 
       // не плодим "пустые" users/<id> с одной лишь trustedDevices внутри
-      const target = await getUser(uid);
-      if (!target) {
+      if (!targetExists) {
         return jsonResponse({ error: 'пользователь не найден' }, 404);
       }
 
@@ -924,13 +941,13 @@ export default {
         return jsonResponse({ error: 'Telegram initData не прошла проверку: ' + verified.reason }, 401);
       }
 
-      const requester = await getUser(verified.userId);
-      if (!requester || !requester.playerId) {
+      const requesterPlayerId = await getUserField(verified.userId, 'playerId');
+      if (!requesterPlayerId) {
         return jsonResponse({ error: 'Профиль запрашивающего не найден' }, 403);
       }
 
       try {
-        const result = await finishMatch(env, requester.playerId, String(matchId), winnerSide);
+        const result = await finishMatch(env, requesterPlayerId, String(matchId), winnerSide);
         return jsonResponse({ ok: true, ...result });
       } catch (err) {
         return jsonResponse({ error: err.message }, 400);
@@ -982,8 +999,8 @@ export default {
         return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
-      const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(env, verified.userId, requester)) {
+      const requesterRole = await getRole(verified.userId);
+      if (!hasBackupsAccess(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1014,8 +1031,8 @@ export default {
         return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
-      const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(env, verified.userId, requester)) {
+      const requesterRole = await getRole(verified.userId);
+      if (!hasBackupsAccess(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1041,8 +1058,8 @@ export default {
         return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
-      const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(env, verified.userId, requester)) {
+      const requesterRole = await getRole(verified.userId);
+      if (!hasBackupsAccess(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1082,8 +1099,8 @@ export default {
         return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
-      const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(env, verified.userId, requester)) {
+      const requesterRole = await getRole(verified.userId);
+      if (!hasBackupsAccess(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 
@@ -1128,8 +1145,8 @@ export default {
         return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
 
-      const requester = await getUser(verified.userId);
-      if (!hasBackupsAccess(env, verified.userId, requester)) {
+      const requesterRole = await getRole(verified.userId);
+      if (!hasBackupsAccess(env, verified.userId, requesterRole)) {
         return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
       }
 

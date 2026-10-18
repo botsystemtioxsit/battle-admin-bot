@@ -72,7 +72,30 @@
   .term-prompt{ color:var(--gold); font:700 13px/1 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; white-space:nowrap; }
   /* 16px — иначе iOS/Telegram приближают страницу при фокусе на поле */
   #term-input{ flex:1; min-width:0; background:transparent; border:none; outline:none; color:var(--text); font:16px/1.4 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
-  .term-send{ background:var(--gold); color:#fff; border:none; border-radius:var(--radius); width:34px; height:30px; font-size:16px; font-weight:700; cursor:pointer; }
+  .term-send{ background:var(--gold); color:#fff; border:none; border-radius:var(--radius); width:34px; height:30px; font-size:16px; font-weight:700; cursor:pointer; align-self:flex-end; }
+  #term-input{ resize:none; overflow-y:auto; max-height:140px; }
+  .term-input-row{ align-items:flex-end; }
+  .term-prompt{ padding-bottom:6px; }
+  .term-chip.active{ color:var(--text); border-color:var(--gold); background:var(--panel); }
+
+  /* "Эфир" — прямая трансляция */
+  .live-head{ display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+  .live-badge{ display:inline-flex; align-items:center; gap:7px; font:700 11.5px/1 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; letter-spacing:0.5px; color:var(--live); }
+  .live-pulse{ width:8px; height:8px; border-radius:50%; background:var(--live); animation:livePulse 1.4s ease-in-out infinite; }
+  @keyframes livePulse{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:.35; transform:scale(.7); } }
+  .live-online{ font:12px/1 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--muted); }
+  .live-spacer{ flex:1; }
+  .live-stage{ position:relative; }
+  #live-out{ height:min(62vh, 560px); overflow-y:auto; padding:10px 12px; font:12.5px/1.55 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--text); white-space:pre-wrap; word-break:break-word; -webkit-overflow-scrolling:touch; }
+  .live-line{ animation:liveIn .25s ease-out; }
+  @keyframes liveIn{ from{ background:rgba(76,130,247,.22); } to{ background:transparent; } }
+  .live-line.term-warn{ color:#E8B04B; } .live-line.term-err{ color:var(--live); } .live-line.term-ok{ color:#3FB67E; } .live-line.term-dim{ color:var(--muted); }
+  #live-out[data-filter="actions"] .live-line:not([data-kind="actions"]),
+  #live-out[data-filter="requests"] .live-line:not([data-kind="requests"]),
+  #live-out[data-filter="errors"] .live-line:not([data-kind="errors"]),
+  #live-out[data-filter="players"] .live-line:not([data-kind="players"]),
+  #live-out[data-filter="matches"] .live-line:not([data-kind="matches"]){ display:none; }
+  #live-jump{ position:absolute; left:50%; bottom:10px; transform:translateX(-50%); background:var(--gold); color:#fff; border:none; border-radius:100px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,.5); }
 
   .screen{ display:none; }
   .screen.active{ display:block; }
@@ -297,7 +320,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Терминал: вкладка с командной строкой (find, ban, restrict, unban, requests/approve/deny, log, online, maintenance, lockdown, feed) — те же действия, что кнопки, с вопросом y/N и записью в Журнал. Скорость: на старте панель больше не скачивает всю таблицу игроков (число игроков и очистка гостей — отдельными лёгкими запросами), профиль/аварийный режим/доверие устройства читаются параллельно, список бэкапов грузится только на своей вкладке, JSZip — по требованию. Заявки на вход и на устройства теперь живые: появляются сразу, на вкладке красная цифра. Заявки не светятся красным, если страницу просителя закрыли (отсечка 10 минут). «Администрация», никнеймы на проверке и поиск игрока по коду используют индексы базы (database.rules.json); «Аккаунт» читает только email, «Статистика» кэшируется на 90 с.">v5.13</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Эфир и Терминал: «Эфир» — прямая трансляция событий (действия персонала, заявки, ошибки клиентов, новые игроки, бои, режимы, онлайн), только чтение; «Терминал» — теперь только для Супердоступа, принимает сразу несколько строк (покажет список и спросит один раз). Терминал: вкладка с командной строкой (find, ban, restrict, unban, requests/approve/deny, log, online, maintenance, lockdown, feed) — те же действия, что кнопки, с вопросом y/N и записью в Журнал. Скорость: на старте панель больше не скачивает всю таблицу игроков (число игроков и очистка гостей — отдельными лёгкими запросами), профиль/аварийный режим/доверие устройства читаются параллельно, список бэкапов грузится только на своей вкладке, JSZip — по требованию. Заявки на вход и на устройства теперь живые: появляются сразу, на вкладке красная цифра. Заявки не светятся красным, если страницу просителя закрыли (отсечка 10 минут). «Администрация», никнеймы на проверке и поиск игрока по коду используют индексы базы (database.rules.json); «Аккаунт» читает только email, «Статистика» кэшируется на 90 с.">v5.14</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -447,9 +470,11 @@
            кого вообще есть доступ в панель, поэтому вынесено в отдельную
            вкладку без ограничения по роли. -->
       <div class="tab" data-tab="apps">Приложения</div>
-      <!-- командная строка внутри панели (см. "Терминал" в конце скрипта): те же команды, что у
-           cli/battle-admin.js, плюс заявки и живая лента. Видна всем, у кого есть доступ к панели;
-           каждая команда сама проверяет своё право. -->
+      <!-- два вида терминала (код в конце скрипта):
+           "Эфир" — прямая трансляция событий, только чтение, видна всем, у кого есть доступ к панели;
+           "Терминал" — командная строка (как cli/battle-admin.js + заявки), только Супердоступ
+           (скрывается в applyRoleUI, а termOpen/termSubmit перепроверяют роль сами). -->
+      <div class="tab" data-tab="live" id="tab-live">Эфир</div>
       <div class="tab" data-tab="terminal" id="tab-terminal">Терминал</div>
       <!-- ===== "Супердоступ" объединяет четыре бывшие отдельные вкладки —
            "Администрация" (права + запросы на устройства), "Токены
@@ -970,6 +995,30 @@
          Telegram Web App (обычный <a target="_blank"> там либо не работает,
          либо открывает не то), иначе обычным window.open — см. openAppLink()
          в JS. -->
+    <div class="subview" data-panel="live" id="panel-live">
+      <div class="term-wrap">
+        <div class="live-head">
+          <span class="live-badge"><span class="live-pulse"></span>ПРЯМОЙ ЭФИР</span>
+          <span class="live-online" id="live-online">онлайн: —</span>
+          <span class="live-spacer"></span>
+          <button type="button" class="term-chip" id="live-pause">⏸ пауза</button>
+          <button type="button" class="term-chip" id="live-clear">очистить</button>
+        </div>
+        <div class="term-chips">
+          <button type="button" class="term-chip active" data-live-filter="all">всё</button>
+          <button type="button" class="term-chip" data-live-filter="actions">действия</button>
+          <button type="button" class="term-chip" data-live-filter="requests">заявки</button>
+          <button type="button" class="term-chip" data-live-filter="errors">ошибки</button>
+          <button type="button" class="term-chip" data-live-filter="players">игроки</button>
+          <button type="button" class="term-chip" data-live-filter="matches">бои</button>
+        </div>
+        <div class="live-stage">
+          <div id="live-out" data-filter="all" role="log"></div>
+          <button type="button" id="live-jump" style="display:none;"></button>
+        </div>
+      </div>
+    </div>
+
     <div class="subview" data-panel="terminal" id="panel-terminal">
       <div class="term-wrap">
         <div class="term-chips">
@@ -982,7 +1031,7 @@
         <div id="term-out" role="log" aria-live="polite"></div>
         <form class="term-input-row" id="term-form" autocomplete="off">
           <span class="term-prompt">battle&gt;</span>
-          <input id="term-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="help">
+          <textarea id="term-input" rows="1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="команда или несколько строк сразу"></textarea>
           <button type="submit" class="term-send" aria-label="Выполнить">↵</button>
         </form>
       </div>
@@ -1750,6 +1799,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
           applyRoleUI();
           showScreen('screen-app');
           startLiveRequestWatchers();
+          startLiveBroadcast();
           loadUserList(false);
           loadBadgeDefs();
           renderAccountTab(user);
@@ -1857,6 +1907,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
       applyRoleUI();
       showScreen('screen-app');
+      startLiveBroadcast();
       loadUserList(false);
       loadBadgeDefs();
     }).catch((err) => {
@@ -2175,6 +2226,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       }
       if (tab.dataset.tab !== 'terminal') termLeave();
       if (tab.dataset.tab === 'terminal') termOpen();
+      if (tab.dataset.tab !== 'live') liveLeave();
+      if (tab.dataset.tab === 'live') liveOpen();
       if (tab.dataset.tab === 'logs') showLogsSection('actions');
       if (tab.dataset.tab === 'event') loadEventsAdminList();
       if (tab.dataset.tab === 'beta') showBetaSection(canManageBeta() ? 'beta' : 'clans');
@@ -2763,6 +2816,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // сессии по токену доступа, там нет ни email, ни реального аккаунта.
     const accountTab = document.querySelector('.tab[data-tab="account"]');
     if (accountTab) accountTab.style.display = myIsAccessToken ? 'none' : '';
+    // "Терминал" (командная строка) — только Супердоступ; "Эфир" (чтение) видят все
+    const terminalTab = document.querySelector('.tab[data-tab="terminal"]');
+    if (terminalTab) terminalTab.style.display = canManageRoles() ? '' : 'none';
     // "База данных" внутри секции "Система" (см. #panel-super) — сырой
     // доступ буквально ко всей базе, включая emailLogins с почтами игроков,
     // только superadmin, без промежуточных прав.
@@ -2903,7 +2959,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         renderAccountLoginRequests();
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
-          newKeys.forEach((key) => termNote('🔐 заявка на вход: ' + termClean(latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — requests, approve/deny'));
+          newKeys.forEach((key) => liveEmit('requests', '🔐 заявка на вход: ' + termClean(latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — подтвердить: вкладка «Аккаунт»'));
         }
         firstSnapshot = false;
       }, (err) => console.error('Заявки на вход', err));
@@ -2925,7 +2981,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
           latestPendingDeviceRequests.filter(([key]) => newKeys.includes(key))
-            .forEach(([, r]) => termNote('📱 запрос устройства: ' + termClean(r.device || 'неизвестное устройство') + ' — ' + termClean(r.firstName || 'Игрок', 40) + ' — requests, approve/deny'));
+            .forEach(([, r]) => liveEmit('requests', '📱 запрос устройства: ' + termClean(r.device || 'неизвестное устройство') + ' — ' + termClean(r.firstName || 'Игрок', 40) + ' — подтвердить: «Супердоступ» → «Администрация»'));
         }
         firstSnapshot = false;
       }, (err) => console.error('Запросы на устройства', err));
@@ -4313,24 +4369,26 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     adminsListCb = null;
   }
 
-  // Есть ли в базе индекс users по role (database.rules.json → users/.indexOn).
-  // С индексом список персонала берётся запросом "role от admin до
-  // superadmin" — сервер отдаёт только сотрудников. Без индекса такой запрос
-  // тянул бы ВСЕХ игроков, поэтому, если индекса ещё нет, остаёмся на старом
-  // способе. Проба — один REST-запрос по значению, которому не соответствует
-  // ни один игрок: без индекса база отвечает ошибкой "Index not defined", с
-  // индексом — 200 и пустым телом (профиль при этом не скачивается).
-  // Запоминаем ответ базы на сессию; сбой сети не запоминаем — в следующий раз
-  // спросим снова (а пока работает запасной способ).
-  let usersRoleIndexProbe = null;
-  function usersRoleIndexExists() {
-    if (!usersRoleIndexProbe) {
-      usersRoleIndexProbe = fetch(firebaseConfig.databaseURL + '/users.json?orderBy=%22role%22&equalTo=%22__index_probe__%22&limitToFirst=1')
+  // Есть ли в базе индекс (database.rules.json → .indexOn). С индексом запрос
+  // "по полю" отдаёт только нужное; без него он тянул бы ВСЮ ветку, поэтому,
+  // если индекса ещё нет, остаёмся на запасном способе. Проба — один REST-запрос
+  // по значению, которому не соответствует ни один игрок: без индекса база
+  // отвечает ошибкой "Index not defined", с индексом — 200 и пустым телом
+  // (записи при этом не скачиваются). Ответ базы запоминаем на сессию; сбой
+  // сети не запоминаем — в следующий раз спросим снова.
+  const rtdbIndexProbes = {};
+  function rtdbIndexExists(path, child) {
+    const key = path + '|' + child;
+    if (!rtdbIndexProbes[key]) {
+      rtdbIndexProbes[key] = fetch(firebaseConfig.databaseURL + '/' + path + '.json?orderBy=' + encodeURIComponent('"' + child + '"') + '&equalTo=%22__index_probe__%22&limitToFirst=1')
         .then((r) => r.ok)
-        .catch(() => { usersRoleIndexProbe = null; return false; });
+        .catch(() => { delete rtdbIndexProbes[key]; return false; });
     }
-    return usersRoleIndexProbe;
+    return rtdbIndexProbes[key];
   }
+  // "Администрация" берёт персонал запросом "role от admin до superadmin"
+  function usersRoleIndexExists() { return rtdbIndexExists('users', 'role'); }
+
 
   // ===== "Запросы на устройства" — тот же экран "Администрация", над
   // таблицей. См. #screen-device-trust: глобальный список (не привязан к
@@ -4420,6 +4478,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       });
     });
   }
+
 
   function loadAdminsTab() {
     if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
@@ -5373,11 +5432,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   let termPending = null;       // { run } — ждём ответ y/N на вопрос терминала
   let termBusy = false;
   let termBannerShown = false;
-  let termUnread = 0;           // события, пришедшие, пока вкладка закрыта
   let termRequestIndex = [];    // пронумерованные заявки из последнего `requests`
-  let termFeedRef = null;
-  let termFeedCb = null;
-  let termFeedEnabled = true;
+  let termAutoConfirm = false;  // внутри подтверждённого пакета вопросы y/N не задаются
   let termActive = false;
 
   function termStamp() {
@@ -5408,13 +5464,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     while (excess-- > 0) out.removeChild(out.firstChild);
     out.scrollTop = out.scrollHeight;
   }
-  // событие "само пришло" — печатаем со временем; если вкладка закрыта,
-  // ставим на ней цифру непрочитанного
-  function termNote(text, kind) {
-    termPrint('[' + termStamp() + '] ' + text, kind || 'warn');
-    if (!termActive) { termUnread++; setTabDot('terminal', termUnread); }
-  }
-
   function termAgo(ts) {
     const sec = Math.max(0, Math.round((Date.now() - Number(ts || 0)) / 1000));
     if (!ts || sec < 45) return 'только что';
@@ -5480,7 +5529,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       throw new Error('право «' + needPermission + '» отозвано');
     }
   }
+  // Вопрос y/N. Внутри пакета, который владелец уже подтвердил целиком
+  // (см. termPlanBatch), вопросы не задаются: действие выполняется сразу, а
+  // вопрос печатается для следа. Возвращает промис выполнения (или undefined,
+  // если ждём ответа) — вызывающие делают `await termAsk(...)`.
   function termAsk(question, run) {
+    if (termAutoConfirm) {
+      termPrint(question + ' → да (пакет подтверждён)', 'warn');
+      return run();
+    }
     termPending = { run };
     termPrint(question + ' [y/N]', 'warn');
   }
@@ -5502,7 +5559,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!found) throw new Error('игрок не найден: ' + args[0]);
     if (found.key === myTelegramId) throw new Error('себя банить нельзя');
     termPrintUser(found.key, found.user);
-    termAsk('Забанить этого игрока навсегда?' + (reason ? ' (' + reason + ')' : ''), async () => {
+    await termAsk('Забанить этого игрока навсегда?' + (reason ? ' (' + reason + ')' : ''), async () => {
       await setUserStatus(found.key, 'banned', null);
       logAction('ban_forever', found.key, found.user.firstName || '—', found.user.playerId || '—', 'Забанен навсегда (Терминал)' + (reason ? ': ' + reason : ''));
       termPrint('Забанен: ' + termClean(found.user.firstName || '—') + ' (' + found.key + ')', 'ok');
@@ -5517,7 +5574,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!found) throw new Error('игрок не найден: ' + args[0]);
     if (found.key === myTelegramId) throw new Error('себя ограничивать нельзя');
     termPrintUser(found.key, found.user);
-    termAsk('Ограничить на ' + hours + ' ч.?' + (reason ? ' (' + reason + ')' : ''), async () => {
+    await termAsk('Ограничить на ' + hours + ' ч.?' + (reason ? ' (' + reason + ')' : ''), async () => {
       await setUserStatus(found.key, 'restricted', Date.now() + hours * 3600000);
       logAction('ban_temp', found.key, found.user.firstName || '—', found.user.playerId || '—', 'Ограничение на ' + hours + ' ч. (Терминал)' + (reason ? ': ' + reason : ''));
       termPrint('Ограничен на ' + hours + ' ч.: ' + termClean(found.user.firstName || '—') + ' (' + found.key + ')', 'ok');
@@ -5536,7 +5593,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const on = termOnOff(args[0]);
     const message = termClean(args.slice(1).join(' '), 300);
     await termRequireLiveRole(['superadmin']);
-    termAsk(on
+    await termAsk(on
       ? 'Включить АВАРИЙНЫЙ РЕЖИМ? Сайт и панель закроются для ВСЕХ, кроме Супердоступа, и остановятся автобэкапы.'
       : 'Выключить аварийный режим, вернуть доступ всем и возобновить автобэкапы?', async () => {
       await termRequireLiveRole(['superadmin']);
@@ -5568,7 +5625,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       }
       termPrint(on ? 'Режим обслуживания: включён' : 'Режим обслуживания: выключен', on ? 'warn' : 'ok');
     };
-    if (on) termAsk('Включить режим обслуживания? Обычные игроки не смогут пользоваться сайтом, пока его не выключишь.', apply);
+    if (on) await termAsk('Включить режим обслуживания? Обычные игроки не смогут пользоваться сайтом, пока его не выключишь.', apply);
     else await apply();
   }
 
@@ -5588,9 +5645,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     entries.forEach((e) => termPrint(termLogLine(e), 'dim'));
   }
   function termLogLine(e) {
+    return termFmtDate(Number(e.timestamp)) + ' · ' + termLogBody(e);
+  }
+  function termLogBody(e) {
     const label = Object.prototype.hasOwnProperty.call(ACTION_LABELS, e.actionType) ? ACTION_LABELS[e.actionType] : termClean(e.actionType || '—', 40);
     const target = e.targetName && e.targetName !== '—' ? ' → ' + termClean(e.targetName, 40) : '';
-    return termFmtDate(Number(e.timestamp)) + ' · ' + label + ' · ' + termClean(e.actorName || '—', 40) + target + (e.details ? ' · ' + termClean(e.details) : '');
+    return label + ' · ' + termClean(e.actorName || '—', 40) + target + (e.details ? ' · ' + termClean(e.details) : '');
   }
 
   const TERM_REQUESTS_MAX = 30;
@@ -5630,7 +5690,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (item.kind === 'login') {
       const r = latestLoginRequests[item.key];
       if (!r || r.status !== 'pending') throw new Error('заявка уже обработана');
-      termAsk('Разрешить вход с устройства «' + termClean(r.device || 'неизвестное устройство') + '»?', async () => {
+      await termAsk('Разрешить вход с устройства «' + termClean(r.device || 'неизвестное устройство') + '»?', async () => {
         const live = latestLoginRequests[item.key];
         if (!live || live.status !== 'pending') throw new Error('заявка уже обработана');
         await db.ref('users/' + myTelegramId + '/loginRequests/' + item.key).update({ status: 'approved' });
@@ -5644,7 +5704,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const durKey = (args[1] || 'forever').toLowerCase();
     if (!Object.prototype.hasOwnProperty.call(TERM_DURATIONS, durKey)) throw new Error('срок: 24h, 7d, 30d или forever');
     const r = entry[1];
-    termAsk('Подтвердить устройство «' + termClean(r.device || 'неизвестное устройство') + '» аккаунта ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || r.uid || '—', 40) + ') — ' + termDurationLabel(durKey) + '?', async () => {
+    await termAsk('Подтвердить устройство «' + termClean(r.device || 'неизвестное устройство') + '» аккаунта ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || r.uid || '—', 40) + ') — ' + termDurationLabel(durKey) + '?', async () => {
       // одобряем ровно ту заявку, которую показали в вопросе: если за это время
       // её содержимое (аккаунт, ключ устройства) кто-то подменил — отказ
       await approveDeviceTrustRequest(item.key, TERM_DURATIONS[durKey], TERM_DURATION_LABELS[durKey], { uid: item.uid, deviceKey: item.deviceKey });
@@ -5665,12 +5725,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       await db.ref('deviceTrustRequests/' + item.key).update({ status: 'denied' });
     }
     termPrint('Отклонено.', 'ok');
-  }
-
-  function termCmdFeed(args) {
-    termFeedEnabled = termOnOff(args[0]);
-    if (termFeedEnabled) termAttachFeed(); else termDetachFeed();
-    termPrint('Живая лента журнала: ' + (termFeedEnabled ? 'включена' : 'выключена') + '. Заявки приходят всегда.', 'ok');
   }
 
   function termCmdWhoami() {
@@ -5695,7 +5749,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     ['online',      { usage: 'online',                                  desc: 'сколько игроков онлайн',                           allowed: () => true,                                   run: termCmdOnline }],
     ['maintenance', { usage: 'maintenance on|off [сообщение]',          desc: 'режим обслуживания',                               allowed: () => canManageDanger() || myRole === 'superadmin', run: termCmdMaintenance }],
     ['lockdown',    { usage: 'lockdown on|off [сообщение]',             desc: 'аварийный режим (только Супердоступ)',             allowed: () => myRole === 'superadmin',                run: termCmdLockdown }],
-    ['feed',        { usage: 'feed on|off',                             desc: 'живая лента журнала на этой вкладке',              allowed: () => true,                                   run: termCmdFeed }],
     ['whoami',      { usage: 'whoami',                                  desc: 'кто я и что мне можно',                            allowed: () => true,                                   run: termCmdWhoami }],
     ['clear',       { usage: 'clear',                                   desc: 'очистить экран',                                   allowed: () => true,                                   run: () => { document.getElementById('term-out').textContent = ''; } }],
   ]);
@@ -5709,95 +5762,139 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       termPrint('  ' + def.usage);
       termPrint('      ' + def.desc, 'dim');
     });
-    termPrint('↑/↓ — прошлые команды · Tab — дописать · опасное спросит y/N', 'dim');
+    termPrint('↑/↓ — прошлые команды · Tab — дописать · Shift+Enter — новая строка · несколько строк сразу = пакет (покажу список, спрошу один раз) · опасное спросит y/N', 'dim');
   }
 
-  async function termRun(rawLine) {
-    const line = rawLine.trim();
-    if (!line) return;
-    termPrint('battle> ' + termClean(line, 500), 'cmd');
+  const TERM_TIMEOUT_MS = 30000;
+
+  // ---- пакеты: несколько команд, вставленных разом ----
+  // Вставили блок строк (например, из ответа Claude) — терминал не выполняет
+  // их вслепую: сначала показывает список и проверяет каждую строку (команда
+  // известна и разрешена), потом ОДИН раз спрашивает y/N на весь пакет. После
+  // подтверждения строки идут по очереди без отдельных вопросов; первая же
+  // ошибка останавливает пакет. Пустые строки и строки с # пропускаются.
+  const TERM_BATCH_MAX = 50;
+  const TERM_CHANGING = new Set(['ban', 'restrict', 'unban', 'lockdown', 'maintenance', 'approve', 'deny']);
+
+  function termWithTimeout(promise, ms) {
+    let timer = null;
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('команда не ответила за 30 секунд — проверь связь и повтори')), ms || TERM_TIMEOUT_MS); }),
+    ]).finally(() => clearTimeout(timer));
+  }
+
+  async function termExecLine(line) {
+    const tokens = termTokenize(line);
+    const cmd = (tokens.shift() || '').toLowerCase();
+    const def = TERM_COMMANDS.get(cmd);
+    if (!def) throw new Error('неизвестная команда: ' + termClean(cmd, 30));
+    if (!def.allowed()) throw new Error('нет прав на команду ' + cmd);
+    await def.run(tokens);
+  }
+
+  function termPlanBatch(lines) {
+    if (lines.length > TERM_BATCH_MAX) {
+      termPrint('Слишком длинный пакет: ' + lines.length + ' строк, за раз можно не больше ' + TERM_BATCH_MAX + '. Ничего не выполнено.', 'err');
+      return;
+    }
+    const problems = [];
+    lines.forEach((line, i) => {
+      const name = (termTokenize(line)[0] || '').toLowerCase();
+      const def = TERM_COMMANDS.get(name);
+      if (!def) problems.push('  строка ' + (i + 1) + ': неизвестная команда «' + termClean(name, 30) + '»');
+      else if (!def.allowed()) problems.push('  строка ' + (i + 1) + ': нет прав на «' + name + '»');
+    });
+    if (problems.length) {
+      termPrint('Пакет не принят:\n' + problems.join('\n') + '\nНичего не выполнено.', 'err');
+      return;
+    }
+    termPrint('Пакет из ' + lines.length + ' команд:\n' + lines.map((line, i) => ' ' + (i + 1) + ') ' + termClean(line, 160)).join('\n'));
+    const changing = [...new Set(lines.map((line) => (termTokenize(line)[0] || '').toLowerCase()).filter((name) => TERM_CHANGING.has(name)))];
+    if (changing.length) {
+      termPrint('⚠ В пакете есть изменяющие команды (' + changing.join(', ') + '). Внутри пакета они НЕ переспрашиваются — проверь список выше.', 'warn');
+    }
+    termPending = { batch: true, run: () => termExecBatch(lines) };
+    termPrint('Выполнить все ' + lines.length + ' по очереди? [y/N]', 'warn');
+  }
+
+  async function termExecBatch(lines) {
+    termAutoConfirm = true;
+    try {
+      for (let i = 0; i < lines.length; i++) {
+        termPrint('▶ ' + (i + 1) + '/' + lines.length + ': ' + termClean(lines[i], 160), 'cmd');
+        try {
+          await termWithTimeout(termExecLine(lines[i]));
+        } catch (err) {
+          termPrint('Ошибка в строке ' + (i + 1) + ': ' + termClean(err && err.message ? err.message : err, 300) + '\nПакет остановлен: выполнено ' + i + ' из ' + lines.length + '.', 'err');
+          return;
+        }
+      }
+      termPrint('Пакет выполнен: ' + lines.length + ' из ' + lines.length + '.', 'ok');
+    } finally {
+      termAutoConfirm = false;
+    }
+  }
+
+  async function termRun(rawText) {
+    const lines = String(rawText).split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    if (!lines.length) return;
     if (termPending) {
+      if (lines.length > 1) { termPrint('Сначала ответь на вопрос: y или n.', 'warn'); return; }
+      termPrint('battle> ' + termClean(lines[0], 500), 'cmd');
       const pending = termPending;
       termPending = null;
-      if (/^(y|yes|д|да)$/i.test(line)) await pending.run();
+      if (/^(y|yes|д|да)$/i.test(lines[0])) await pending.run();
       else termPrint('Отменено.', 'dim');
       return;
     }
+    if (lines.length > 1) {
+      termPrint('battle> (вставлено строк: ' + lines.length + ')', 'cmd');
+      termPlanBatch(lines);
+      return;
+    }
+    const line = lines[0];
+    termPrint('battle> ' + termClean(line, 500), 'cmd');
     termHistory.push(line);
     if (termHistory.length > TERM_HISTORY_MAX) termHistory.shift();
     termHistoryPos = termHistory.length;
     const tokens = termTokenize(line);
     const cmd = (tokens.shift() || '').toLowerCase();
     const def = TERM_COMMANDS.get(cmd);
-    if (!def) { termPrint('Неизвестная команда: ' + cmd + '. help — список команд.', 'err'); return; }
+    if (!def) { termPrint('Неизвестная команда: ' + termClean(cmd, 40) + '. help — список команд.', 'err'); return; }
     if (!def.allowed()) { termPrint('Нет прав на команду ' + cmd + '.', 'err'); return; }
     await def.run(tokens);
   }
 
-  const TERM_TIMEOUT_MS = 30000;
-  async function termSubmit(rawLine) {
+  async function termSubmit(rawText) {
     if (termBusy) return;
+    if (!canManageRoles()) { termPrint('Терминал доступен только Супердоступу.', 'err'); return; }
     termBusy = true;
     const input = document.getElementById('term-input');
     // readOnly, а не disabled: отключённое поле теряет фокус, и на телефоне
     // после каждой команды (и каждого y/N) закрывалась бы клавиатура
     input.readOnly = true;
-    let timer = null;
     try {
-      await Promise.race([
-        termRun(rawLine),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('команда не ответила за 30 секунд — проверь связь и повтори')), TERM_TIMEOUT_MS); }),
-      ]);
+      // пакет следит за временем построчно, поэтому общий таймаут ему не нужен
+      const wholeBatch = !!(termPending && termPending.batch);
+      const work = termRun(rawText);
+      await (wholeBatch ? work : termWithTimeout(work));
     } catch (err) {
       termPrint('Ошибка: ' + termClean(err && err.message ? err.message : err, 300), 'err');
     } finally {
-      clearTimeout(timer);
       termBusy = false;
       input.readOnly = false;
       if (termActive && window.matchMedia && window.matchMedia('(pointer: fine)').matches) input.focus();
     }
   }
 
-  // ---- живая лента журнала: только пока открыта вкладка ----
-  // Подписка начинается с последней записи, которая уже есть в журнале
-  // (её самой пропускаем) — печатаются только новые, без привязки к часам.
-  async function termAttachFeed() {
-    if (!termFeedEnabled || termFeedRef || !termActive) return;
-    const token = {};
-    termFeedRef = token; // занимаем место, пока идёт чтение последней записи
-    try {
-      const last = await db.ref('logs').orderByKey().limitToLast(1).once('value');
-      const lastKey = Object.keys(last.val() || {})[0] || null;
-      if (termFeedRef !== token) return; // за время чтения вкладку закрыли или ленту выключили
-      const ref = lastKey ? db.ref('logs').orderByKey().startAt(lastKey) : db.ref('logs');
-      termFeedCb = ref.on('child_added', (snap) => {
-        if (snap.key === lastKey) return;
-        const e = snap.val();
-        if (!e || !e.timestamp) return;
-        if (ownLogKeys.has(snap.key) || (myTelegramId && e.actorPlayerId === myTelegramId)) return; // собственные действия уже напечатаны командой
-        termPrint('[' + termStamp() + '] 📜 ' + termLogLine(e), 'dim');
-      }, (err) => console.error('Терминал: лента', err));
-      termFeedRef = ref;
-    } catch (err) {
-      termFeedRef = null;
-      console.error('Терминал: лента', err);
-    }
-  }
-  function termDetachFeed() {
-    if (termFeedRef && termFeedCb && typeof termFeedRef.off === 'function') termFeedRef.off('child_added', termFeedCb);
-    termFeedRef = null;
-    termFeedCb = null;
-  }
-
   function termOpen() {
+    if (!canManageRoles()) return; // вкладка скрыта не-Супердоступу; на случай подделки клика мимо скрытого UI
     termActive = true;
-    termUnread = 0;
-    setTabDot('terminal', 0);
     if (!termBannerShown) {
       termBannerShown = true;
-      termPrint('БАТТЛ · Терминал — help покажет команды. Опасные действия спросят y/N.', 'dim');
+      termPrint('БАТТЛ · Терминал (Супердоступ) — help покажет команды. Можно вставить сразу несколько строк: терминал покажет список и спросит один раз. Опасное спросит y/N.', 'dim');
     }
-    termAttachFeed();
     const input = document.getElementById('term-input');
     // на телефоне фокус сразу открыл бы клавиатуру и закрыл вывод
     if (input && window.matchMedia && window.matchMedia('(pointer: fine)').matches) input.focus();
@@ -5805,28 +5902,37 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function termLeave() {
     if (!termActive) return;
     termActive = false;
-    termDetachFeed();
     // вопрос y/N не переживает уход с вкладки: иначе следующая набранная
     // команда была бы принята за ответ на давно забытый вопрос
     if (termPending) { termPending = null; termPrint('Вопрос снят — вы ушли с вкладки.', 'dim'); }
   }
 
+  const termInputEl = document.getElementById('term-input');
+  function termFitInput() {
+    termInputEl.style.height = 'auto';
+    termInputEl.style.height = Math.min(termInputEl.scrollHeight, 140) + 'px';
+  }
   document.getElementById('term-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const input = document.getElementById('term-input');
-    const line = input.value;
-    input.value = '';
-    termSubmit(line);
+    const text = termInputEl.value;
+    termInputEl.value = '';
+    termFitInput();
+    termSubmit(text);
   });
-  document.getElementById('term-input').addEventListener('keydown', (e) => {
+  termInputEl.addEventListener('input', termFitInput);
+  termInputEl.addEventListener('keydown', (e) => {
     const input = e.currentTarget;
-    if (e.key === 'ArrowUp') {
-      if (!termHistory.length) return;
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      // Enter отправляет, Shift+Enter — перенос строки (вставка нескольких строк сохраняет переносы)
+      e.preventDefault();
+      document.getElementById('term-form').requestSubmit();
+    } else if (e.key === 'ArrowUp') {
+      if (!termHistory.length || input.value.includes('\n')) return;
       e.preventDefault();
       termHistoryPos = Math.max(0, termHistoryPos - 1);
       input.value = termHistory[termHistoryPos] || '';
     } else if (e.key === 'ArrowDown') {
-      if (termHistoryPos >= termHistory.length) return; // уже внизу истории — не стираем набранное
+      if (termHistoryPos >= termHistory.length || input.value.includes('\n')) return; // уже внизу истории — не стираем набранное
       e.preventDefault();
       termHistoryPos++;
       input.value = termHistory[termHistoryPos] || '';
@@ -5841,9 +5947,182 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       termPrint('Отменено.', 'dim');
     }
   });
-  document.querySelectorAll('.term-chip').forEach((chip) => {
+  document.querySelectorAll('[data-term-cmd]').forEach((chip) => {
     chip.addEventListener('click', () => termSubmit(chip.dataset.termCmd));
   });
+
+  // ===== "Эфир" — прямая трансляция того, что происходит =====
+  // Только чтение: ничего не нажимается и не выполняется. Видна всем, у кого
+  // есть доступ к панели (то же самое видно в "Журнале" и "Статистике", но там
+  // это разовый снимок, а здесь — поток). События приходят слушателями
+  // Firebase в ту же секунду, без опроса: действия персонала (logs), ошибки
+  // клиентов (errorReports), заявки на вход/устройства, переключение режимов
+  // (config), новые игроки и завершённые бои (запросы по индексам) и счётчик
+  // "онлайн". Слушатели подключаются один раз за сессию — когда вкладка
+  // закрыта, строки копятся в ленте (до 500), на вкладке горит цифра.
+  // Всё, что пришло из базы, — чужой текст: чистится/обрезается (termClean)
+  // и выводится только через textContent.
+  const LIVE_MAX_LINES = 500;
+  const LIVE_PAUSE_QUEUE_MAX = 300;
+  const LIVE_CONFIG_FLAGS = { maintenanceMode: 'режим обслуживания', emergencyLockdown: 'аварийный режим', closedBeta: 'закрытый бета-тест', backupsDisabled: 'автобэкапы остановлены' };
+  let liveStarted = false;
+  let liveActive = false;
+  let livePaused = false;
+  let liveFollow = true;
+  let liveUnread = 0;
+  let liveBehind = 0;           // строк ниже видимой области, пока лента не прокручена вниз
+  const livePausedQueue = [];
+
+  const liveOutEl = document.getElementById('live-out');
+  const liveJumpEl = document.getElementById('live-jump');
+  const livePauseEl = document.getElementById('live-pause');
+
+  function liveRender(entry) {
+    const line = document.createElement('div');
+    line.className = 'live-line' + (entry.tone ? ' term-' + entry.tone : '');
+    line.dataset.kind = entry.kind;
+    line.textContent = '[' + entry.stamp + '] ' + entry.text;
+    liveOutEl.appendChild(line);
+    let excess = liveOutEl.childElementCount - LIVE_MAX_LINES;
+    while (excess-- > 0) liveOutEl.removeChild(liveOutEl.firstChild);
+    if (liveFollow) {
+      liveOutEl.scrollTop = liveOutEl.scrollHeight;
+    } else {
+      liveBehind++;
+      liveJumpEl.textContent = '↓ новое (' + liveBehind + ')';
+      liveJumpEl.style.display = 'block';
+    }
+  }
+  function livePauseLabel() {
+    livePauseEl.textContent = livePaused ? '▶ продолжить' + (livePausedQueue.length ? ' (' + livePausedQueue.length + ')' : '') : '⏸ пауза';
+  }
+  // kind: actions | requests | errors | players | matches | system
+  function liveEmit(kind, text, tone) {
+    const entry = {
+      kind,
+      tone: tone || (kind === 'errors' ? 'err' : kind === 'requests' ? 'warn' : kind === 'system' ? 'dim' : null),
+      text: termClean(text, 400),
+      stamp: termStamp(),
+    };
+    if (livePaused) {
+      livePausedQueue.push(entry);
+      if (livePausedQueue.length > LIVE_PAUSE_QUEUE_MAX) livePausedQueue.shift();
+      livePauseLabel();
+    } else {
+      liveRender(entry);
+    }
+    // служебные строки ("эфир включён", "нет индекса") цифру не зажигают
+    if (!liveActive && kind !== 'system') { liveUnread++; setTabDot('live', liveUnread); }
+  }
+
+  liveOutEl.addEventListener('scroll', () => {
+    liveFollow = liveOutEl.scrollHeight - liveOutEl.scrollTop - liveOutEl.clientHeight < 24;
+    if (liveFollow) { liveBehind = 0; liveJumpEl.style.display = 'none'; }
+  });
+  liveJumpEl.addEventListener('click', () => {
+    liveFollow = true; liveBehind = 0; liveJumpEl.style.display = 'none';
+    liveOutEl.scrollTop = liveOutEl.scrollHeight;
+  });
+  livePauseEl.addEventListener('click', () => {
+    livePaused = !livePaused;
+    if (!livePaused) { livePausedQueue.splice(0).forEach(liveRender); }
+    livePauseLabel();
+  });
+  document.getElementById('live-clear').addEventListener('click', () => { liveOutEl.textContent = ''; liveBehind = 0; liveJumpEl.style.display = 'none'; });
+  document.querySelectorAll('[data-live-filter]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('[data-live-filter]').forEach((c) => c.classList.toggle('active', c === chip));
+      liveOutEl.dataset.filter = chip.dataset.liveFilter;
+      liveOutEl.scrollTop = liveOutEl.scrollHeight;
+    });
+  });
+
+  function liveOpen() {
+    liveActive = true;
+    liveUnread = 0;
+    setTabDot('live', 0);
+    liveFollow = true;
+    liveOutEl.scrollTop = liveOutEl.scrollHeight;
+  }
+  function liveLeave() { liveActive = false; }
+
+  // Только новое: подписка начинается с последней записи, которая уже есть
+  // (её самой пропускаем) — ключи push-записей идут по времени.
+  async function liveWatchNewByKey(path, onChild) {
+    try {
+      const last = await db.ref(path).orderByKey().limitToLast(1).once('value');
+      const lastKey = Object.keys(last.val() || {})[0] || null;
+      const ref = lastKey ? db.ref(path).orderByKey().startAt(lastKey) : db.ref(path);
+      ref.on('child_added', (snap) => {
+        if (snap.key === lastKey) return;
+        try { onChild(snap.key, snap.val()); } catch (err) { console.error('Эфир: ' + path, err); }
+      }, (err) => console.error('Эфир: ' + path, err));
+    } catch (err) {
+      console.error('Эфир: ' + path, err);
+    }
+  }
+  // Новое по времени (игроки по createdAt, бои по finishedAt) — только если в
+  // базе есть индекс: без него запрос скачал бы всю таблицу.
+  async function liveWatchNewByTime(path, field, label, sinceMs, onChild) {
+    if (!(await rtdbIndexExists(path, field))) {
+      liveEmit('system', 'ℹ️ «' + label + '» в эфире не показываются: в базе нет индекса ' + path + '.' + field + ' (нужно выложить правила базы).');
+      return;
+    }
+    db.ref(path).orderByChild(field).startAt(sinceMs).on('child_added', (snap) => {
+      try { onChild(snap.key, snap.val()); } catch (err) { console.error('Эфир: ' + path, err); }
+    }, (err) => console.error('Эфир: ' + path, err));
+  }
+
+  function liveSigned(n) {
+    const v = Number(n);
+    return Number.isFinite(v) ? (v > 0 ? '+' : '') + v : '—';
+  }
+
+  function startLiveBroadcast() {
+    if (liveStarted) return;
+    liveStarted = true;
+    const since = Date.now() - 30000; // запас на разницу часов у тех, кто пишет createdAt/finishedAt
+    liveEmit('system', 'Эфир включён — новые события появляются здесь сразу.');
+
+    liveWatchNewByKey('logs', (key, e) => {
+      if (!e || !e.timestamp) return;
+      liveEmit('actions', '📜 ' + termLogBody(e) + (ownLogKeys.has(key) ? ' · вы' : ''));
+    });
+    liveWatchNewByKey('errorReports', (key, r) => {
+      if (!r) return;
+      const lastLine = String(r.log || '').trim().split('\n').pop();
+      liveEmit('errors', '🐞 ошибка клиента · ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || '—', 40) + ') · ' + termClean(lastLine, 160));
+    });
+
+    // режимы: печатаем только переключения известных флагов (в config лежат и
+    // секреты — значения остальных ключей не читаем и не храним)
+    let configPrev = null;
+    db.ref('config').on('value', (snap) => {
+      const cfg = snap.val() || {};
+      if (configPrev) {
+        Object.keys(LIVE_CONFIG_FLAGS).forEach((flag) => {
+          if (!!cfg[flag] !== !!configPrev[flag]) liveEmit('actions', '⚙️ ' + LIVE_CONFIG_FLAGS[flag] + ': ' + (cfg[flag] ? 'ВКЛЮЧЁН' : 'выключен'), cfg[flag] ? 'warn' : 'ok');
+        });
+      }
+      configPrev = {};
+      Object.keys(LIVE_CONFIG_FLAGS).forEach((flag) => { configPrev[flag] = !!cfg[flag]; });
+    }, (err) => console.error('Эфир: config', err));
+
+    db.ref('presence').on('value', (snap) => {
+      document.getElementById('live-online').textContent = 'онлайн: ' + snap.numChildren();
+    }, (err) => console.error('Эфир: presence', err));
+
+    liveWatchNewByTime('users', 'createdAt', 'новые игроки', since, (key, u) => {
+      if (!u) return;
+      const guest = key.startsWith('guest_');
+      liveEmit('players', (guest ? '👤 новый гость' : '🆕 новый игрок') + ': ' + termClean(u.firstName || '—', 40) + ' (' + termClean(u.playerId || key, 40) + ')', guest ? 'dim' : 'ok');
+    });
+    liveWatchNewByTime('matches', 'finishedAt', 'завершённые бои', since, (key, m) => {
+      if (!m || !m.finishedAt) return;
+      const pa = m.pointsAwarded || {};
+      liveEmit('matches', '⚔️ бой завершён: ' + termClean(m.winnerId || '—', 40) + ' победил ' + termClean(m.loserId || '—', 40) + ' (' + liveSigned(pa[m.winnerId]) + ' / ' + liveSigned(pa[m.loserId]) + ')');
+    });
+  }
 </script>
 </body>
 </html>

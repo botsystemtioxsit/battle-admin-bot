@@ -50,6 +50,13 @@ public class MainActivity extends Activity {
         webView.getSettings().setLoadWithOverviewMode(true);
         webView.getSettings().setUseWideViewPort(true);
 
+        // Версия самого APK — в User-Agent: страница показывает её человеку. Иначе по экрану не
+        // отличить новое приложение от старого (страница грузится по сети и всегда свежая).
+        try {
+            String appVersion = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            webView.getSettings().setUserAgentString(webView.getSettings().getUserAgentString() + " BattleApp/" + appVersion);
+        } catch (Exception ignored) { }
+
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest request) {

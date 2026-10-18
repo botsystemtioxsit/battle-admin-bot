@@ -321,7 +321,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Вход и уведомления. Сообщение в боте о запросе на вход теперь говорит, куда входят (игра или админ-панель) и с какого устройства; кнопки «Разрешить»/«Отклонить» обрабатывает Worker, так что снова срабатывают. Устройство — «Приложение для Android / для компьютера» или название браузера. До этого: «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.15</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. В Android-приложении в шапке видна версия самого приложения (и она же — в сообщении о запросе на вход), чтобы отличать новое от старого. Значок приложения — адаптивный, с поддержкой «тематических значков». До этого: вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.16</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -2132,6 +2132,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // ждём, пока её подтвердят — либо в игре (Сообщество → Запросы), либо
   // прямо здесь же (вкладка "Аккаунт", см. loadAccountLoginRequests ниже).
   // Тайм-аут ожидания — 5 минут.
+  // Версию APK приложение дописывает в User-Agent (MainActivity: «BattleApp/1.1.7»);
+  // в браузере её нет. Показываем в шапке, чтобы было видно, какое приложение стоит.
+  function appVersionFromUA() {
+    const m = /BattleApp\/([0-9][0-9.]{0,9})/.exec(navigator.userAgent || '');
+    return m ? m[1] : '';
+  }
+  (function showAppVersion() {
+    const v = appVersionFromUA();
+    const el = document.getElementById('admin-version');
+    if (v && el) el.textContent += ' · приложение ' + v;
+  })();
+
   // Куда входят: поле app в заявке пишет сама страница (игра — 'game', панель —
   // 'admin'). Выводим только из белого списка; нет поля — подпись как раньше.
   function loginTargetLabel(req) {
@@ -2144,7 +2156,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function detectDeviceLabel() {
     const ua = navigator.userAgent || '';
     if (/Electron\//.test(ua)) return 'Приложение для компьютера';
-    if (/; wv\)/.test(ua)) return 'Приложение для Android';
+    if (/; wv\)/.test(ua)) return 'Приложение для Android' + (appVersionFromUA() ? ' ' + appVersionFromUA() : '');
     if (/YaBrowser/.test(ua)) return 'Яндекс.Браузер';
     if (/EdgA?\//.test(ua)) return 'Edge';
     if (/OPR\//.test(ua) || /Opera/.test(ua)) return 'Opera';

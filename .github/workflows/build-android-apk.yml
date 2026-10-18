@@ -98,6 +98,20 @@ jobs:
           {"versionCode": ${{ steps.ver.outputs.code }}, "versionName": "${{ steps.ver.outputs.name }}"}
           EOF
 
+      # Сборка с ветки: отдельный тестовый релиз android-test (не android-latest),
+      # чтобы её можно было скачать и проверить на телефоне до слияния в main.
+      # Удаляется сам при следующей выкладке в main (см. последний шаг).
+      - name: Publish test build (branches only)
+        if: github.ref != 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-test
+          name: ТЕСТОВАЯ сборка БАТТЛ Админ (Android) — не последняя версия
+          prerelease: true
+          files: android/battle-admin.apk
+          body: |
+            Проверочная сборка из ветки ${{ github.ref_name }} (коммит ${{ github.sha }}). Это не основная версия: обычная лежит в релизе android-latest.
+
       - name: Publish GitHub Release with APK attached
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -118,3 +132,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete-asset android-latest app-debug.apk --yes --repo "$GITHUB_REPOSITORY" || true
+
+      - name: Remove the test release (main only)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete android-test --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true

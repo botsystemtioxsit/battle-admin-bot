@@ -39,6 +39,15 @@ android {
         release {
             minifyEnabled false
         }
+        // Проверочная версия значка. Ставится РЯДОМ с обычным приложением как отдельное
+        // (другое имя пакета и название «… (тест значка)»): так видно, показывает ли
+        // телефон новый значок, без влияния старой установки, ярлыков и кэша лаунчера.
+        // Собирается только в сборках из ветки (см. .github/workflows/build-android-apk.yml).
+        iconTest {
+            initWith debug
+            applicationIdSuffix ".icontest"
+            matchingFallbacks = ['debug']
+        }
     }
 
     compileOptions {

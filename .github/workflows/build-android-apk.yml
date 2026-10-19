@@ -59,6 +59,14 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --no-daemon
 
+      # Проверочная версия значка (другое имя пакета, ставится рядом) — только в сборках из ветки.
+      - name: Build icon-test APK (branches only)
+        if: github.ref != 'refs/heads/main'
+        working-directory: android
+        run: |
+          gradle assembleIconTest --no-daemon
+          cp app/build/outputs/apk/iconTest/app-iconTest.apk battle-admin-icontest.apk
+
       - name: Show signing certificate
         run: |
           APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
@@ -108,7 +116,9 @@ jobs:
           tag_name: android-test
           name: ТЕСТОВАЯ сборка БАТТЛ Админ (Android) — не последняя версия
           prerelease: true
-          files: android/battle-admin.apk
+          files: |
+            android/battle-admin.apk
+            android/battle-admin-icontest.apk
           body: |
             Проверочная сборка из ветки ${{ github.ref_name }} (коммит ${{ github.sha }}). Это не основная версия: обычная лежит в релизе android-latest.
 

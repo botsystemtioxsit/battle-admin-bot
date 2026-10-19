@@ -86,3 +86,11 @@ The database is world-readable and holds avatars as base64 inside `users/<id>`, 
 
 ### Versioning
 `#admin-version` in the topbar (a version string + a `title` tooltip summarizing the latest change) is the only version indicator — bump it on every change to this file, the same discipline `index.html` applies to its own `.version-block`.
+
+## Working agreement with the owner
+
+The owner is non-technical and Russian-speaking (often dictates by voice). Standing rules, set by them:
+- **Do what is asked and publish it.** For a requested task, finish it, open the PR, merge it, check the result and report — no separate "may I publish?" step. (Worker deploys, releases and the like are part of publishing.)
+- **Your own ideas: ask first.** Anything the owner did not ask for (extra features, clean-ups, deleting things) is proposed as a short yes/no question before doing it. Creativity is welcome.
+- **Say what limits you**, plainly (e.g. cannot see the phone or PC, cannot set GitHub/Cloudflare secrets or BotFather settings, the sandbox's safety layer blocks some actions such as installing third-party skills into the agent's own config).
+- **Write short and plain.** Lead with what happened or what to do; no jargon; one check at a time; skip long explanations — the owner loses the thread in walls of text.

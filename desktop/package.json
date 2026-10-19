@@ -1,6 +1,6 @@
 {
   "name": "battle-admin-desktop",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "description": "Десктоп-приложение (Electron) для панели администратора БАТТЛ — окно, которое открывает живую панель без браузера.",
   "author": {
@@ -52,7 +52,12 @@
       "target": [
         "nsis"
       ],
-      "icon": "icon.png"
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
     }
   }
 }

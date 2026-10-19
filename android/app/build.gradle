@@ -7,11 +7,16 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.tioxsit.battleadmin"
+        // Суффикс .icontest — не опечатка и не тест. На телефоне владельца лаунчер держал
+        // СТАРЫЙ значок за прежним именем пакета com.tioxsit.battleadmin и не обновлял его
+        // ни после переустановки, ни после очистки кэша; тот же APK под новым именем
+        // сразу показал новый значок. Возвращать прежнее имя нельзя — значок снова
+        // станет старым. Код (namespace и пакет в java/) от этого не зависит.
+        applicationId "com.tioxsit.battleadmin.icontest"
         minSdk 24
         targetSdk 34
-        versionCode 10
-        versionName "1.1.7"
+        versionCode 11
+        versionName "1.1.8"
     }
 
     signingConfigs {
@@ -38,15 +43,6 @@ android {
         }
         release {
             minifyEnabled false
-        }
-        // Проверочная версия значка. Ставится РЯДОМ с обычным приложением как отдельное
-        // (другое имя пакета и название «… (тест значка)»): так видно, показывает ли
-        // телефон новый значок, без влияния старой установки, ярлыков и кэша лаунчера.
-        // Собирается только в сборках из ветки (см. .github/workflows/build-android-apk.yml).
-        iconTest {
-            initWith debug
-            applicationIdSuffix ".icontest"
-            matchingFallbacks = ['debug']
         }
     }
 

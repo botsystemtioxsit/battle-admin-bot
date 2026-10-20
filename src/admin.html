@@ -10,6 +10,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>БАТТЛ — Админ-панель</title>
+<link rel="icon" type="image/png" href="logo.png">
 <!-- Заранее открываем соединения (DNS + TLS) к тому, куда панель обратится в
      первые секунды: база, role-gateway и скрипты SDK. Само по себе ничего не
      загружает, но экономит несколько круговых обходов на старте. -->
@@ -42,13 +43,17 @@
     --side-w: 232px;
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
+  /* «Масштаб» (Аккаунт → только в десктопном приложении): --ui-zoom ставит JS.
+     У CSS zoom единицы vh не масштабируются вместе со страницей, поэтому все
+     vh ниже делятся на --ui-zoom. */
+  html{ zoom:var(--ui-zoom, 1); }
   html,body{ background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; min-height:100%; -webkit-font-smoothing:antialiased; }
   body{ display:flex; justify-content:center; padding:16px 0 40px; }
   .wrap{ width:100%; max-width:460px; padding:0 16px; }
 
   .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
   .brand{ font-size:14px; font-weight:700; line-height:22px; }
-  .brand::before{ content:''; display:inline-block; width:22px; height:22px; border-radius:7px; background:var(--gold); vertical-align:top; margin-right:9px; }
+  .brand-logo{ width:24px; height:24px; border-radius:7px; vertical-align:top; margin:-1px 9px 0 0; background:#000; }
   .brand span{ color:var(--live); }
   .brand .brand-version{ color:var(--muted); }
   .me{ font-size:12px; color:var(--muted); text-align:right; line-height:1.5; }
@@ -79,7 +84,7 @@
   .me.switchable{ cursor:pointer; }
   .me-switch{ display:none; margin-top:4px; font-size:12px; font-weight:600; color:var(--gold); }
   .me.switchable .me-switch{ display:block; }
-  .acct-menu{ display:none; position:fixed; z-index:70; left:10px; bottom:96px; width:236px; max-height:60vh; overflow-y:auto; padding:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 12px 32px rgba(0,0,0,0.45); }
+  .acct-menu{ display:none; position:fixed; z-index:70; left:10px; bottom:96px; width:236px; max-height:calc(60vh / var(--ui-zoom, 1)); overflow-y:auto; padding:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 12px 32px rgba(0,0,0,0.45); }
   .acct-menu.open{ display:block; }
   .acct-row{ display:flex; align-items:center; gap:2px; border-radius:var(--radius); }
   .acct-row:hover{ background:var(--line); }
@@ -105,7 +110,7 @@
 
   /* заголовок раздела над его содержимым (текст берётся из data-title /
      data-sub у активной .tab, см. syncPageHead) */
-  .page-head{ margin-bottom:18px; }
+  .page-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:18px; }
   .page-head h1{ font-size:22px; font-weight:700; letter-spacing:-0.01em; }
   .page-sub{ color:var(--muted); font-size:13px; margin-top:4px; }
 
@@ -137,7 +142,7 @@
   .term-chips{ display:flex; flex-wrap:wrap; gap:6px; padding:8px 10px; border-bottom:1px solid var(--line); background:var(--panel); }
   .term-chip{ background:var(--panel-2); border:1px solid var(--line); color:var(--muted); border-radius:100px; padding:4px 10px; font:600 11.5px/1.4 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; cursor:pointer; }
   .term-chip:hover{ color:var(--text); border-color:var(--gold); }
-  #term-out{ height:min(58vh, 520px); overflow-y:auto; padding:10px 12px; font:12.5px/1.55 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--text); white-space:pre-wrap; word-break:break-word; -webkit-overflow-scrolling:touch; }
+  #term-out{ height:min(calc(58vh / var(--ui-zoom, 1)), 520px); overflow-y:auto; padding:10px 12px; font:12.5px/1.55 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--text); white-space:pre-wrap; word-break:break-word; -webkit-overflow-scrolling:touch; }
   .term-line.term-cmd{ color:var(--gold); }
   .term-line.term-err{ color:var(--live); }
   .term-line.term-ok{ color:#3FB67E; }
@@ -162,7 +167,7 @@
   .live-online{ font:12px/1 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--muted); }
   .live-spacer{ flex:1; }
   .live-stage{ position:relative; }
-  #live-out{ height:min(62vh, 560px); overflow-y:auto; padding:10px 12px; font:12.5px/1.55 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--text); white-space:pre-wrap; word-break:break-word; -webkit-overflow-scrolling:touch; }
+  #live-out{ height:min(calc(62vh / var(--ui-zoom, 1)), 560px); overflow-y:auto; padding:10px 12px; font:12.5px/1.55 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--text); white-space:pre-wrap; word-break:break-word; -webkit-overflow-scrolling:touch; }
   .live-line{ animation:liveIn .25s ease-out; }
   @keyframes liveIn{ from{ background:rgba(91,157,255,.22); } to{ background:transparent; } }
   .live-line.term-warn{ color:#E8B04B; } .live-line.term-err{ color:var(--live); } .live-line.term-ok{ color:#3FB67E; } .live-line.term-dim{ color:var(--muted); }
@@ -195,25 +200,16 @@
     .wrap{ max-width:1100px; }
     body.in-app{ display:block; padding:0; }
     body.in-app::before{ content:''; position:fixed; z-index:0; top:0; bottom:0; left:0; width:var(--side-w); background:var(--side); border-right:1px solid var(--line); }
-    body.in-app .wrap{ max-width:none; margin-left:var(--side-w); padding:0; }
+    body.in-app .wrap{ width:auto; max-width:none; margin-left:var(--side-w); padding:0; }
     body.in-app .topbar{ position:fixed; z-index:5; top:0; left:0; width:var(--side-w); margin:0; padding:20px 18px 8px; display:block; }
     body.in-app .tabs{ position:fixed; z-index:5; top:80px; bottom:100px; left:0; width:var(--side-w); padding:8px 10px; overflow-y:auto; }
     body.in-app .tab{ min-height:36px; font-size:13.5px; }
     body.in-app .me{ position:fixed; z-index:5; left:0; bottom:0; width:var(--side-w); padding:12px 18px 16px; text-align:left; border-top:1px solid var(--line); }
     #screen-app.active{ display:grid; grid-template-columns:minmax(0, 1fr); align-items:start; column-gap:28px; max-width:1180px; padding:28px 36px 56px; }
     .page-head, .subview{ grid-column:1; }
-    /* третья колонка появляется только когда пик-панель базы данных
-       реально нужна (superadmin, не редактируем базу целиком прямо сейчас)
-       — см. updateDbPeekVisibility() в JS, которая ставит оба класса разом */
-    #screen-app.active.has-db-peek{ grid-template-columns:minmax(0, 1fr) 280px; max-width:1500px; }
-    .db-peek-panel.show{
-      display:block; grid-column:2; grid-row:1 / span 2; position:sticky; top:16px;
-      max-height:calc(100vh - 32px); overflow-y:auto;
-      background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); padding:14px;
-    }
   }
 
-  .center-msg{ min-height:60vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px 12px; }
+  .center-msg{ min-height:calc(60vh / var(--ui-zoom, 1)); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px 12px; }
   .center-msg .big{ font-size:18px; font-weight:700; margin-bottom:10px; }
   .center-msg .small{ color:var(--muted); font-size:13.5px; line-height:1.5; max-width:280px; }
   .center-msg.denied .big{ color:var(--live); }
@@ -251,7 +247,15 @@
   /* скрыта по умолчанию — на мобильных нет места на третью колонку, и до
      первого updateDbPeekVisibility() её вообще не должно быть видно, даже
      мельком; .show ставится только внутри @media(min-width:900px) выше */
-  .db-peek-panel{ display:none; }
+  /* просмотр базы — выезжающая справа панель по кнопке «База данных» в
+     заголовке раздела (только Супердоступ, см. updateDbPeekVisibility) */
+  .db-peek-panel{ position:fixed; z-index:45; top:0; right:0; bottom:0; width:min(460px, 94vw); padding:16px 18px 24px; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); box-shadow:-14px 0 34px rgba(0,0,0,0.4); transform:translateX(100%); visibility:hidden; transition:transform .2s ease, visibility 0s linear .2s; }
+  .db-peek-panel.open{ transform:none; visibility:visible; transition:transform .2s ease; }
+  .db-peek-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .db-peek-head .section-label{ margin:0; }
+  .head-btn{ display:none; flex:none; height:36px; padding:0 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel-2); color:var(--text); font-size:13px; font-weight:600; cursor:pointer; }
+  body.db-peek-allowed .head-btn{ display:inline-block; }
+  .head-btn[aria-expanded="true"]{ border-color:var(--gold); color:var(--gold); }
   .db-tree{ font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size:12.5px; line-height:1.9; overflow-x:auto; }
   .db-node{ display:flex; align-items:center; gap:6px; padding:2px 6px; border-radius:5px; white-space:nowrap; }
   .db-node.container{ cursor:pointer; }
@@ -407,6 +411,10 @@
      Журнал/Ошибки, База/Система, Кланы/Заявки) — две кнопки-переключателя
      тем же .btn, что и везде в файле, активная — btn-gold, неактивная —
      btn-line, чтобы не заводить отдельный паттерн навигации. */
+  /* несколько частей одной вкладки показаны сразу (Заявки, Журнал,
+     Администрация + токены): рядом, если есть место, иначе друг под другом */
+  .pair{ display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap:4px 28px; align-items:start; }
+  .pair > *{ min-width:0; }
   .subnav{ display:flex; gap:8px; margin-bottom:16px; }
   .subnav .btn{ flex:1; }
 </style>
@@ -420,7 +428,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.19: в десктопном приложении можно держать несколько аккаунтов и переключаться между ними (имя внизу слева → «Сменить аккаунт»). До этого: новый вид «Полочки» — меню слева по группам, на телефоне выезжает по ≡ (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.19</span></div>
+    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.20: «Заявки» и «Журнал» показывают обе части сразу; «Супердоступ» — отдельная полка с вкладками «Администрация» (права + токены), «Бэкапы», «Система»; просмотр базы выезжает справа по кнопке «База данных»; настоящий логотип в шапке; масштаб в приложении для компьютера (Аккаунт → Масштаб). До этого: несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.20</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -591,41 +599,47 @@
       <div class="tab" data-tab="apps" data-title="Приложения" data-sub="Панель на компьютер и телефон"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"></path></svg>Приложения</div>
       <div class="tab-grp">Доступ</div>
       <div class="tab" data-tab="account" data-title="Аккаунт" data-sub="Вход с других устройств и ваши заявки на вход"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path></svg>Аккаунт</div>
-      <!-- ===== "Супердоступ" объединяет четыре бывшие отдельные вкладки —
-           "Администрация" (права + запросы на устройства), "Токены
-           доступа" (accessTokens), "Бэкапы" и "Система" (опасная зона +
-           база данных) — суб-нав внутри .subview, см. showSuperSection().
-           Все четыре и раньше были доступны только Супердоступу (см.
-           applyRoleUI/canManageRoles) — объединение вкладок тут не меняет
-           эффективный доступ, только убирает с телефона 4 лишние строки в
-           и без того длинном списке вкладок. Исключение внутри —
-           "Опасная зона": делегируется отдельным правом danger (см.
-           canManageDanger), поэтому кнопка суб-нава на неё видна и не-
-           superadmin с этим правом, а сама вкладка "Супердоступ" целиком
-           видна, если есть хоть одно из четырёх: canManageRoles() (всё,
-           кроме опасной зоны) или canManageDanger(). -->
-      <div class="tab" data-tab="super" id="tab-super" data-title="Супердоступ" data-sub="Права, токены доступа, бэкапы и система"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Супердоступ</div>
+      <!-- ===== Полка «Супердоступ»: три вкладки на одной .subview#panel-super
+           (поэтому data-view="super", а не data-panel — тот атрибут ищет
+           диспетчер вкладок среди разделов). «Администрация» показывает сразу
+           две части — права админов с запросами на устройства и токены
+           доступа; «Бэкапы» и «Система» — по одной, у каждой остаются свои
+           внутренние переключатели (список/восстановление; опасная зона/база
+           данных). Все три и раньше были доступны только Супердоступу (см.
+           applyRoleUI/canManageRoles) — кроме «Опасной зоны», которую
+           делегирует отдельное право danger, и «Бэкапов» по токену с этим
+           правом (myTokenBackupsAccess). -->
+      <div class="tab-grp">Супердоступ</div>
+      <div class="tab" data-tab="super-admins" data-view="super" data-title="Администрация" data-sub="Права админов, запросы на устройства и токены доступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Администрация</div>
+      <div class="tab" data-tab="super-backups" data-view="super" data-title="Бэкапы" data-sub="Снимки кода и базы, восстановление"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18v4H3zM5 11v8h14v-8M10 15h4"></path></svg>Бэкапы</div>
+      <div class="tab" data-tab="super-danger" data-view="super" data-title="Система" data-sub="Обслуживание, аварийные режимы, база данных"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2"></path><circle cx="14" cy="6" r="2"></circle><circle cx="8" cy="12" r="2"></circle><circle cx="16" cy="18" r="2"></circle></svg>Система</div>
     </div>
 
     <!-- заголовок раздела: текст берётся из data-title/data-sub активной
          вкладки (см. syncPageHead) -->
     <div class="page-head" id="page-head">
-      <h1 id="page-title">Панель</h1>
-      <div class="page-sub" id="page-sub">Найдите игрока и управляйте его доступом</div>
+      <div>
+        <h1 id="page-title">Панель</h1>
+        <div class="page-sub" id="page-sub">Найдите игрока и управляйте его доступом</div>
+      </div>
+      <button type="button" class="head-btn" id="db-peek-btn" aria-expanded="false" aria-controls="db-peek-panel">База данных</button>
     </div>
 
-    <!-- ===== "Пик" базы данных — только на десктопе, только superadmin.
-         Третья колонка CSS-грида #screen-app (см. .has-db-peek ниже),
-         живёт НЕЗАВИСИМО от того, какая .subview сейчас активна — видна на
-         любой вкладке (Панель/Журнал/...), кроме одного случая: как только
-         открыт сам редактируемый просмотр ("Система" → "База данных"), эта
-         колонка прячется (см. updateDbPeekVisibility) — незачем показывать
-         то же дерево дважды, а редактируемая версия и так занимает весь
-         экран. Рендерится тем же renderDbTree()/renderDbLevel(), что и
-         редактируемое дерево, просто с editable=false (см. JS) — поэтому
-         тут нет ни ✎, ни +, ни ✕, только просмотр и разворачивание веток. -->
-    <div class="db-peek-panel" id="db-peek-panel">
-      <div class="section-label" style="margin-top:0;">База данных — просмотр</div>
+    <!-- ===== Просмотр базы данных — выезжающая справа панель, только
+         Супердоступ. Открывается кнопкой «База данных» в заголовке любого
+         раздела (раньше это была постоянная третья колонка, которая съедала
+         место и на узких окнах вылезала за край); пока закрыта — ничего не
+         читает из базы и слушателей не держит. Прячется целиком, пока открыто
+         само редактируемое дерево («Система» → «База данных») — незачем
+         показывать одно и то же дважды (см. updateDbPeekVisibility).
+         Рендерится тем же renderDbTree()/renderDbLevel(), что и редактируемое
+         дерево, просто с editable=false (см. JS) — поэтому тут нет ни ✎, ни +,
+         ни ✕, только просмотр и разворачивание веток. -->
+    <div class="db-peek-panel" id="db-peek-panel" role="dialog" aria-label="Просмотр базы данных">
+      <div class="db-peek-head">
+        <div class="section-label">База данных — просмотр</div>
+        <button type="button" class="btn btn-line" id="db-peek-close" aria-label="Закрыть" style="padding:6px 12px;">✕</button>
+      </div>
       <div id="db-peek-tree" class="db-tree"><div class="admin-empty">Загрузка…</div></div>
     </div>
 
@@ -838,6 +852,18 @@
           <button class="btn btn-line" id="btn-theme-reset" style="flex:1;">Сбросить</button>
         </div>
       </div>
+
+      <!-- только десктопное приложение (показывает JS, см. «Масштаб») -->
+      <div class="admin-card" id="zoom-card" style="display:none;">
+        <div class="section-label">Масштаб</div>
+        <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Если всё мелко или, наоборот, слишком крупно. Запоминается на этом компьютере.</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-line" id="zoom-minus" aria-label="Мельче" style="width:44px; height:40px;">−</button>
+          <div id="zoom-value" style="flex:1; text-align:center; font-size:16px; font-weight:700;">100%</div>
+          <button class="btn btn-line" id="zoom-plus" aria-label="Крупнее" style="width:44px; height:40px;">+</button>
+          <button class="btn btn-line" id="zoom-reset" style="height:40px;">100%</button>
+        </div>
+      </div>
     </div>
 
     <!-- ===== права конкретного админа — по образцу "Прав админов" в
@@ -962,11 +988,7 @@
          Обе части видны всем, у кого вообще есть доступ к панели — так
          было и раньше у каждой по отдельности, см. showLogsSection(). -->
     <div class="subview" data-panel="logs" id="panel-logs">
-      <div class="subnav">
-        <button class="btn btn-gold" id="logs-sub-actions">Действия</button>
-        <button class="btn btn-line" id="logs-sub-errors">Ошибки клиента</button>
-      </div>
-
+      <div class="pair">
       <div id="logs-section-actions">
         <div class="back-link" id="log-back-to-all" style="display:none;">← ко всем записям</div>
         <div class="section-label" id="log-title">Журнал действий (все)</div>
@@ -974,10 +996,11 @@
         <div class="admin-empty" id="log-empty" style="display:none;">Записей пока нет</div>
       </div>
 
-      <div id="logs-section-errors" style="display:none;">
+      <div id="logs-section-errors">
         <div class="section-label" id="errors-title">Присланные ошибки (0)</div>
         <div id="errors-list"></div>
         <div class="admin-empty" id="errors-empty" style="display:none;">Пока никто ничего не присылал</div>
+      </div>
       </div>
     </div>
 
@@ -1001,18 +1024,14 @@
          вступить в другой (это на стороне основного сайта, см. index.html:
          users/<uid>/clanId ставится сразу при создании, ещё до одобрения). -->
     <div class="subview" data-panel="beta" id="panel-beta">
-      <div class="subnav">
-        <button class="btn btn-gold" id="beta-sub-beta">Заявки на бета</button>
-        <button class="btn btn-line" id="beta-sub-clans">Заявки кланов</button>
-      </div>
-
+      <div class="pair">
       <div id="beta-section-beta">
-        <div class="section-label">Заявки на рассмотрении</div>
+        <div class="section-label">Заявки на бета-тест — на рассмотрении</div>
         <div id="beta-applications-list"></div>
         <div class="admin-empty" id="beta-applications-empty" style="display:none;">Нет заявок, ожидающих проверки</div>
       </div>
 
-      <div id="beta-section-clans" style="display:none;">
+      <div id="beta-section-clans">
         <div class="section-label">Кланы на рассмотрении</div>
         <div id="clans-pending-list"></div>
         <div class="admin-empty" id="clans-pending-empty" style="display:none;">Нет кланов, ожидающих проверки</div>
@@ -1032,6 +1051,7 @@
         <div class="section-label" style="margin-top:22px;">Никнеймы — на проверке</div>
         <div id="nicknames-pending-list"></div>
         <div class="admin-empty" id="nicknames-pending-empty" style="display:none;">Нет никнеймов, ожидающих проверки</div>
+      </div>
       </div>
     </div>
 
@@ -1215,13 +1235,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
          (список/восстановление; опасная зона/база данных) без изменений —
          просто теперь на один уровень вложенности глубже. -->
     <div class="subview" data-panel="super" id="panel-super">
-      <div class="subnav">
-        <button class="btn btn-gold" id="super-sub-admins">Администрация</button>
-        <button class="btn btn-line" id="super-sub-tokens">Токены доступа</button>
-        <button class="btn btn-line" id="super-sub-backups">Бэкапы</button>
-        <button class="btn btn-line" id="super-sub-danger">Система</button>
-      </div>
-
+      <div class="pair">
       <div id="super-section-admins">
       <div class="admin-card">
         <div class="section-label" id="device-trust-requests-title">Запросы на устройства</div>
@@ -1234,14 +1248,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       <div class="admin-empty" id="admins-table-empty" style="display:none;">Пока нет ни одного модератора/админа</div>
       </div>
 
-      <div id="super-section-tokens" style="display:none;">
+      <div id="super-section-tokens">
       <div class="section-label">Новый токен</div>
       <div class="admin-card">
         <div class="row">
           <input type="text" class="field-input" id="new-token-label" placeholder="Метка (для себя, необязательно)">
         </div>
         <div class="admin-empty" style="text-align:left; padding:4px 0 8px;">Выбери, что этот токен открывает — можно отметить сколько угодно пунктов сразу:</div>
-        <div id="new-token-perm-toggles" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;"></div>
+        <div id="new-token-perm-toggles" style="display:flex; flex-direction:column; margin-bottom:12px;"></div>
         <div class="row" style="margin-bottom:12px;">
           <select class="field-input" id="new-token-duration">
             <option value="">Бессрочный</option>
@@ -1260,6 +1274,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
       <div class="section-label">Выданные токены</div>
       <div id="access-tokens-list" class="admin-empty">Загрузка…</div>
+      </div>
       </div>
 
       <div id="super-section-backups" style="display:none;">
@@ -1341,7 +1356,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
       <div id="danger-section-zone">
 
-      <div class="center-msg" id="danger-checking" style="min-height:30vh;">
+      <div class="center-msg" id="danger-checking" style="min-height:calc(30vh / var(--ui-zoom, 1));">
         <div class="big">Проверяем доступ…</div>
         <div class="small">Секунду — сверяемся с базой, у кого сейчас есть право на эту вкладку.</div>
       </div>
@@ -1674,6 +1689,38 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     applyPanelTheme(theme);
   }
   applyPanelTheme(loadPanelTheme());
+
+  // ===== «Масштаб» — только десктопное приложение (Аккаунт → «Масштаб») =====
+  // CSS zoom на <html>, значение хранится на этом компьютере. В браузере и
+  // Telegram/Android его нет (там масштаб есть у самого браузера).
+  const PANEL_ZOOM_KEY = 'battlePanelZoom';
+  const PANEL_ZOOM_MIN = 0.7;
+  const PANEL_ZOOM_MAX = 2;
+  const PANEL_IS_DESKTOP_APP = /Electron\//.test(navigator.userAgent || '');
+  function loadPanelZoom() {
+    try {
+      const v = parseFloat(window.localStorage.getItem(PANEL_ZOOM_KEY));
+      return v >= PANEL_ZOOM_MIN && v <= PANEL_ZOOM_MAX ? v : 1;
+    } catch { return 1; }
+  }
+  function applyPanelZoom(z) {
+    document.documentElement.style.setProperty('--ui-zoom', String(z));
+    const label = document.getElementById('zoom-value');
+    if (label) label.textContent = Math.round(z * 100) + '%';
+  }
+  function setPanelZoom(z) {
+    z = Math.round(Math.min(PANEL_ZOOM_MAX, Math.max(PANEL_ZOOM_MIN, z)) * 100) / 100;
+    try { window.localStorage.setItem(PANEL_ZOOM_KEY, String(z)); } catch {}
+    applyPanelZoom(z);
+  }
+  if (PANEL_IS_DESKTOP_APP) {
+    applyPanelZoom(loadPanelZoom());
+    const zoomCard = document.getElementById('zoom-card');
+    if (zoomCard) zoomCard.style.display = '';
+    document.getElementById('zoom-minus')?.addEventListener('click', () => setPanelZoom(loadPanelZoom() - 0.1));
+    document.getElementById('zoom-plus')?.addEventListener('click', () => setPanelZoom(loadPanelZoom() + 0.1));
+    document.getElementById('zoom-reset')?.addEventListener('click', () => setPanelZoom(1));
+  }
 
   function syncPanelThemeInputs() {
     const theme = loadPanelTheme();
@@ -2562,15 +2609,16 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       document.querySelectorAll('[data-panel]').forEach(p => p.classList.remove('active'));
-      document.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');
-      // ушли со "Супердоступа" (объединяет бывшие "Администрация"/"Токены
-      // доступа"/"Бэкапы"/"Система", см. #panel-super) на другую вкладку —
-      // снимаем ВСЕ живые слушатели, которые могли остаться от любой из
-      // четырёх секций, независимо от того, какая из них была открыта
-      // последней: незачем продолжать тянуть трафик за экраном, который
-      // никто не видит (все detach-функции безопасно ничего не делают,
-      // если слушатель и так не был подключён).
-      if (tab.dataset.tab !== 'super') {
+      // вкладки полки «Супердоступ» делят один раздел #panel-super — у них
+      // data-view="super"; у остальных раздел называется так же, как вкладка
+      document.querySelector(`[data-panel="${tab.dataset.view || tab.dataset.tab}"]`).classList.add('active');
+      // ушли с полки «Супердоступ» (три вкладки на одном #panel-super) на
+      // другую вкладку — снимаем ВСЕ живые слушатели, которые могли остаться
+      // от любой из её частей: незачем продолжать тянуть трафик за экраном,
+      // который никто не видит (все detach-функции безопасно ничего не
+      // делают, если слушатель и так не был подключён).
+      const isSuperTab = tab.dataset.view === 'super';
+      if (!isSuperTab) {
         detachAllDbLiveBranches(dbTreeState);
         detachAdminsLiveListener();
         detachAccessTokensListener();
@@ -2579,11 +2627,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (tab.dataset.tab === 'terminal') termOpen();
       if (tab.dataset.tab !== 'live') liveLeave();
       if (tab.dataset.tab === 'live') liveOpen();
-      if (tab.dataset.tab === 'logs') showLogsSection('actions');
+      if (tab.dataset.tab === 'logs') showLogsSection();
       if (tab.dataset.tab === 'event') loadEventsAdminList();
-      if (tab.dataset.tab === 'beta') showBetaSection(canManageBeta() ? 'beta' : 'clans');
+      if (tab.dataset.tab === 'beta') showBetaSection();
       if (tab.dataset.tab === 'stats') loadStatsTab();
-      if (tab.dataset.tab === 'super') showSuperSection(defaultSuperSection());
+      if (isSuperTab) showSuperSection(tab.dataset.tab);
       // нужен только привязанный email — целиком профиль (с аватаркой) не читаем
       if (tab.dataset.tab === 'account' && myTelegramId) db.ref('users/' + myTelegramId + '/attachedEmail').once('value').then((s) => renderAccountTab({ attachedEmail: s.val() }));
       updateDbPeekVisibility();
@@ -2625,67 +2673,55 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
   }
 
-  // ===== суб-нав "Супердоступа" (см. #panel-super в HTML) — переключает,
-  // какая из четырёх бывших отдельных вкладок сейчас видна. Снимает все
-  // живые слушатели при КАЖДОМ переключении (не только при уходе со всей
-  // вкладки "Супердоступ" целиком, см. диспетчер выше) — так, переходя,
-  // скажем, из "Администрация" в "Токены доступа", не тянем впустую живой
-  // db.ref('users').on('value') от первой секции.
-  function defaultSuperSection() {
-    if (canManageRoles()) return 'admins';
-    if (myTokenBackupsAccess) return 'backups';
-    if (canManageDanger()) return 'danger';
-    return 'admins';
-  }
-  function showSuperSection(section) {
+  // ===== вкладки полки «Супердоступ» (см. #panel-super в HTML) — какие части
+  // раздела видны и что подгрузить. «Администрация» показывает сразу две
+  // части (права админов + токены доступа), «Бэкапы» и «Система» — по одной.
+  // Живые слушатели снимаются при КАЖДОМ переключении (не только при уходе с
+  // полки целиком, см. диспетчер выше) — так, переходя, скажем, из
+  // «Администрации» в «Бэкапы», не тянем впустую живой db.ref('users').on('value').
+  const SUPER_TAB_SECTIONS = {
+    'super-admins': ['admins', 'tokens'],
+    'super-backups': ['backups'],
+    'super-danger': ['danger'],
+  };
+  function showSuperSection(tabKey) {
     detachAllDbLiveBranches(dbTreeState);
     detachAdminsLiveListener();
     detachAccessTokensListener();
-    ['admins', 'tokens', 'backups', 'danger'].forEach((s) => {
-      document.getElementById('super-sub-' + s).className = 'btn ' + (s === section ? 'btn-gold' : 'btn-line');
-      document.getElementById('super-section-' + s).style.display = s === section ? 'block' : 'none';
+    const shown = SUPER_TAB_SECTIONS[tabKey] || [];
+    ['admins', 'tokens', 'backups', 'danger'].forEach((name) => {
+      document.getElementById('super-section-' + name).style.display = shown.includes(name) ? 'block' : 'none';
     });
-    if (section === 'admins') { loadAdminsTab(); loadDeviceTrustRequests(); }
-    else if (section === 'tokens') { loadAccessTokensList(); }
-    else if (section === 'backups') { showBackupsSection('list'); loadAllBackupLists(); }
-    else if (section === 'danger') { showDangerSection('zone'); openDangerZone(); }
+    if (shown.includes('admins')) { loadAdminsTab(); loadDeviceTrustRequests(); }
+    if (shown.includes('tokens')) { loadAccessTokensList(); }
+    if (shown.includes('backups')) { showBackupsSection('list'); loadAllBackupLists(); }
+    if (shown.includes('danger')) { showDangerSection('zone'); openDangerZone(); }
     updateDbPeekVisibility();
   }
-  document.getElementById('super-sub-admins').addEventListener('click', () => showSuperSection('admins'));
-  document.getElementById('super-sub-tokens').addEventListener('click', () => showSuperSection('tokens'));
-  document.getElementById('super-sub-backups').addEventListener('click', () => showSuperSection('backups'));
-  document.getElementById('super-sub-danger').addEventListener('click', () => showSuperSection('danger'));
 
   // ===== суб-навы объединённых вкладок (см. CLAUDE.md/PR-описание задачи
   // "merge related tabs") — переключают, какая из двух секций внутри
   // одной .subview видна, и подгружают/освобождают контент этой секции.
   // Активная кнопка — btn-gold, неактивная — btn-line (см. .subnav в CSS).
-  function showLogsSection(section) {
-    const isActions = section === 'actions';
-    document.getElementById('logs-sub-actions').className = 'btn ' + (isActions ? 'btn-gold' : 'btn-line');
-    document.getElementById('logs-sub-errors').className = 'btn ' + (!isActions ? 'btn-gold' : 'btn-line');
-    document.getElementById('logs-section-actions').style.display = isActions ? 'block' : 'none';
-    document.getElementById('logs-section-errors').style.display = isActions ? 'none' : 'block';
-    if (isActions) openAllLogs(); else loadErrorReports();
+  // «Журнал»: действия и присланные ошибки показаны сразу обе части — рядом,
+  // без переключателя (оба списка видны всем, у кого есть доступ к панели).
+  function showLogsSection() {
+    openAllLogs();
+    loadErrorReports();
   }
-  document.getElementById('logs-sub-actions').addEventListener('click', () => showLogsSection('actions'));
-  document.getElementById('logs-sub-errors').addEventListener('click', () => showLogsSection('errors'));
 
-  // "Заявки на бета" — своё право beta; "Заявки кланов" — своё право clans;
-  // каждая секция сама решает, грузить ли данные, а не полагается только на
-  // то, что вкладка/кнопка видна (та же защита "на случай подделки клика
-  // мимо скрытого UI", что и везде в этом файле).
-  function showBetaSection(section) {
-    const isBeta = section === 'beta';
-    document.getElementById('beta-sub-beta').className = 'btn ' + (isBeta ? 'btn-gold' : 'btn-line');
-    document.getElementById('beta-sub-clans').className = 'btn ' + (!isBeta ? 'btn-gold' : 'btn-line');
-    document.getElementById('beta-section-beta').style.display = isBeta ? 'block' : 'none';
-    document.getElementById('beta-section-clans').style.display = isBeta ? 'none' : 'block';
-    if (isBeta) { if (canManageBeta()) loadBetaApplicationsPanel(); }
-    else { if (canManageClans()) loadClansAdminPanel(); }
+  // «Заявки»: заявки на бета-тест и модерация кланов тоже сразу обе. Своё
+  // право у каждой части (beta / clans): часть без права не показывается и не
+  // грузится — та же защита «на случай подделки клика мимо скрытого UI», что и
+  // везде в этом файле.
+  function showBetaSection() {
+    const betaOk = canManageBeta();
+    const clansOk = canManageClans();
+    document.getElementById('beta-section-beta').style.display = betaOk ? 'block' : 'none';
+    document.getElementById('beta-section-clans').style.display = clansOk ? 'block' : 'none';
+    if (betaOk) loadBetaApplicationsPanel();
+    if (clansOk) loadClansAdminPanel();
   }
-  document.getElementById('beta-sub-beta').addEventListener('click', () => showBetaSection('beta'));
-  document.getElementById('beta-sub-clans').addEventListener('click', () => showBetaSection('clans'));
 
   function showBackupsSection(section) {
     const isList = section === 'list';
@@ -3181,29 +3217,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // так что доступ к самому контенту не расширяется этим объединением.
     const betaTab = document.querySelector('.tab[data-tab="beta"]');
     if (betaTab) betaTab.style.display = (canManageBeta() || canManageClans()) ? '' : 'none';
-    const betaSubBetaBtn = document.getElementById('beta-sub-beta');
-    if (betaSubBetaBtn) betaSubBetaBtn.style.display = canManageBeta() ? '' : 'none';
-    const betaSubClansBtn = document.getElementById('beta-sub-clans');
-    if (betaSubClansBtn) betaSubClansBtn.style.display = canManageClans() ? '' : 'none';
-    // "Супердоступ" объединяет 4 бывшие вкладки (см. комментарий у
-    // #panel-super в HTML) — сама вкладка видна, если есть право хотя бы на
-    // ОДНУ из четырёх секций, а видимость каждой кнопки суб-нава внутри
-    // по-прежнему подчиняется своему исходному условию (объединение вкладок
-    // тут не расширяет доступ к самому контенту).
-    const superTab = document.querySelector('.tab[data-tab="super"]');
-    const superAdminsVisible = canManageRoles();
-    const superTokensVisible = canManageRoles();
-    const superBackupsVisible = canManageRoles() || myTokenBackupsAccess;
-    const superDangerVisible = canManageDanger() || canManageRoles();
-    if (superTab) superTab.style.display = (superAdminsVisible || superTokensVisible || superBackupsVisible || superDangerVisible) ? '' : 'none';
-    const superSubAdminsBtn = document.getElementById('super-sub-admins');
-    if (superSubAdminsBtn) superSubAdminsBtn.style.display = superAdminsVisible ? '' : 'none';
-    const superSubTokensBtn = document.getElementById('super-sub-tokens');
-    if (superSubTokensBtn) superSubTokensBtn.style.display = superTokensVisible ? '' : 'none';
-    const superSubBackupsBtn = document.getElementById('super-sub-backups');
-    if (superSubBackupsBtn) superSubBackupsBtn.style.display = superBackupsVisible ? '' : 'none';
-    const superSubDangerBtn = document.getElementById('super-sub-danger');
-    if (superSubDangerBtn) superSubDangerBtn.style.display = superDangerVisible ? '' : 'none';
+    // Полка «Супердоступ» (три вкладки, см. #panel-super в HTML): у каждой
+    // свое условие. «Администрация» (права админов и токены) и всё внутри —
+    // только настоящий Супердоступ; «Бэкапы» — он же или токен с этим правом;
+    // «Система» — право danger либо Супердоступ (а «База данных» внутри неё —
+    // по-прежнему только Супердоступ, см. ниже). Кнопки «Список/Восстановление»
+    // и «Опасная зона/База данных» внутри вкладок живут по своим условиям.
+    const superAdminsTab = document.querySelector('.tab[data-tab="super-admins"]');
+    if (superAdminsTab) superAdminsTab.style.display = canManageRoles() ? '' : 'none';
+    const superBackupsTab = document.querySelector('.tab[data-tab="super-backups"]');
+    if (superBackupsTab) superBackupsTab.style.display = (canManageRoles() || myTokenBackupsAccess) ? '' : 'none';
+    const superDangerTab = document.querySelector('.tab[data-tab="super-danger"]');
+    if (superDangerTab) superDangerTab.style.display = (canManageDanger() || canManageRoles()) ? '' : 'none';
     // "Аккаунт" — привязка email/заявки на вход — не имеет смысла для
     // сессии по токену доступа, там нет ни email, ни реального аккаунта.
     const accountTab = document.querySelector('.tab[data-tab="account"]');
@@ -3299,7 +3324,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const el = document.getElementById('menu-count');
     if (!el) return;
     let n = 0;
-    ['account', 'super'].forEach((name) => {
+    ['account', 'super-admins'].forEach((name) => {
       const d = document.querySelector('.tab[data-tab="' + name + '"] .tab-dot');
       if (d) n += parseInt(d.textContent, 10) || 0;
     });
@@ -3351,7 +3376,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // полминуты пересчитываем цифры на вкладках (списки от времени не зависят)
       requestWatchersTimer = setInterval(() => {
         setTabDot('account', freshLoginRequestKeys().length);
-        if (deviceWatcherRef) setTabDot('super', freshDeviceRequests().length);
+        if (deviceWatcherRef) setTabDot('super-admins', freshDeviceRequests().length);
       }, 30000);
     }
     if (myTelegramId && !loginWatcherRef) {
@@ -3385,7 +3410,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         const newKeys = latestPendingDeviceRequests.map(([key]) => key).filter((key) => !knownPending.has(key));
         if (!firstSnapshot) newKeys.forEach((key) => { requestFirstSeenLive['device:' + key] = Date.now(); });
         knownPending = new Set(latestPendingDeviceRequests.map(([key]) => key));
-        setTabDot('super', freshDeviceRequests().length);
+        setTabDot('super-admins', freshDeviceRequests().length);
         renderDeviceTrustRequests(latestPendingDeviceRequests);
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
@@ -4725,30 +4750,34 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       });
   }
 
-  // Ровно один переключатель видимости пик-панели, вызывается после
-  // каждого события, способного изменить, нужна ли она прямо сейчас:
-  // вход в приложение (applyRoleUI), переключение вкладок верхнего уровня,
-  // переключение "Опасная зона"/"База данных" внутри "Система"
-  // (showDangerSection). Условие простое: только superadmin, и не прямо
-  // сейчас смотрим редактируемое дерево — иначе получится одно и то же
-  // дерево дважды на экране, а редактируемая версия и так занимает всю
-  // правую колонку.
+  // Один переключатель допустимости пик-панели, вызывается после каждого
+  // события, способного изменить, нужна ли она прямо сейчас: вход в
+  // приложение (applyRoleUI), переключение вкладок, переключение «Опасная
+  // зона»/«База данных» внутри «Системы» (showDangerSection). Условие простое:
+  // только superadmin и не прямо сейчас смотрим редактируемое дерево — иначе
+  // получится одно и то же дерево дважды. Кнопка «База данных» в заголовке
+  // раздела видна, пока это допустимо (body.db-peek-allowed); сама панель
+  // открывается по кнопке и, пока закрыта, ничего не читает и слушателей не
+  // держит.
   function isViewingDbEditor() {
-    const superTab = document.querySelector('.tab[data-tab="super"]');
+    const superTab = document.querySelector('.tab[data-tab="super-danger"]');
     if (!superTab || !superTab.classList.contains('active')) return false;
     const dangerSection = document.getElementById('super-section-danger');
     if (!dangerSection || dangerSection.style.display === 'none') return false;
     const dbBtn = document.getElementById('danger-sub-db');
     return !!dbBtn && dbBtn.classList.contains('btn-gold');
   }
-  function updateDbPeekVisibility() {
+  function dbPeekAllowed() {
+    return canManageRoles() && !isViewingDbEditor();
+  }
+  function setDbPeekOpen(open) {
     const panel = document.getElementById('db-peek-panel');
-    const screenApp = document.getElementById('screen-app');
-    if (!panel || !screenApp) return;
-    const show = canManageRoles() && !isViewingDbEditor();
-    panel.classList.toggle('show', show);
-    screenApp.classList.toggle('has-db-peek', show);
-    if (show) {
+    const btn = document.getElementById('db-peek-btn');
+    if (!panel) return;
+    open = !!open && dbPeekAllowed();
+    panel.classList.toggle('open', open);
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
       if (!dbPeekState.rootKeys) {
         loadDbPeekTree();
       } else {
@@ -4761,6 +4790,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       detachAllDbLiveBranches(dbPeekState);
     }
   }
+  function updateDbPeekVisibility() {
+    const panel = document.getElementById('db-peek-panel');
+    if (!panel) return;
+    const allowed = dbPeekAllowed();
+    document.body.classList.toggle('db-peek-allowed', allowed);
+    // допустимость пропала (вышли из Супердоступа / открыли редактируемое
+    // дерево) — закрываем; иначе оставляем как есть
+    if (!allowed) setDbPeekOpen(false);
+  }
+  document.getElementById('db-peek-btn').addEventListener('click', () => setDbPeekOpen(!document.getElementById('db-peek-panel').classList.contains('open')));
+  document.getElementById('db-peek-close').addEventListener('click', () => setDbPeekOpen(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setDbPeekOpen(false); });
 
   // ===== "Администрация" — сводная таблица прав всех модераторов/админов
   // одним экраном (вместо захода в карточку каждого через поиск в

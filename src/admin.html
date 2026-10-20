@@ -24,15 +24,22 @@
      --gold/--live имена переменных оставлены как есть (их много где
      используют), поменялись только значения и то, как их применяют. */
   :root{
-    --bg: #0B0B0D;
-    --panel: #17171B;
-    --panel-2: #1F1F24;
-    --line: #2A2A30;
-    --text: #F2F1EE;
-    --muted: #8A8A92;
-    --live: #E5493D;
-    --gold: #4C82F7;
-    --radius: 5px;
+    --bg: #0E1013;
+    --side: #13161A;
+    --panel: #13161A;
+    --panel-2: #1A1F26;
+    --line: #262C34;
+    --text: #E8EAED;
+    --muted: #9AA3AF;
+    --live: #FF6B5E;
+    --gold: #5B9DFF;
+    /* текст на залитой акцентной/красной кнопке — тёмный, белый на этих
+       светлых цветах не проходит по контрасту */
+    --on-gold: #06101F;
+    --on-live: #1A0A08;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --side-w: 232px;
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; min-height:100%; -webkit-font-smoothing:antialiased; }
@@ -40,22 +47,67 @@
   .wrap{ width:100%; max-width:460px; padding:0 16px; }
 
   .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
-  .brand{ font-size:15px; font-weight:700; }
+  .brand{ font-size:14px; font-weight:700; line-height:22px; }
+  .brand::before{ content:''; display:inline-block; width:22px; height:22px; border-radius:7px; background:var(--gold); vertical-align:top; margin-right:9px; }
   .brand span{ color:var(--live); }
-  .me{ font-size:11px; color:var(--muted); text-align:right; line-height:1.4; }
+  .brand .brand-version{ color:var(--muted); }
+  .me{ font-size:12px; color:var(--muted); text-align:right; line-height:1.5; }
   .me b{ color:var(--text); font-weight:600; }
 
-  /* flex-wrap вместо overflow-x:auto — на узких экранах вкладки не всегда
-     помещаются в одну строку (особенно с учётом того, что часть из них
-     скрыта в зависимости от прав, а видимый набор меняется), и крутить
-     вбок в поисках нужной — раздражает и отвлекает. Перенос на вторую
-     строку сразу показывает все доступные вкладки целиком. */
-  .tabs{ display:flex; flex-wrap:wrap; gap:4px 2px; border-bottom:1px solid var(--line); margin-bottom:16px; }
-  .tab{ padding:8px 9px; font-size:12px; font-weight:600; cursor:pointer; color:var(--muted); user-select:none; border-bottom:2px solid transparent; white-space:nowrap; }
-  .tab.active{ color:var(--text); border-bottom-color:var(--gold); }
-  /* красная точка-счётчик на вкладке: новая заявка на вход/устройство ждёт
+  /* ===== Меню по "полочкам" (вариант 1 «Полочки»): разделы собраны в
+     группы — Игроки / Контент / Наблюдение / Инструменты / Доступ. На
+     телефоне это выезжающее слева меню (кнопка ≡ в шапке), на компьютере —
+     постоянная колонка слева, см. @media ниже. Сами .tab и их порядок для
+     кода значения не имеют: всё держится на data-tab. Заголовки групп —
+     НЕ .tab, чтобы диспетчер вкладок их не трогал; пустую группу (все её
+     разделы скрыты правами) прячет syncTabGroups(). ===== */
+  .tabs{ display:flex; flex-direction:column; gap:2px; }
+  .tab-grp{ font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); padding:16px 10px 6px; }
+  .tab-grp:first-child{ padding-top:4px; }
+  .tab-grp.empty{ display:none; }
+  .tab{ display:flex; align-items:center; gap:10px; min-height:44px; padding:0 10px; border-radius:var(--radius); font-size:14px; font-weight:500; cursor:pointer; color:var(--muted); user-select:none; white-space:nowrap; }
+  .tab:hover{ background:var(--panel-2); color:var(--text); }
+  .tab.active{ background:var(--line); color:var(--text); }
+  .tab-ic{ width:18px; height:18px; flex:none; }
+  .tab.active .tab-ic{ color:var(--gold); }
+  /* красный счётчик на вкладке: новая заявка на вход/устройство ждёт
      ответа (см. startLiveRequestWatchers) */
-  .tab-dot{ display:inline-block; min-width:16px; height:16px; line-height:16px; padding:0 4px; margin-left:5px; border-radius:100px; background:var(--live); color:#fff; font-size:10px; font-weight:700; text-align:center; vertical-align:1px; }
+  .tab-dot{ margin-left:auto; min-width:20px; height:20px; line-height:20px; padding:0 6px; border-radius:10px; background:var(--live); color:var(--on-live); font-size:11px; font-weight:700; text-align:center; }
+
+  /* кнопка ≡ и красная цифра на ней — только на телефоне (см. @media ниже) */
+  .menu-btn{ display:none; position:relative; width:44px; height:44px; flex:none; margin-left:-8px; border:0; border-radius:10px; background:transparent; color:var(--text); align-items:center; justify-content:center; cursor:pointer; }
+  .menu-btn svg{ width:22px; height:22px; }
+  .menu-count{ position:absolute; top:3px; right:1px; min-width:18px; height:18px; line-height:18px; padding:0 5px; border-radius:9px; background:var(--live); color:var(--on-live); font-size:11px; font-weight:700; text-align:center; display:none; }
+  .menu-backdrop{ display:none; }
+
+  /* заголовок раздела над его содержимым (текст берётся из data-title /
+     data-sub у активной .tab, см. syncPageHead) */
+  .page-head{ margin-bottom:18px; }
+  .page-head h1{ font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+  .page-sub{ color:var(--muted); font-size:13px; margin-top:4px; }
+
+  /* на телефоне, внутри приложения (а не на экранах входа/отказа) */
+  @media (max-width: 899px){
+    body.in-app .wrap{ max-width:560px; }
+    body.in-app .topbar{ position:sticky; top:0; z-index:60; height:56px; margin:0 -16px 16px; padding:0 16px; background:var(--bg); border-bottom:1px solid var(--line); justify-content:flex-start; gap:6px; }
+    body.in-app .menu-btn{ display:flex; }
+    body.in-app .menu-count.show{ display:block; }
+    body.in-app .tabs{
+      position:fixed; z-index:50; top:56px; bottom:0; left:0; width:min(300px, 84vw);
+      padding:16px 10px 110px; overflow-y:auto; background:var(--side); border-right:1px solid var(--line);
+      transform:translateX(-100%); visibility:hidden; transition:transform .2s ease, visibility 0s linear .2s;
+    }
+    body.in-app.menu-open .tabs{ transform:none; visibility:visible; transition:transform .2s ease; }
+    body.in-app .menu-backdrop{ display:block; position:fixed; z-index:40; inset:56px 0 0 0; background:rgba(0,0,0,0.55); opacity:0; pointer-events:none; transition:opacity .2s ease; }
+    body.in-app.menu-open .menu-backdrop{ opacity:1; pointer-events:auto; }
+    body.in-app.menu-open{ overflow:hidden; }
+    .admin-result .r-head{ flex-wrap:wrap; }
+    .admin-result #r-status-badge{ flex-basis:100%; }
+    .admin-result #r-status-badge:empty{ display:none; }
+    /* имя и «Выйти» живут внизу выезжающего меню */
+    body.in-app .me{ position:fixed; z-index:61; left:0; bottom:0; width:min(300px, 84vw); padding:12px 18px 16px; text-align:left; background:var(--side); border-top:1px solid var(--line); border-right:1px solid var(--line); transform:translateX(-100%); visibility:hidden; transition:transform .2s ease, visibility 0s linear .2s; }
+    body.in-app.menu-open .me{ transform:none; visibility:visible; transition:transform .2s ease; }
+  }
 
   /* "Терминал" — командная строка внутри панели */
   .term-wrap{ background:#08080a; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
@@ -72,7 +124,7 @@
   .term-prompt{ color:var(--gold); font:700 13px/1 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; white-space:nowrap; }
   /* 16px — иначе iOS/Telegram приближают страницу при фокусе на поле */
   #term-input{ flex:1; min-width:0; background:transparent; border:none; outline:none; color:var(--text); font:16px/1.4 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
-  .term-send{ background:var(--gold); color:#fff; border:none; border-radius:var(--radius); width:34px; height:30px; font-size:16px; font-weight:700; cursor:pointer; align-self:flex-end; }
+  .term-send{ background:var(--gold); color:var(--on-gold); border:none; border-radius:var(--radius); width:34px; height:30px; font-size:16px; font-weight:700; cursor:pointer; align-self:flex-end; }
   #term-input{ resize:none; overflow-y:auto; max-height:140px; }
   .term-input-row{ align-items:flex-end; }
   .term-prompt{ padding-bottom:6px; }
@@ -89,14 +141,14 @@
   .live-stage{ position:relative; }
   #live-out{ height:min(62vh, 560px); overflow-y:auto; padding:10px 12px; font:12.5px/1.55 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; color:var(--text); white-space:pre-wrap; word-break:break-word; -webkit-overflow-scrolling:touch; }
   .live-line{ animation:liveIn .25s ease-out; }
-  @keyframes liveIn{ from{ background:rgba(76,130,247,.22); } to{ background:transparent; } }
+  @keyframes liveIn{ from{ background:rgba(91,157,255,.22); } to{ background:transparent; } }
   .live-line.term-warn{ color:#E8B04B; } .live-line.term-err{ color:var(--live); } .live-line.term-ok{ color:#3FB67E; } .live-line.term-dim{ color:var(--muted); }
   #live-out[data-filter="actions"] .live-line:not([data-kind="actions"]),
   #live-out[data-filter="requests"] .live-line:not([data-kind="requests"]),
   #live-out[data-filter="errors"] .live-line:not([data-kind="errors"]),
   #live-out[data-filter="players"] .live-line:not([data-kind="players"]),
   #live-out[data-filter="matches"] .live-line:not([data-kind="matches"]){ display:none; }
-  #live-jump{ position:absolute; left:50%; bottom:10px; transform:translateX(-50%); background:var(--gold); color:#fff; border:none; border-radius:100px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,.5); }
+  #live-jump{ position:absolute; left:50%; bottom:10px; transform:translateX(-50%); background:var(--gold); color:var(--on-gold); border:none; border-radius:100px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,.5); }
 
   .screen{ display:none; }
   .screen.active{ display:block; }
@@ -106,28 +158,35 @@
   .subview{ display:none; }
   .subview.active{ display:block; }
 
-  /* ===== десктоп: тот же брейкпоинт и та же логика, что и в игре
-     (index.html) — реальные мобильные экраны и Telegram WebView никогда не
-     достигают такой ширины, так что мобильная раскладка ниже не
-     затрагивается вообще. Вкладки .tabs становятся вертикальным меню
-     слева, .subview (их всего одна видна за раз через .active) занимает
-     правую колонку той же CSS-грид — оборачивать все .subview в общий
-     контейнер не нужно, грид расставляет прямых детей #screen-app сам. */
+  /* ===== десктоп: тот же брейкпоинт, что и в игре (index.html) — реальные
+     мобильные экраны и Telegram WebView никогда не достигают такой ширины,
+     так что мобильная раскладка выше не затрагивается вообще. Внутри
+     приложения (body.in-app, его ставит showScreen) слева — постоянная
+     колонка: шапка с названием и версией, меню по группам, внизу «кто
+     вошёл». Всё трое — это те же элементы, что и на телефоне, просто
+     прибитые к левому краю (position:fixed), поэтому разметка и код
+     вкладок одни на оба размера. Справа — заголовок раздела и сам раздел
+     (.subview, одна видна за раз через .active); третья колонка нужна
+     только пик-панели базы данных. */
   @media (min-width: 900px){
     .wrap{ max-width:1100px; }
-    #screen-app.active{ display:grid; grid-template-columns:220px 1fr; align-items:start; gap:28px; }
-    .tabs{ flex-direction:column; flex-wrap:nowrap; border-bottom:none; border-right:1px solid var(--line); padding-right:14px; margin-bottom:0; position:sticky; top:16px; }
-    .tab{ border-bottom:none; border-left:2px solid transparent; border-radius:0 var(--radius) var(--radius) 0; padding:10px 12px; }
-    .tab.active{ border-bottom-color:transparent; border-left-color:var(--gold); background:var(--panel); }
-    .subview{ grid-column:2; }
+    body.in-app{ display:block; padding:0; }
+    body.in-app::before{ content:''; position:fixed; z-index:0; top:0; bottom:0; left:0; width:var(--side-w); background:var(--side); border-right:1px solid var(--line); }
+    body.in-app .wrap{ max-width:none; margin-left:var(--side-w); padding:0; }
+    body.in-app .topbar{ position:fixed; z-index:5; top:0; left:0; width:var(--side-w); margin:0; padding:20px 18px 8px; display:block; }
+    body.in-app .tabs{ position:fixed; z-index:5; top:80px; bottom:100px; left:0; width:var(--side-w); padding:8px 10px; overflow-y:auto; }
+    body.in-app .tab{ min-height:36px; font-size:13.5px; }
+    body.in-app .me{ position:fixed; z-index:5; left:0; bottom:0; width:var(--side-w); padding:12px 18px 16px; text-align:left; border-top:1px solid var(--line); }
+    #screen-app.active{ display:grid; grid-template-columns:minmax(0, 1fr); align-items:start; column-gap:28px; max-width:1180px; padding:28px 36px 56px; }
+    .page-head, .subview{ grid-column:1; }
     /* третья колонка появляется только когда пик-панель базы данных
        реально нужна (superadmin, не редактируем базу целиком прямо сейчас)
        — см. updateDbPeekVisibility() в JS, которая ставит оба класса разом */
-    #screen-app.active.has-db-peek{ grid-template-columns:220px 1fr 280px; }
+    #screen-app.active.has-db-peek{ grid-template-columns:minmax(0, 1fr) 280px; max-width:1500px; }
     .db-peek-panel.show{
-      display:block; grid-column:3; grid-row:1; position:sticky; top:16px;
+      display:block; grid-column:2; grid-row:1 / span 2; position:sticky; top:16px;
       max-height:calc(100vh - 32px); overflow-y:auto;
-      background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px;
+      background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); padding:14px;
     }
   }
 
@@ -136,22 +195,22 @@
   .center-msg .small{ color:var(--muted); font-size:13.5px; line-height:1.5; max-width:280px; }
   .center-msg.denied .big{ color:var(--live); }
 
-  .section-label{ font-size:11px; letter-spacing:0.3px; text-transform:uppercase; color:var(--muted); margin:18px 0 10px; }
+  .section-label{ font-size:11.5px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); margin:20px 0 10px; }
   .section-label:first-child{ margin-top:0; }
 
   /* карточка-раздел — вместо простой линии-разделителя между блоками
      настроек: явная рамка сразу показывает, где кончается один раздел
      и начинается следующий, вместо сплошной ленты одинаковых полей */
-  .admin-card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
+  .admin-card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); padding:16px 18px; margin-bottom:14px; }
   .admin-card .section-label{ margin-top:0; }
   .admin-card.live{ border-color:var(--live); }
 
   .brand-version{ font-size:10px; font-weight:500; color:var(--muted); margin-left:6px; vertical-align:middle; }
 
   .admin-search{ display:flex; gap:8px; margin-bottom:14px; }
-  .admin-search input{ flex:1; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; color:var(--text); font-size:14px; min-width:0; }
+  .admin-search input{ flex:1; height:42px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:0 14px; color:var(--text); font-size:14px; min-width:0; }
   .admin-search input::placeholder{ color:var(--muted); }
-  .admin-search button{ background:var(--gold); color:#fff; border:none; border-radius:var(--radius); padding:0 16px; font-size:13px; font-weight:600; cursor:pointer; }
+  .admin-search button{ background:var(--gold); color:var(--on-gold); border:none; border-radius:var(--radius); padding:0 20px; font-size:13.5px; font-weight:600; cursor:pointer; }
 
   button{ font-family:inherit; }
 
@@ -221,34 +280,37 @@
   .u-role-badge{ font-size:10px; letter-spacing:0.3px; text-transform:uppercase; padding:2px 6px; border-radius:var(--radius); flex-shrink:0; }
   .u-role-badge.role-user{ background:var(--panel-2); color:var(--muted); }
   .u-role-badge.role-moderator{ background:rgba(108,124,255,0.15); color:#6C7CFF; }
-  .u-role-badge.role-admin{ background:rgba(229,73,61,0.15); color:var(--live); }
-  .u-role-badge.role-superadmin{ background:rgba(76,130,247,0.15); color:var(--gold); }
+  .u-role-badge.role-admin{ background:rgba(255,107,94,0.15); color:var(--live); }
+  .u-role-badge.role-superadmin{ background:rgba(91,157,255,0.15); color:var(--gold); }
 
   .badge{ display:inline-block; font-size:10px; letter-spacing:0.3px; text-transform:uppercase; padding:2px 6px; border-radius:var(--radius); }
-  .badge.live{ background:rgba(229,73,61,0.15); color:var(--live); }
+  .badge.live{ background:rgba(255,107,94,0.15); color:var(--live); }
 
   .badge-pill{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:5px 10px; border-radius:var(--radius); background:var(--panel-2); border:1px solid var(--line); }
   .badge-pill .emoji{ font-size:15px; line-height:1; }
-  .badge-pill.awarded{ border-color: var(--gold); background: rgba(76,130,247,0.1); }
+  .badge-pill.awarded{ border-color: var(--gold); background: rgba(91,157,255,0.1); }
   .badge-pill.pick{ cursor:pointer; background:var(--panel-2); }
-  .badge-pill.pick.on{ border-color: var(--gold); background: rgba(76,130,247,0.15); color: var(--gold); }
+  .badge-pill.pick.on{ border-color: var(--gold); background: rgba(91,157,255,0.15); color: var(--gold); }
   .badge-pill .remove{ opacity:0.6; font-weight:700; }
 
-  .admin-result{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px; display:none; margin-top:4px; }
-  .admin-result .r-avatar{ width:48px; height:48px; border-radius:50%; background:var(--panel-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; margin-bottom:12px; background-size:cover; background-position:center; }
-  .admin-result .r-name{ font-size:15px; font-weight:700; margin-bottom:2px; }
-  .admin-result .r-id{ font-size:12.5px; color:var(--muted); margin-bottom:14px; }
-  .r-toggle-row{ display:flex; flex-direction:column; align-items:stretch; gap:10px; padding-top:12px; border-top:1px solid var(--line); }
-  .r-toggle-label{ font-size:13px; font-weight:600; }
+  .admin-result{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); padding:0; display:none; margin-top:4px; overflow:hidden; }
+  .admin-result .r-head{ display:flex; align-items:center; gap:14px; padding:18px 20px; }
+  .admin-result .r-head-info{ flex:1; min-width:0; }
+  .admin-result .r-avatar{ width:52px; height:52px; flex:none; border-radius:50%; background:var(--panel-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; background-size:cover; background-position:center; }
+  .admin-result .r-name{ font-size:17px; font-weight:600; margin-bottom:2px; overflow-wrap:anywhere; }
+  .admin-result .r-id{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+  .r-toggle-row{ display:flex; flex-direction:column; align-items:stretch; gap:10px; padding:14px 20px; border-top:1px solid var(--line); }
+  .r-toggle-label{ font-size:13.5px; font-weight:600; }
+  .admin-result > #btn-open-player-history{ margin:14px 20px 20px !important; width:calc(100% - 40px) !important; }
   .token-reveal{ font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size:13px; background:var(--panel-2); border:1px solid var(--gold); border-radius:var(--radius); padding:10px; word-break:break-all; user-select:all; margin:8px 0; }
 
   .stat-field{ font-size:11px; color:var(--muted); }
   .stat-field input{ width:100%; box-sizing:border-box; margin-top:4px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px; color:var(--text); }
 
   .btn{ border:none; border-radius:var(--radius); padding:10px; font-size:13px; font-weight:600; cursor:pointer; }
-  .btn-gold{ background:var(--gold); color:#fff; }
+  .btn-gold{ background:var(--gold); color:var(--on-gold); }
   .btn-line{ background:var(--panel-2); border:1px solid var(--line); color:var(--text); }
-  .btn-live{ background:var(--live); color:#fff; }
+  .btn-live{ background:var(--live); color:var(--on-live); }
 
   .log-row{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:11px 13px; margin-bottom:7px; }
   .log-row .l-title{ font-size:13px; font-weight:600; margin-bottom:3px; }
@@ -279,7 +341,7 @@
   .toggle-row{ display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--line); cursor:pointer; }
   .toggle-row:last-child{ border-bottom:none; }
   .toggle-check{ width:22px; height:22px; border-radius:50%; border:1.5px solid var(--line); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; color:transparent; }
-  .toggle-row.on .toggle-check{ background:var(--gold); border-color:var(--gold); color:#fff; }
+  .toggle-row.on .toggle-check{ background:var(--gold); border-color:var(--gold); color:var(--on-gold); }
   .toggle-row.on .toggle-check::after{ content:'✓'; }
   .toggle-label{ font-size:14px; }
 
@@ -311,7 +373,7 @@
   .bk-row input[type=checkbox], .bk-all input{ width:18px; height:18px; flex:none; accent-color:var(--gold); cursor:pointer; }
 
   /* ===== "Бэкапы"/"Восстановление" — тоже портировано из battle-data-admin-bot ===== */
-  .warn-banner{ background:rgba(229,73,61,.12); border:1px solid var(--live); border-radius:var(--radius); padding:12px; font-size:12px; line-height:1.5; margin-bottom:16px; }
+  .warn-banner{ background:rgba(255,107,94,.12); border:1px solid var(--live); border-radius:var(--radius); padding:12px; font-size:12px; line-height:1.5; margin-bottom:16px; }
   .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
   .row > *{ flex:1 1 auto; }
   .status-line{ font-size:12px; margin-top:10px; min-height:16px; }
@@ -331,13 +393,19 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). Во вкладке «Бэкапы» можно отметить несколько снимков и удалить их разом; снимки старше 10 дней удаляются сами, три самых свежих остаются всегда. До этого: версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.17</span></div>
+    <button type="button" class="menu-btn" id="menu-btn" aria-label="Меню" aria-expanded="false" aria-controls="app-tabs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+      <span class="menu-count" id="menu-count"></span>
+    </button>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.18: новый вид — меню слева по группам (Игроки, Контент, Наблюдение, Инструменты, Доступ), на телефоне оно выезжает по кнопке ≡; заголовок над каждым разделом; единый стиль карточек и кнопок. До этого: пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.18</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
       <a href="#" id="me-logout-link" style="display:none; color:var(--muted); text-decoration:underline;">Выйти</a>
     </div>
   </div>
+
+  <div class="menu-backdrop" id="menu-backdrop"></div>
 
   <div class="screen active" id="screen-loading">
     <div class="center-msg">
@@ -455,38 +523,47 @@
 
   <div class="screen" id="screen-app">
 
-    <div class="tabs">
-      <div class="tab active" data-tab="panel">Панель</div>
-      <div class="tab" data-tab="account">Аккаунт</div>
-      <div class="tab" data-tab="event">Ивент</div>
-      <!-- "Журнал" объединяет журнал действий ("Действия") и присланные
-           игроками ошибки ("Ошибки клиента") — суб-нав внутри .subview,
-           см. showLogsSection(). Обе части видны всем, у кого вообще есть
-           доступ к панели — так было и раньше у каждой по отдельности. -->
-      <div class="tab" data-tab="logs">Журнал</div>
+    <!-- Меню по «полочкам»: на телефоне выезжает слева (кнопка ≡ в шапке), на
+         компьютере — колонка слева. Заголовки групп (.tab-grp) — не .tab,
+         диспетчер вкладок их не видит; у пустой группы (все разделы скрыты
+         правами) их прячет syncTabGroups() в конце applyRoleUI(). -->
+    <div class="tabs" id="app-tabs">
+      <div class="tab-grp">Игроки</div>
+      <div class="tab active" data-tab="panel" data-title="Панель" data-sub="Найдите игрока и управляйте его доступом"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18 14.4c1.8.8 3 2.7 3 5.6"></path></svg>Панель</div>
       <!-- "Заявки" объединяет модерацию кланов ("Заявки кланов", право
            clans) и заявки на закрытый бета-тест ("Заявки на бета", право
            beta) — суб-нав внутри .subview, см. showBetaSection(). Сама
            вкладка видна, если есть хоть одно из двух прав (объединение);
            видимость кнопок суб-нава и загрузка контента — по своему
            условию у каждой части, см. applyRoleUI. -->
-      <div class="tab" data-tab="beta">Заявки</div>
+      <div class="tab" data-tab="beta" data-title="Заявки" data-sub="Закрытый бета-тест и кланы"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"></path><path d="M3 13h5l1 3h6l1-3h5"></path></svg>Заявки</div>
+      <div class="tab-grp">Контент</div>
+      <div class="tab" data-tab="event" data-title="Ивент" data-sub="Событие в игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>Ивент</div>
+      <div class="tab-grp">Наблюдение</div>
+      <!-- "Журнал" объединяет журнал действий ("Действия") и присланные
+           игроками ошибки ("Ошибки клиента") — суб-нав внутри .subview,
+           см. showLogsSection(). Обе части видны всем, у кого вообще есть
+           доступ к панели — так было и раньше у каждой по отдельности. -->
+      <div class="tab" data-tab="logs" data-title="Журнал" data-sub="Что делали админы и какие ошибки прислали игроки"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Журнал</div>
+      <!-- два вида терминала (код в конце скрипта):
+           "Эфир" — прямая трансляция событий, только чтение, видна всем, у кого есть доступ к панели;
+           "Терминал" — командная строка (как cli/battle-admin.js + заявки), только Супердоступ
+           (скрывается в applyRoleUI, а termOpen/termSubmit перепроверяют роль сами). -->
+      <div class="tab" data-tab="live" id="tab-live" data-title="Эфир" data-sub="Что происходит прямо сейчас"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>Эфир</div>
       <!-- видна всем, у кого вообще есть доступ к панели — отчёт "только
            для чтения" (см. loadStatsTab), не отдельное переключаемое право -->
-      <div class="tab" data-tab="stats" id="tab-stats">Статистика</div>
+      <div class="tab" data-tab="stats" id="tab-stats" data-title="Статистика" data-sub="Сводка по игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Статистика</div>
+      <div class="tab-grp">Инструменты</div>
+      <div class="tab" data-tab="terminal" id="tab-terminal" data-title="Терминал" data-sub="Команды для Супердоступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 10l3 2-3 2M13 15h4"></path></svg>Терминал</div>
       <!-- ссылки на скачивание Desktop/Android/веб-версии панели + инструкция
            по установке под Linux — было засунуто внутрь бывшей вкладки
            "Ассистент" (см. её полное удаление в истории коммитов), из-за
            чего видно было только Супердоступу — по смыслу нужно любому, у
            кого вообще есть доступ в панель, поэтому вынесено в отдельную
            вкладку без ограничения по роли. -->
-      <div class="tab" data-tab="apps">Приложения</div>
-      <!-- два вида терминала (код в конце скрипта):
-           "Эфир" — прямая трансляция событий, только чтение, видна всем, у кого есть доступ к панели;
-           "Терминал" — командная строка (как cli/battle-admin.js + заявки), только Супердоступ
-           (скрывается в applyRoleUI, а termOpen/termSubmit перепроверяют роль сами). -->
-      <div class="tab" data-tab="live" id="tab-live">Эфир</div>
-      <div class="tab" data-tab="terminal" id="tab-terminal">Терминал</div>
+      <div class="tab" data-tab="apps" data-title="Приложения" data-sub="Панель на компьютер и телефон"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"></path></svg>Приложения</div>
+      <div class="tab-grp">Доступ</div>
+      <div class="tab" data-tab="account" data-title="Аккаунт" data-sub="Вход с других устройств и ваши заявки на вход"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path></svg>Аккаунт</div>
       <!-- ===== "Супердоступ" объединяет четыре бывшие отдельные вкладки —
            "Администрация" (права + запросы на устройства), "Токены
            доступа" (accessTokens), "Бэкапы" и "Система" (опасная зона +
@@ -500,7 +577,14 @@
            superadmin с этим правом, а сама вкладка "Супердоступ" целиком
            видна, если есть хоть одно из четырёх: canManageRoles() (всё,
            кроме опасной зоны) или canManageDanger(). -->
-      <div class="tab" data-tab="super" id="tab-super">Супердоступ</div>
+      <div class="tab" data-tab="super" id="tab-super" data-title="Супердоступ" data-sub="Права, токены доступа, бэкапы и система"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Супердоступ</div>
+    </div>
+
+    <!-- заголовок раздела: текст берётся из data-title/data-sub активной
+         вкладки (см. syncPageHead) -->
+    <div class="page-head" id="page-head">
+      <h1 id="page-title">Панель</h1>
+      <div class="page-sub" id="page-sub">Найдите игрока и управляйте его доступом</div>
     </div>
 
     <!-- ===== "Пик" базы данных — только на десктопе, только superadmin.
@@ -539,12 +623,16 @@
       <div class="admin-empty" id="admin-empty">Введи ID игрока или разверни список, чтобы посмотреть/изменить доступ</div>
 
       <div class="admin-result" id="admin-result">
-        <div class="r-avatar" id="r-avatar"></div>
-        <div class="r-name" id="r-name">—</div>
-        <div class="r-id" id="r-id">—</div>
-        <div class="r-id" style="margin-bottom:12px;">Очков: <span id="r-points-val">0</span></div>
-        <div class="r-id" id="r-tickets-line" style="margin-bottom:12px; display:none;">Билеты-множители: <span id="r-tickets-val"></span></div>
-        <div id="r-status-badge" style="margin-bottom:12px;"></div>
+        <div class="r-head">
+          <div class="r-avatar" id="r-avatar"></div>
+          <div class="r-head-info">
+            <div class="r-name" id="r-name">—</div>
+            <div class="r-id" id="r-id">—</div>
+            <div class="r-id">Очков: <span id="r-points-val">0</span></div>
+            <div class="r-id" id="r-tickets-line" style="display:none;">Билеты-множители: <span id="r-tickets-val"></span></div>
+          </div>
+          <div id="r-status-badge"></div>
+        </div>
 
         <div class="r-toggle-row">
           <div class="r-toggle-label">Уровень доступа</div>
@@ -703,21 +791,21 @@
             <div style="font-size:13px; font-weight:600;">Акцент 1</div>
             <div style="font-size:11.5px; color:var(--muted);">Кнопки, ошибки</div>
           </div>
-          <input type="color" id="theme-color-live" value="#E5493D" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
+          <input type="color" id="theme-color-live" value="#FF6B5E" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
         </div>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
           <div>
             <div style="font-size:13px; font-weight:600;">Акцент 2</div>
             <div style="font-size:11.5px; color:var(--muted);">Активная вкладка, важные кнопки</div>
           </div>
-          <input type="color" id="theme-color-gold" value="#4C82F7" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
+          <input type="color" id="theme-color-gold" value="#5B9DFF" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
         </div>
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
           <div>
             <div style="font-size:13px; font-weight:600;">Фон</div>
             <div style="font-size:11.5px; color:var(--muted);">Общий тон панели</div>
           </div>
-          <input type="color" id="theme-color-bg" value="#0B0B0D" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
+          <input type="color" id="theme-color-bg" value="#0E1013" style="width:44px; height:34px; border:1px solid var(--line); border-radius:8px; background:none; padding:0; cursor:pointer;">
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-line" id="btn-theme-reset" style="flex:1;">Сбросить</button>
@@ -1476,7 +1564,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // Применяется САМЫМ ПЕРВЫМ, до Firebase/Telegram-инициализации ниже —
   // иначе на экранах входа/проверки доступа мелькали бы цвета по
   // умолчанию до применения сохранённой темы.
-  const PANEL_THEME_DEFAULTS = { live: '#E5493D', gold: '#4C82F7', bg: '#0B0B0D' };
+  const PANEL_THEME_DEFAULTS = { live: '#FF6B5E', gold: '#5B9DFF', bg: '#0E1013' };
 
   function clamp01_100(v) { return Math.max(0, Math.min(100, v)); }
   function hexToHsl(hex) {
@@ -1513,18 +1601,34 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // По одному фону считает всё остальное (панели/линии/текст) — так
   // светлую или тёмную тему можно выбрать одним цветом, без отдельного
   // переключателя "тёмная/светлая база", как в index.html.
+  // Текст на залитой акцентной кнопке: тёмный на светлом цвете, белый на тёмном
+  // (иначе подпись на ярко-голубой или красной кнопке не читается).
+  function readableOn(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    if (!m) return '#FFFFFF';
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const L = 0.2126 * lin(parseInt(m[1], 16)) + 0.7152 * lin(parseInt(m[2], 16)) + 0.0722 * lin(parseInt(m[3], 16));
+    return L > 0.3 ? '#06101F' : '#FFFFFF';
+  }
   function derivePanelPalette(theme) {
     const [h, s, l] = hexToHsl(theme.bg);
-    const dir = l < 50 ? 1 : -1;
+    const dark = l < 50;
+    // на тёмном фоне карточки лишь чуть светлее фона (как в варианте «Полочки»),
+    // на светлом — темнее, с более заметным шагом
+    const [d1, d2, d3] = dark ? [2, 6, 11] : [-6, -12, -20];
+    const panel = hslToHex(h, s, clamp01_100(l + d1));
     return {
       bg: theme.bg,
-      panel: hslToHex(h, s, clamp01_100(l + dir * 6)),
-      'panel-2': hslToHex(h, s, clamp01_100(l + dir * 12)),
-      line: hslToHex(h, s, clamp01_100(l + dir * 20)),
-      text: l < 50 ? '#F2F1EE' : '#15151A',
-      muted: l < 50 ? '#8A8A92' : '#6B6B72',
+      side: panel,
+      panel,
+      'panel-2': hslToHex(h, s, clamp01_100(l + d2)),
+      line: hslToHex(h, s, clamp01_100(l + d3)),
+      text: dark ? '#E8EAED' : '#15151A',
+      muted: dark ? '#9AA3AF' : '#5B6270',
       live: theme.live,
       gold: theme.gold,
+      'on-live': readableOn(theme.live),
+      'on-gold': readableOn(theme.gold),
     };
   }
   function applyPanelTheme(theme) {
@@ -1756,6 +1860,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
+    // body.in-app включает раскладку «меню слева / выезжающее меню»; на
+    // экранах проверки доступа, входа и отказа её быть не должно
+    document.body.classList.toggle('in-app', id === 'screen-app');
+    if (id !== 'screen-app') setMenuOpen(false);
+  }
+
+  // Выезжающее меню на телефоне (на компьютере меню всегда на виду и это
+  // состояние ни на что не влияет).
+  function setMenuOpen(open) {
+    document.body.classList.toggle('menu-open', !!open);
+    const btn = document.getElementById('menu-btn');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
   // При заходе из Telegram источник правды для "кто ты" — tgUser.id, как и
@@ -2285,6 +2401,41 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
   });
 
+  // ===== меню: кнопка ≡, подложка, Esc; заголовок раздела; пустые группы =====
+  document.getElementById('menu-btn').addEventListener('click', () => setMenuOpen(!document.body.classList.contains('menu-open')));
+  document.getElementById('menu-backdrop').addEventListener('click', () => setMenuOpen(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenuOpen(false); });
+
+  // Заголовок и подпись над разделом берутся из data-title/data-sub активной
+  // вкладки. Срабатывает после диспетчера вкладок (он стоит на самой .tab и
+  // отрабатывает раньше, чем событие дойдёт сюда), поэтому .active уже
+  // переставлен; заодно закрывает выезжающее меню на телефоне.
+  function syncPageHead() {
+    const active = document.querySelector('#app-tabs .tab.active');
+    const titleEl = document.getElementById('page-title');
+    const subEl = document.getElementById('page-sub');
+    if (!active || !titleEl || !subEl) return;
+    titleEl.textContent = active.dataset.title || active.textContent.trim();
+    subEl.textContent = active.dataset.sub || '';
+  }
+  document.getElementById('app-tabs').addEventListener('click', (e) => {
+    if (!e.target.closest('.tab')) return;
+    syncPageHead();
+    setMenuOpen(false);
+  });
+
+  // Заголовок группы («Игроки», «Доступ»…) прячется, если все её разделы
+  // скрыты правами (скрывает их applyRoleUI через style.display).
+  function syncTabGroups() {
+    document.querySelectorAll('#app-tabs .tab-grp').forEach((grp) => {
+      let any = false;
+      for (let el = grp.nextElementSibling; el && !el.classList.contains('tab-grp'); el = el.nextElementSibling) {
+        if (el.classList.contains('tab') && el.style.display !== 'none') { any = true; break; }
+      }
+      grp.classList.toggle('empty', !any);
+    });
+  }
+
   // ===== суб-нав "Супердоступа" (см. #panel-super в HTML) — переключает,
   // какая из четырёх бывших отдельных вкладок сейчас видна. Снимает все
   // живые слушатели при КАЖДОМ переключении (не только при уходе со всей
@@ -2679,13 +2830,19 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     document.getElementById('panel-admin-rights').classList.add('active');
     document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
     document.querySelector('.tabs').style.display = 'none';
+    // на этом экране своё «назад», общие меню и заголовок раздела не нужны
+    document.getElementById('page-head').style.display = 'none';
+    document.getElementById('menu-btn').style.visibility = 'hidden';
   }
 
   document.getElementById('admin-rights-back').addEventListener('click', () => {
     document.querySelector('.tabs').style.display = 'flex';
+    document.getElementById('page-head').style.display = '';
+    document.getElementById('menu-btn').style.visibility = '';
     document.querySelectorAll('[data-panel]').forEach((p) => p.classList.remove('active'));
     document.getElementById('panel-players').classList.add('active');
     document.querySelector('.tab[data-tab="panel"]').classList.add('active');
+    syncPageHead();
   });
 
   // ===== "Токены доступа" — см. комментарий у #tab-tokens в HTML. =====
@@ -2873,6 +3030,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // "Статистика"/"Приложения" — видны всем, у кого вообще есть доступ к
     // панели (moderator/admin/superadmin), без отдельного переключаемого
     // права — намеренно не трогаем их display здесь.
+    syncTabGroups();
     updateDbPeekVisibility();
   }
 
@@ -2942,6 +3100,22 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       dot.textContent = String(count);
       tab.appendChild(dot);
     }
+    updateMenuCount();
+  }
+
+  // Красная цифра на кнопке ≡ (телефон): сколько заявок на вход/устройство
+  // ждут ответа — те же, что считают цифры на «Аккаунт» и «Супердоступ».
+  // Непрочитанный «Эфир» сюда не входит: это поток событий, а не вопрос.
+  function updateMenuCount() {
+    const el = document.getElementById('menu-count');
+    if (!el) return;
+    let n = 0;
+    ['account', 'super'].forEach((name) => {
+      const d = document.querySelector('.tab[data-tab="' + name + '"] .tab-dot');
+      if (d) n += parseInt(d.textContent, 10) || 0;
+    });
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.classList.toggle('show', n > 0);
   }
 
   // Ждущая заявка живёт столько же, сколько ждёт само устройство: 5 минут,

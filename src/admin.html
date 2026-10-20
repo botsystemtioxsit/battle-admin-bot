@@ -428,7 +428,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.20: «Заявки» и «Журнал» показывают обе части сразу; «Супердоступ» — отдельная полка с вкладками «Администрация» (права + токены), «Бэкапы», «Система»; просмотр базы выезжает справа по кнопке «База данных»; настоящий логотип в шапке; масштаб в приложении для компьютера (Аккаунт → Масштаб). До этого: несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.20</span></div>
+    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.21</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -738,6 +738,23 @@
             <button class="btn btn-line" id="btn-unban">Снять бан / ограничение</button>
           </div>
           <div id="ban-manage-locked-note" class="admin-empty" style="display:none;padding:2px 0;">Банить и снимать ограничения может только тот, у кого включено это право</div>
+        </div>
+
+        <!-- Удаление профиля — только Супердоступ (см. openUserDetail /
+             deletePlayerProfile) и не для админов/Супердоступа: сначала снимите
+             роль. Подтверждение — вписать ID игрока, как «ВОССТАНОВИТЬ» у бэкапов. -->
+        <div class="r-toggle-row" id="delete-profile-row" style="display:none;">
+          <div class="r-toggle-label">Удаление профиля</div>
+          <div class="admin-empty" style="text-align:left; padding:0;">Стирает аккаунт игрока целиком: очки, статистику, значки, привязанную почту. Отменить нельзя — вернуть можно только из ежедневной копии базы. Если игрок снова откроет игру, у него появится новый пустой профиль.</div>
+          <button class="btn btn-line" id="btn-delete-profile-open" style="color:var(--live);">Удалить профиль…</button>
+          <div id="delete-profile-confirm-wrap" style="display:none; flex-direction:column; gap:8px;">
+            <input type="text" class="field-input" id="delete-profile-confirm" placeholder="Впиши ID игрока для подтверждения" autocomplete="off">
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-line" id="btn-delete-profile-cancel" style="flex:1;">Отмена</button>
+              <button class="btn btn-live" id="btn-delete-profile-confirm" style="flex:1;">Удалить навсегда</button>
+            </div>
+            <div class="status-line" id="delete-profile-status"></div>
+          </div>
         </div>
 
         <button class="btn btn-line" id="btn-open-player-history" style="width:100%; margin-top:14px;">📜 История этого игрока</button>
@@ -3684,6 +3701,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     document.getElementById('ban-manage-block').style.display = bansEditable ? 'flex' : 'none';
     document.getElementById('ban-manage-locked-note').style.display = bansEditable ? 'none' : 'block';
 
+    // удалить профиль может только Супердоступ; админа/Супердоступа и себя —
+    // нельзя (сначала снять роль). Подтверждение каждый раз закрыто заново.
+    const canDelete = canManageRoles() && role !== 'admin' && role !== 'superadmin' && !user.isAdmin && String(userKey) !== String(myTelegramId);
+    document.getElementById('delete-profile-row').style.display = canDelete ? 'flex' : 'none';
+    resetDeleteProfileForm();
+
     document.getElementById('admin-empty').style.display = 'none';
     const resultEl = document.getElementById('admin-result');
     resultEl.style.display = 'block';
@@ -3730,7 +3753,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     closed_beta_toggled: 'Закрытый бета-тест переключён',
     beta_application_approved: 'Заявка на бета-тест одобрена',
     beta_application_rejected: 'Заявка на бета-тест отклонена',
-    token_collision_detected: 'Обнаружен дублирующийся токен устройства — аккаунты заблокированы'
+    token_collision_detected: 'Обнаружен дублирующийся токен устройства — аккаунты заблокированы',
+    player_deleted: 'Профиль игрока удалён'
   };
 
   // ключи записей, которые написала эта же вкладка — живая лента Терминала
@@ -3904,6 +3928,87 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       db.ref('users/' + foundUserKey).once('value').then(snap => renderStatusBadge(snap.val()));
       logAction('unban', foundUserKey, targetName, targetPlayerId, 'Бан/ограничение снято');
     }).catch(err => { console.error(err); alert('Не удалось снять бан: ' + (err.message || err)); });
+  });
+
+  // ===== удаление профиля игрока (только Супердоступ) =====
+  // Кнопка в карточке игрока → поле «впиши ID» → «Удалить навсегда». Всё
+  // перепроверяется ЖИВЬЁМ по базе, а не по тому, что нарисовано на экране:
+  // роль могла смениться, ID — не тот. Админа/Супердоступа и самого себя
+  // удалить нельзя. Стирается одной атомарной записью: users/<id> и то, что
+  // без него осиротеет и мешало бы заново зайти — owners/<id> (привязка
+  // записи к устройству игры), presence, очередь поиска, заявка на бета,
+  // привязанная почта (emailLogins) и @username (usernames) — две последние
+  // только если указывают именно на этого игрока.
+  function resetDeleteProfileForm() {
+    document.getElementById('btn-delete-profile-open').style.display = '';
+    document.getElementById('delete-profile-confirm-wrap').style.display = 'none';
+    document.getElementById('delete-profile-confirm').value = '';
+    document.getElementById('delete-profile-status').textContent = '';
+    document.getElementById('btn-delete-profile-confirm').disabled = false;
+  }
+  document.getElementById('btn-delete-profile-open').addEventListener('click', () => {
+    if (!foundUserKey || !canManageRoles()) return; // на случай подделки клика мимо скрытого UI
+    document.getElementById('btn-delete-profile-open').style.display = 'none';
+    document.getElementById('delete-profile-confirm-wrap').style.display = 'flex';
+    document.getElementById('delete-profile-confirm').focus();
+  });
+  document.getElementById('btn-delete-profile-cancel').addEventListener('click', resetDeleteProfileForm);
+  document.getElementById('btn-delete-profile-confirm').addEventListener('click', async () => {
+    if (!foundUserKey || !canManageRoles()) return;
+    const key = foundUserKey;
+    const statusEl = document.getElementById('delete-profile-status');
+    const btn = document.getElementById('btn-delete-profile-confirm');
+    const fail = (msg) => { statusEl.style.color = 'var(--live)'; statusEl.textContent = msg; btn.disabled = false; };
+    statusEl.style.color = '';
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(key))) { fail('Некорректный ключ игрока'); return; }
+    if (String(key) === String(myTelegramId)) { fail('Свой профиль удалять нельзя'); return; }
+    btn.disabled = true;
+    statusEl.textContent = 'Проверяю…';
+    try {
+      const snap = await db.ref('users/' + key).once('value');
+      const user = snap.val();
+      if (!user) { fail('Такого профиля уже нет'); return; }
+      const role = user.role || (user.isAdmin ? 'admin' : 'user');
+      if (role === 'admin' || role === 'superadmin' || user.isAdmin) { fail('У этого игрока роль «' + (ROLE_LABELS[role] || role) + '» — сначала снимите её'); return; }
+      const expected = String(user.playerId || key).trim().toUpperCase();
+      if (document.getElementById('delete-profile-confirm').value.trim().toUpperCase() !== expected) { fail('ID не совпал — впиши ' + expected + ' точно'); return; }
+
+      const update = {};
+      update['users/' + key] = null;
+      update['owners/' + key] = null;
+      update['presence/' + key] = null;
+      update['queue/' + key] = null;
+      update['betaApplications/' + key] = null;
+      if (user.attachedEmail) {
+        const emailKey = emailToKey(String(user.attachedEmail));
+        if (emailKey && !/[.#$\[\]\/]/.test(emailKey)) {
+          const linkSnap = await db.ref('emailLogins/' + emailKey).once('value');
+          if (String(linkSnap.val()) === String(key)) update['emailLogins/' + emailKey] = null;
+        }
+      }
+      if (user.username) {
+        const nameKey = String(user.username).trim().replace(/^@/, '').toLowerCase();
+        if (nameKey && !/[.#$\[\]\/]/.test(nameKey)) {
+          const nameSnap = await db.ref('usernames/' + nameKey).once('value');
+          if (String(nameSnap.val()) === String(key)) update['usernames/' + nameKey] = null;
+        }
+      }
+      statusEl.textContent = 'Удаляю…';
+      await db.ref().update(update);
+      logAction('player_deleted', key, user.firstName || '—', user.playerId || key,
+        `Профиль удалён (${role === 'moderator' ? 'модератор (устар.)' : 'обычный игрок'}, очков ${user.points ?? 0})`);
+
+      foundUserKey = null;
+      document.getElementById('admin-result').style.display = 'none';
+      const emptyEl = document.getElementById('admin-empty');
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = 'Профиль ' + expected + ' удалён.';
+      loadUserList(false);
+      if (document.getElementById('user-list-wrap').style.display !== 'none') loadUserList(true);
+    } catch (err) {
+      console.error(err);
+      fail('Не удалось удалить: ' + (err.message || err.code || err));
+    }
   });
 
   // ===== ивенты на главном экране =====

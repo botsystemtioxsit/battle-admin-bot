@@ -717,9 +717,59 @@ async function handleLoginCallback(env, query) {
 // Telegram Serverless (api/telegram-webhook.js, bot/index.js,
 // telegram-serverless/handlers/message.js) — теперь тот же набор живёт тут,
 // потому что вебхук у бота один.
+// Код подключения устройства (devicePairings/<код>): 6 символов без 0/O/1/I, как в randomPairingCode
+// панели и лаунчера. Человек вписывает код прямо в чат с ботом — это и есть подтверждение: кто
+// написал, определяет Telegram (message.from.id), а не текст сообщения, поэтому подключить
+// устройство можно только к СВОЕМУ аккаунту.
+const PAIRING_CODE_RE = /^[A-HJ-NP-Z2-9]{6}$/;
+
+async function handlePairingCode(env, message, code) {
+  const chatId = message.chat.id;
+  const say = (text) => tgApi(env, 'sendMessage', { chat_id: chatId, text });
+  const fromId = String((message.from && message.from.id) || '');
+  if (!/^\d+$/.test(fromId)) return;
+  let pairing;
+  try {
+    pairing = await (await fetch(`${FIREBASE_DB_URL}/devicePairings/${code}.json`)).json();
+  } catch {
+    await say('Не удалось связаться с базой, попробуй ещё раз.');
+    return;
+  }
+  const fresh = pairing && Math.abs(Date.now() - Number(pairing.requestedAt || 0)) <= LOGIN_REQUEST_TTL_MS;
+  if (!pairing || pairing.status !== 'pending' || !fresh || typeof pairing.deviceKey !== 'string' || !DEVICE_KEY_RE.test(pairing.deviceKey)) {
+    await say('Не нашёл такой код — он мог устареть (живёт 5 минут) или быть набран с ошибкой. Запроси новый в приложении.');
+    return;
+  }
+  if (!(await userExists(fromId))) {
+    await say('Для этого Telegram-аккаунта нет профиля в игре — сначала открой игру.');
+    return;
+  }
+  const label = safeDeviceLabel(pairing.device);
+  try {
+    // сначала подписанная запись о доверии, и только потом «approved»: устройство входит сразу по этому статусу
+    await writeTrustedDevice(env, fromId, pairing.deviceKey, { label, durationMs: null, approvedBy: fromId });
+    const patch = await dbWrite(env, `/devicePairings/${code}.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'approved', telegramId: fromId, approvedAt: Date.now() }),
+    });
+    if (!patch.ok) throw new Error(`Firebase PATCH ${patch.status}`);
+  } catch (err) {
+    console.error('pairing code:', err && err.message);
+    await say('Что-то пошло не так, попробуй ещё раз.');
+    return;
+  }
+  await say(`✅ Устройство подключено: ${label}.\n\nЕсли это были не вы — отзовите его в админ-панели («Аккаунт» → «Отозвать»).`);
+}
+
 async function handleBotMessage(env, message) {
   if (!message || !message.chat || message.chat.type !== 'private' || typeof message.text !== 'string') return;
   const chatId = message.chat.id;
+  const pairingCode = message.text.trim().toUpperCase();
+  if (PAIRING_CODE_RE.test(pairingCode)) {
+    await handlePairingCode(env, message, pairingCode);
+    return;
+  }
   const command = message.text.trim().split(/\s+/)[0].split('@')[0];
   if (command === '/start' || command === '/admin') {
     await tgApi(env, 'sendMessage', {
@@ -730,7 +780,7 @@ async function handleBotMessage(env, message) {
   } else if (command === '/help') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».',
+      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».',
     });
   } else if (command === '/requests') {
     const fromId = String((message.from && message.from.id) || '');

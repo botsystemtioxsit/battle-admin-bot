@@ -299,6 +299,16 @@
   .list-row:last-child{ border-bottom:none; }
   .list-row .meta{ color:var(--muted); }
   .list-row a{ color:var(--gold); text-decoration:none; font-weight:600; }
+  /* Списки снимков во вкладке "Бэкапы": галочки, панель "выбрать все / старше 10 дней / удалить выбранные" */
+  .bk-toolbar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:0 0 8px; }
+  .bk-toolbar .btn{ padding:7px 10px; font-size:12px; }
+  .bk-toolbar .btn:disabled{ opacity:.45; cursor:default; }
+  .bk-all{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); margin-right:auto; cursor:pointer; }
+  .bk-row{ display:grid; grid-template-columns:auto minmax(0, 1fr) auto auto; align-items:center; gap:8px; }
+  .bk-row .bk-name{ min-width:0; overflow-wrap:anywhere; }
+  .bk-row .bk-name .meta{ display:block; font-size:11px; margin-top:1px; }
+  .bk-row .btn{ padding:6px 9px; font-size:11.5px; }
+  .bk-row input[type=checkbox], .bk-all input{ width:18px; height:18px; flex:none; accent-color:var(--gold); cursor:pointer; }
 
   /* ===== "Бэкапы"/"Восстановление" — тоже портировано из battle-data-admin-bot ===== */
   .warn-banner{ background:rgba(229,73,61,.12); border:1px solid var(--live); border-radius:var(--radius); padding:12px; font-size:12px; line-height:1.5; margin-bottom:16px; }
@@ -321,7 +331,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. В Android-приложении в шапке видна версия самого приложения (и она же — в сообщении о запросе на вход), чтобы отличать новое от старого. Значок приложения — адаптивный, с поддержкой «тематических значков». До этого: вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.16</span></div>
+    <div class="brand">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). Во вкладке «Бэкапы» можно отметить несколько снимков и удалить их разом; снимки старше 10 дней удаляются сами, три самых свежих остаются всегда. До этого: версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.17</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1144,6 +1154,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       </div>
 
       <div id="backups-section-list">
+        <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Снимки старше 10 дней удаляются сами раз в сутки (три самых свежих остаются всегда). Лишнее можно убрать вручную: отметь галочками и нажми «Удалить выбранные».</div>
         <div class="admin-card">
           <div class="section-label">Сделать бэкап сейчас</div>
           <div class="admin-empty" style="text-align:left; padding:0 0 10px;">Запускает оба workflow в battle-data-admin-bot немедленно (обычно они срабатывают раз в сутки по расписанию): свежий zip кода index.html и battle-admin-bot, свежий JSON всей базы. Снимок появится в списках ниже примерно через 1–2 минуты — тогда обнови страницу.</div>
@@ -4898,17 +4909,173 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }
   }
 
+  // Пачка снимков одним запросом: Worker удаляет их одним коммитом (отдельный
+  // /delete-backup на каждый файл упёрся бы в лимит запросов Worker'а и в
+  // гонку коммитов). Больше 100 путей за раз он не берёт — режем на куски.
+  // Возвращает имена, которых больше нет (и удалённые сейчас, и уже
+  // отсутствовавшие), даже если один из кусков упал: ошибка пробрасывается
+  // вместе с уже сделанным в err.removed.
+  const BACKUP_DELETE_CHUNK = 100;
+  async function deleteBackupFiles(basePath, names) {
+    const identity = panelIdentityPayload();
+    if (!identity) throw Object.assign(new Error('Не удалось определить личность — попробуй перезайти в панель.'), { removed: [] });
+    const removed = [];
+    for (let k = 0; k < names.length; k += BACKUP_DELETE_CHUNK) {
+      const chunk = names.slice(k, k + BACKUP_DELETE_CHUNK);
+      try {
+        const res = await fetch(`${ROLE_GATEWAY_BASE}/delete-backups`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...identity, paths: chunk.map((n) => `${basePath}/${n}`) }),
+        });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+        const data = await res.json();
+        const gone = new Set([...(data.deleted || []), ...(data.missing || [])].map((pth) => String(pth).split('/').pop()));
+        chunk.forEach((n) => { if (gone.has(n)) removed.push(n); });
+      } catch (err) {
+        err.removed = removed;
+        throw err;
+      }
+    }
+    return removed;
+  }
+
+  // Столько дней снимки живут, и столько самых свежих не удаляются никогда —
+  // те же числа, что в battle-data-admin-bot/.github/scripts/prune-backups.sh
+  // (автоочистка по расписанию); кнопка «Старше N дней» выбирает ровно то, что
+  // автоочистка и удалила бы.
+  const BACKUP_RETENTION_DAYS = 10;
+  const BACKUP_KEEP_NEWEST = 3;
+  const backupSelections = new Map(); // basePath -> Set имён с галочкой
+
+  function pluralRu(n, one, few, many) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  // Имена в списке идут от новых к старым (так их отдаёт Worker).
+  function backupNamesOlderThanRetention(items) {
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - BACKUP_RETENTION_DAYS);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    // Порядок задаём сами, как у скрипта автоочистки (sort -V): по дате, а при
+    // равной дате — по номерам версии (v0.4.56 свежее v0.4.9). Список от
+    // Worker'а упорядочен по тексту, и на границе «трёх свежих» это могло
+    // разойтись с тем, что удалит автоочистка.
+    return items
+      .filter((i) => /^\d{4}-\d{2}-\d{2}/.test(i.name))
+      .sort((x, y) => y.name.localeCompare(x.name, 'en', { numeric: true }))
+      .slice(BACKUP_KEEP_NEWEST)
+      .filter((i) => i.name.slice(0, 10) < cutoffStr)
+      .map((i) => i.name);
+  }
+
+  // Заполненные выпадающие списки восстановления берутся из тех же массивов —
+  // после любого удаления их надо пересобрать, иначе можно «восстановить»
+  // снимок, которого уже нет.
+  function refreshRestoreSelects() {
+    fillBackupSelect(document.getElementById('restore-db-select'), dbBackupsCache, 'Выбери дату снимка');
+    updateRestoreCodeSelect();
+  }
+
   function renderBackupList(el, items, hint, basePath) {
     if (!items) { el.innerHTML = `<div class="admin-empty" style="text-align:left; padding:0;">${escapeHtml(hint)}</div>`; return; }
     if (!items.length) { el.innerHTML = '<div class="admin-empty" style="text-align:left; padding:0;">Снимков пока нет.</div>'; return; }
-    el.innerHTML = items.map((i, idx) => `
-      <div class="list-row">
-        <span>${escapeHtml(i.name.replace(/\.(zip|json)$/, ''))}</span>
-        <span class="meta">${formatBackupSize(i.size)}</span>
+    if (!backupSelections.has(basePath)) backupSelections.set(basePath, new Set());
+    const selected = backupSelections.get(basePath);
+    for (const name of [...selected]) if (!items.some((i) => i.name === name)) selected.delete(name);
+
+    el.innerHTML = `
+      <div class="bk-toolbar">
+        <label class="bk-all"><input type="checkbox" data-bk-all> Выбрать все</label>
+        <button class="btn btn-line" data-bk-old>Старше ${BACKUP_RETENTION_DAYS} дней</button>
+        <button class="btn btn-live" data-bk-delete disabled>Удалить выбранные</button>
+      </div>
+      <div class="status-line" data-bk-status style="margin-top:0;"></div>
+      ${items.map((i, idx) => `
+      <div class="list-row bk-row">
+        <input type="checkbox" data-bk-idx="${idx}" ${selected.has(i.name) ? 'checked' : ''} aria-label="Выбрать ${escapeHtml(i.name)}">
+        <span class="bk-name"><span class="bk-title">${escapeHtml(i.name.replace(/\.(zip|json)$/, ''))}</span><span class="meta">${formatBackupSize(i.size)}</span></span>
         <button class="btn btn-line" data-download-idx="${idx}">Скачать</button>
         <button class="btn btn-live" data-delete-idx="${idx}">Удалить</button>
-      </div>
-    `).join('');
+      </div>`).join('')}
+    `;
+
+    const allBox = el.querySelector('[data-bk-all]');
+    const oldBtn = el.querySelector('[data-bk-old]');
+    const delBtn = el.querySelector('[data-bk-delete]');
+    const statusEl = el.querySelector('[data-bk-status]');
+    const rowBoxes = [...el.querySelectorAll('input[data-bk-idx]')];
+
+    function say(text, isError) {
+      statusEl.style.color = isError ? 'var(--live)' : 'var(--muted)';
+      statusEl.textContent = text;
+    }
+    function syncToolbar() {
+      const n = selected.size;
+      delBtn.disabled = n === 0;
+      delBtn.textContent = n ? `Удалить выбранные (${n})` : 'Удалить выбранные';
+      allBox.checked = n > 0 && n === items.length;
+      allBox.indeterminate = n > 0 && n < items.length;
+    }
+    syncToolbar();
+
+    rowBoxes.forEach((box) => {
+      box.addEventListener('change', () => {
+        const name = items[Number(box.dataset.bkIdx)].name;
+        if (box.checked) selected.add(name); else selected.delete(name);
+        syncToolbar();
+      });
+    });
+    allBox.addEventListener('change', () => {
+      selected.clear();
+      if (allBox.checked) items.forEach((i) => selected.add(i.name));
+      rowBoxes.forEach((box) => { box.checked = allBox.checked; });
+      syncToolbar();
+    });
+    oldBtn.addEventListener('click', () => {
+      const old = backupNamesOlderThanRetention(items);
+      selected.clear();
+      old.forEach((name) => selected.add(name));
+      rowBoxes.forEach((box) => { box.checked = selected.has(items[Number(box.dataset.bkIdx)].name); });
+      syncToolbar();
+      say(old.length
+        ? `Отмечено ${old.length} ${pluralRu(old.length, 'снимок', 'снимка', 'снимков')} старше ${BACKUP_RETENTION_DAYS} дней (три самых свежих не трогаю).`
+        : `Снимков старше ${BACKUP_RETENTION_DAYS} дней нет.`, false);
+    });
+    delBtn.addEventListener('click', async () => {
+      const names = items.filter((i) => selected.has(i.name)).map((i) => i.name);
+      if (!names.length) return;
+      const preview = names.slice(0, 5).join('\n') + (names.length > 5 ? `\n…и ещё ${names.length - 5}` : '');
+      const wipesAll = names.length === items.length;
+      if (!confirm(`Удалить ${names.length} ${pluralRu(names.length, 'снимок', 'снимка', 'снимков')} безвозвратно?\n\n${preview}` +
+        (wipesAll ? '\n\n⚠️ Это ВСЕ снимки в этом списке — копий не останется.' : ''))) return;
+      el.querySelectorAll('button, input').forEach((c) => { c.disabled = true; });
+      say('Удаляю…', false);
+      let removed = [];
+      let failure = null;
+      try {
+        removed = await deleteBackupFiles(basePath, names);
+      } catch (err) {
+        removed = err.removed || [];
+        failure = err;
+      }
+      const gone = new Set(removed);
+      for (let k = items.length - 1; k >= 0; k--) if (gone.has(items[k].name)) items.splice(k, 1);
+      gone.forEach((name) => selected.delete(name));
+      renderBackupList(el, items, hint, basePath);
+      refreshRestoreSelects();
+      const again = el.querySelector('[data-bk-status]');
+      if (again) {
+        again.style.color = failure ? 'var(--live)' : 'var(--muted)';
+        again.textContent = failure
+          ? `Удалено ${removed.length} из ${names.length}. Не удалось удалить остальные: ${failure.message || failure}`
+          : `Удалено: ${removed.length}.`;
+      }
+    });
+
     el.querySelectorAll('button[data-download-idx]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const item = items[Number(btn.dataset.downloadIdx)];
@@ -4921,7 +5088,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         const item = items[idx];
         deleteBackupFile(`${basePath}/${item.name}`, item.name, btn, () => {
           items.splice(idx, 1);
+          selected.delete(item.name);
           renderBackupList(el, items, hint, basePath);
+          refreshRestoreSelects();
         });
       });
     });
@@ -4929,10 +5098,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
   function fillBackupSelect(selectEl, items, placeholder) {
     selectEl.innerHTML = `<option value="">${placeholder}</option>` +
-      (items || []).map((i) => `<option value="${i.name.replace(/\.(zip|json)$/, '')}">${i.name}</option>`).join('');
+      (items || []).map((i) => `<option value="${escapeHtml(i.name.replace(/\.(zip|json)$/, ''))}">${escapeHtml(i.name)}</option>`).join('');
   }
 
   let codeBackupsCache = { 'index.html': [], 'battle-admin-bot': [] };
+  let dbBackupsCache = [];
   let backupListsLoaded = false;
 
   async function loadAllBackupLists() {
@@ -4959,14 +5129,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const { codeIndex, codeAdmin, db: dbList } = await res.json();
       codeBackupsCache['index.html'] = codeIndex;
       codeBackupsCache['battle-admin-bot'] = codeAdmin;
+      dbBackupsCache = dbList;
       backupListsLoaded = true;
 
       renderBackupList(listIndexEl, codeIndex, null, 'code-backups/index.html');
       renderBackupList(listAdminEl, codeAdmin, null, 'code-backups/battle-admin-bot');
       renderBackupList(listDbEl, dbList, null, 'db-snapshots');
 
-      fillBackupSelect(document.getElementById('restore-db-select'), dbList, 'Выбери дату снимка');
-      updateRestoreCodeSelect();
+      refreshRestoreSelects();
     } catch (err) {
       console.error('Бэкапы: список', err);
       const errHint = 'Не удалось загрузить список: ' + (err.message || err);
@@ -4982,7 +5152,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   }
   document.getElementById('restore-code-repo').addEventListener('change', updateRestoreCodeSelect);
 
-  document.getElementById('backup-now-btn').addEventListener('click', async () => {
+  document.getElementById('backup-now-btn').addEventListener('click', asLongOp(async () => {
     if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('backup-now-btn');
     const statusEl = document.getElementById('backup-now-status');
@@ -5005,9 +5175,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     } finally {
       btn.disabled = false; btn.textContent = 'Сделать бэкап сейчас';
     }
-  });
+  }));
 
-  document.getElementById('restore-db-btn').addEventListener('click', async () => {
+  document.getElementById('restore-db-btn').addEventListener('click', asLongOp(async () => {
     if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('restore-db-btn');
     const statusEl = document.getElementById('restore-db-status');
@@ -5043,9 +5213,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     } finally {
       btn.disabled = false; btn.textContent = 'Восстановить базу';
     }
-  });
+  }));
 
-  document.getElementById('restore-code-btn').addEventListener('click', async () => {
+  document.getElementById('restore-code-btn').addEventListener('click', asLongOp(async () => {
     if (!canManageRoles() && !myTokenBackupsAccess) return;
     const btn = document.getElementById('restore-code-btn');
     const statusEl = document.getElementById('restore-code-status');
@@ -5098,7 +5268,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     } finally {
       btn.disabled = false; btn.textContent = 'Восстановить код';
     }
-  });
+  }));
 
   // ===== "Система" — она же опасная зона: полный сброс перед
   // бета-тестом, обслуживание, закрытый бета-тест, аварийный режим.
@@ -5479,6 +5649,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   let termBannerShown = false;
   let termRequestIndex = [];    // пронумерованные заявки из последнего `requests`
   let termActive = false;
+  // Автообновление страницы (блок в конце файла) не перезагружает панель, пока
+  // Терминал выполняет команду или ждёт ответа y/N, и пока идёт долгая операция
+  // (восстановление базы/кода, «Сделать бэкап сейчас») — между её запросами к
+  // серверу бывают паузы без fetch (распаковка архива, разбор JSON).
+  let longOpsRunning = 0;
+  window.__updateBusy = () => termBusy || !!termPending || longOpsRunning > 0;
+  function asLongOp(handler) {
+    return async (...args) => {
+      longOpsRunning++;
+      try { return await handler(...args); } finally { longOpsRunning--; }
+    };
+  }
 
   function termStamp() {
     return new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -6263,6 +6445,227 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       liveEmit('matches', '⚔️ бой завершён: ' + termClean(m.winnerId || '—', 40) + ' победил ' + termClean(m.loserId || '—', 40) + ' (' + liveSigned(pa[m.winnerId]) + ' / ' + liveSigned(pa[m.loserId]) + ')');
     });
   }
+</script>
+<!-- ===== Автообновление страницы =====
+     Панель живёт часами (Telegram, окно приложения для компьютера, Android
+     WebView), а новая версия попадает на хостинг сразу после сборки — раньше
+     приходилось закрывать и открывать приложение вручную. Метки сборки
+     (BUILD_ID/BUILD_TIME) подставляет .github/scripts/build-obfuscated.js и
+     кладёт ту же пару в build-id.json рядом со страницей; здесь раз в
+     несколько минут (и при возвращении в приложение) читается этот крошечный
+     файл, и если он новее, чем сборка открытой страницы, страница
+     перезагружается сама — но не посреди команды Терминала, входа, запроса к
+     серверу, восстановления или набора текста. Отдельный блок, а не часть основного
+     скрипта: если основной скрипт сломается при выкладке (ошибка на загрузке),
+     этот всё равно отработает и подтянет исправленную версию. В src вместо
+     меток стоят заглушки — тогда автообновление выключено. -->
+<script>
+(function () {
+  const BUILD_ID = '__BUILD_ID__';
+  const BUILD_TIME = Number('__BUILD_TIME__');
+  if (!/^[0-9a-f]{12}$/.test(BUILD_ID) || !(BUILD_TIME > 0)) return;
+  window.__appBuildId = BUILD_ID;
+
+  const CHECK_EVERY_MS = 5 * 60 * 1000;   // как часто спрашивать, пока страница открыта
+  const FIRST_CHECK_MS = 20 * 1000;       // первая проверка — когда страница уже поднялась
+  const MIN_GAP_MS = 45 * 1000;           // не чаще, как бы ни дёргали события
+  const APPLY_POLL_MS = 3000;             // пока обновление ждёт, как часто смотреть «не занят ли»
+  const RELOAD_DELAY_MS = 1200;           // короткая плашка «обновляю…» перед перезагрузкой
+  const FETCH_STALE_MS = 60 * 1000;       // зависший запрос не должен держать обновление вечно
+  const EDIT_HOLD_MS = 2 * 60 * 1000;     // после последней правки человека (ввод, выбор) страницу не трогаем
+  const WAIT_BANNER_AFTER_MS = 8000;      // «Обновлю, как только освободишься» — только если ждём заметно долго
+  const PREFLIGHT_TIMEOUT_MS = 10 * 1000; // сколько ждём ответ нового адреса перед переходом
+  const RETRY_MIN_MS = 60 * 1000;         // если новый адрес не отвечает — повтор через минуту, дальше вдвое реже
+  const RETRY_MAX_MS = 10 * 60 * 1000;
+  // Занятые экраны: вход по заявке (ждём одобрения) и подтверждение устройства.
+  const BUSY_SCREENS = ['screen-login', 'screen-device-trust'];
+
+  let lastCheck = 0;
+  let lastEditAt = 0;
+  let pending = null;
+  let reloading = false;
+  let applyTimer = null;
+  let bannerEl = null;
+  let retryAt = 0;
+  let retryDelay = RETRY_MIN_MS;
+
+  // Запросы в полёте считаются «занято»: перезагрузка посреди обращения к
+  // серверу (выдача роли, удаление снимков) его оборвёт. Свою проверку версии не считаем — она
+  // идёт через nativeFetch.
+  const inflight = new Map();
+  let seq = 0;
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if (nativeFetch) {
+    window.fetch = function (...args) {
+      const id = ++seq;
+      inflight.set(id, Date.now());
+      return nativeFetch(...args).finally(() => inflight.delete(id));
+    };
+  }
+
+  // Любая настоящая правка человека (набрал, выбрал, сдвинул ползунок, вставил)
+  // — ещё две минуты не перезагружаем: поля формы, в которых он уже закончил,
+  // не видны по фокусу, а несохранённая форма пропала бы целиком.
+  ['input', 'change'].forEach((type) => document.addEventListener(type, (e) => { if (e.isTrusted) lastEditAt = Date.now(); }, true));
+
+  // Команда или вопрос y/N в Терминале и долгие операции (восстановление,
+  // «Сделать бэкап сейчас») сообщает сам основной скрипт — window.__updateBusy.
+  function panelBusy() {
+    try { return !!(window.__updateBusy && window.__updateBusy()); } catch (e) { return false; }
+  }
+
+  function isBusy() {
+    const now = Date.now();
+    for (const startedAt of inflight.values()) if (now - startedAt < FETCH_STALE_MS) return true;
+    const sinceEdit = now - lastEditAt;
+    if (lastEditAt && sinceEdit >= 0 && sinceEdit < EDIT_HOLD_MS) return true;
+    const el = document.activeElement;
+    if (el && (el.tagName === 'TEXTAREA' || el.isContentEditable || (el.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|range|color|file)$/i.test(el.type)))) {
+      if (String((el.isContentEditable ? el.textContent : el.value) || '').trim()) return true;
+    }
+    if (BUSY_SCREENS.some((id) => document.getElementById(id)?.classList.contains('active'))) return true;
+    return panelBusy();
+  }
+
+  function hideBanner() {
+    if (bannerEl) { bannerEl.remove(); bannerEl = null; }
+  }
+
+  function showBanner(state) {
+    if (!document.body) return;
+    if (!bannerEl) {
+      bannerEl = document.createElement('div');
+      bannerEl.id = 'app-update-banner';
+      bannerEl.setAttribute('role', 'status');
+      bannerEl.style.cssText = 'position:fixed; left:50%; top:calc(env(safe-area-inset-top, 0px) + 10px); transform:translateX(-50%); z-index:2147483000; width:max-content; max-width:min(92vw, 420px); display:flex; align-items:center; gap:10px; background:#17171B; color:#F2F1EE; border:1px solid #2A2A30; border-radius:12px; padding:9px 12px; font:600 12.5px/1.35 Inter, system-ui, sans-serif; box-shadow:0 6px 24px rgba(0,0,0,.45);';
+      const text = document.createElement('span');
+      text.id = 'app-update-text';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'app-update-now';
+      btn.style.cssText = 'flex:none; background:#FF3D2E; color:#fff; border:0; border-radius:8px; padding:6px 10px; font:700 12px Inter, system-ui, sans-serif; cursor:pointer;';
+      btn.addEventListener('click', () => reload(true));
+      bannerEl.append(text, btn);
+      document.body.appendChild(bannerEl);
+    }
+    const text = bannerEl.querySelector('#app-update-text');
+    const btn = bannerEl.querySelector('#app-update-now');
+    if (state === 'wait') {
+      text.textContent = 'Вышла новая версия. Обновлю, как только освободишься.';
+      btn.textContent = 'Обновить сейчас';
+      btn.style.display = '';
+    } else if (state === 'failed') {
+      text.textContent = 'Не удалось обновиться само — закрой и открой приложение заново.';
+      btn.textContent = 'Повторить';
+      btn.style.display = '';
+    } else if (state === 'unavailable') {
+      text.textContent = 'Не получилось загрузить обновление — проверь связь, попробую позже.';
+      btn.textContent = 'Повторить';
+      btn.style.display = '';
+    } else {
+      text.textContent = 'Вышла новая версия — обновляю…';
+      btn.style.display = 'none';
+    }
+  }
+
+  // «Занято» бывает и на долю секунды (идёт запрос) — плашку «подожду» не
+  // показываем сразу, только если обновление ждёт уже заметно долго.
+  function waitBanner() {
+    const waited = Date.now() - pending.since;
+    if (waited < 0 || waited > WAIT_BANNER_AFTER_MS) showBanner('wait');
+  }
+
+  // Сколько раз уже перезагружались ради этой сборки — число записано в самом
+  // адресе (?v=<id>&r=<n>), поэтому работает и без sessionStorage, а каждая
+  // попытка идёт на новый адрес (старый ответ из кэша не подставится).
+  function triesFor(id) {
+    try {
+      const p = new URL(location.href).searchParams;
+      return p.get('v') === id ? Number(p.get('r')) || 0 : 0;
+    } catch (e) { return 0; }
+  }
+
+  // Перед переходом проверяем, что новый адрес отвечает и это действительно
+  // новая сборка: иначе при пропавшей сети или не успевшем обновиться хостинге
+  // рабочая страница сменилась бы страницей ошибки браузера. Ответ остаётся в
+  // кэше, поэтому сам переход его уже не качает заново.
+  async function targetIsReady(href) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), PREFLIGHT_TIMEOUT_MS);
+    try {
+      const res = await nativeFetch(href, { credentials: 'same-origin', signal: ctl.signal });
+      return res.ok && (await res.text()).includes(pending.id);
+    } catch (e) {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // force = человек сам нажал «Обновить сейчас»/«Повторить»
+  async function reload(force) {
+    if (reloading || !pending) return;
+    const now = Date.now();
+    if (retryAt - now > RETRY_MAX_MS) retryAt = 0;   // часы переведены назад
+    if (force) retryAt = 0;
+    if (!force && now < retryAt) return;
+    if (!force && isBusy()) { waitBanner(); return; }
+    const tries = triesFor(pending.id);
+    if (!force && tries >= 2) {
+      // Дважды перезагрузились, а страница всё ещё старая — не крутимся в
+      // цикле, просим открыть приложение заново.
+      showBanner('failed');
+      clearInterval(applyTimer);
+      applyTimer = null;
+      return;
+    }
+    reloading = true;
+    // Адрес с новым ?v=: с тем же адресом браузер/WebView вправе отдать
+    // страницу из кэша; hash (там initData Telegram) остаётся как был.
+    const url = new URL(location.href);
+    url.searchParams.set('v', pending.id);
+    url.searchParams.set('r', String(tries + 1));
+    if (!(await targetIsReady(url.href))) {
+      reloading = false;
+      retryAt = Date.now() + retryDelay;
+      retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+      if (force) showBanner('unavailable'); else if (bannerEl) hideBanner();
+      return;
+    }
+    retryDelay = RETRY_MIN_MS;
+    showBanner('soon');
+    setTimeout(() => {
+      if (!force && isBusy()) { reloading = false; waitBanner(); return; }
+      location.replace(url.href);
+    }, force ? 0 : RELOAD_DELAY_MS);
+  }
+
+  async function check() {
+    if (!nativeFetch || reloading || document.hidden) return;
+    const now = Date.now();
+    if (now >= lastCheck && now - lastCheck < MIN_GAP_MS) return;
+    lastCheck = now;
+    try {
+      const res = await nativeFetch(new URL('build-id.json', location.href).href + '?_=' + now, { cache: 'no-store' });
+      if (!res.ok) return;
+      const info = await res.json();
+      // Только строго более новая сборка: старый файл из залежавшегося кэша
+      // не должен «обновлять» страницу назад.
+      if (!info || !/^[0-9a-f]{12}$/.test(String(info.id)) || info.id === BUILD_ID || !(Number(info.t) > BUILD_TIME)) return;
+      if (pending && Number(pending.t) >= Number(info.t)) return;
+      pending = { id: info.id, t: Number(info.t), since: pending ? pending.since : now };
+      if (!applyTimer) applyTimer = setInterval(() => reload(false), APPLY_POLL_MS);
+      reload(false);
+    } catch (e) { /* нет сети или файл не наш — проверим в следующий раз */ }
+  }
+
+  setTimeout(check, FIRST_CHECK_MS);
+  setInterval(check, CHECK_EVERY_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  window.addEventListener('online', () => { retryAt = 0; check(); if (pending) reload(false); });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) check(); });
+  try { window.Telegram?.WebApp?.onEvent?.('activated', check); } catch (e) { /* старый клиент Telegram */ }
+})();
 </script>
 </body>
 </html>

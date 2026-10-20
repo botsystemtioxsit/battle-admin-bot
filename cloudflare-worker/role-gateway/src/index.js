@@ -24,6 +24,17 @@ const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const GITHUB_OWNER = 'botsystemtioxsit';
 const DATA_REPO = 'battle-data-admin-bot';
 const CODE_REPOS = new Set(['index.html', 'battle-admin-bot']);
+// Жёсткий allowlist путей снимков в приватном репозитории: единственная защита
+// от того, чтобы через /delete-backup и /delete-backups удаляли (а через
+// /download-backup, где такой же регэксп записан на месте, читали)
+// произвольные файлы репозитория — workflow'ы, чужие папки, всё остальное.
+// Проверяется через isBackupPathAllowed ниже, одним и тем же кодом для
+// одиночного и пакетного удаления.
+const BACKUP_PATH_RE = /^(code-backups\/(index\.html|battle-admin-bot)\/[A-Za-z0-9._-]+\.zip|db-snapshots\/[A-Za-z0-9._-]+\.json)$/;
+// Сколько снимков можно удалить одним вызовом /delete-backups и сколько раз
+// ghDeleteFiles пробует заново, если ветку main успели сдвинуть (см. там).
+const MAX_DELETE_PATHS = 100;
+const DELETE_COMMIT_ATTEMPTS = 3;
 const ALLOWED_ROLES = new Set(['admin', 'superadmin']);
 const ALLOWED_STATUSES = new Set(['active', 'restricted', 'banned']);
 // Кто считается "персоналом" для Worker'а. 'moderator' сюда НЕ входит: это
@@ -71,6 +82,13 @@ function jsonResponse(body, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
+}
+
+// Путь снимка допустим, только если это строка без ".." и целиком подходит
+// под BACKUP_PATH_RE. Точка в имени разрешена (2026-10-16.zip), поэтому ".."
+// проверяется отдельно — регэксп сам пропустил бы, например, "a..zip".
+function isBackupPathAllowed(path) {
+  return typeof path === 'string' && !path.includes('..') && BACKUP_PATH_RE.test(path);
 }
 
 async function hmacSha256Hex(keyBytes, message) {
@@ -760,7 +778,11 @@ async function ghApi(path, token, options = {}) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`${path} -> ${res.status}: ${body}`);
+    const err = new Error(`${path} -> ${res.status}: ${body}`);
+    // код ответа отдельно от текста — ghDeleteFiles по нему отличает «ветку
+    // успели сдвинуть» (422/409) от остальных отказов, не разбирая сообщение
+    err.status = res.status;
+    throw err;
   }
   return res.status === 204 ? null : res.json();
 }
@@ -820,6 +842,81 @@ async function ghDeleteFile(env, path) {
     body: JSON.stringify({ message: `Удаление старого снимка: ${path}`, sha: meta.sha, branch: 'main' }),
   });
   if (!delRes.ok) throw new Error(`GitHub Contents API ${delRes.status}: ${await delRes.text().catch(() => '')}`);
+}
+
+// Пакетное удаление снимков (кнопка «Удалить выбранные» в списке бэкапов) —
+// ОДНИМ коммитом через Git Data API. Звать /delete-backup по разу на файл нельзя
+// по двум причинам. Первая — лимит Cloudflare Workers Free: 50 подзапросов
+// (fetch) на один вызов Worker'а, а ghDeleteFile тратит на файл два (GET + DELETE),
+// так что на полсотне снимков вызов падал бы с "Too many subrequests". Вторая —
+// каждый DELETE через Contents API это отдельный коммит в main, и параллельные
+// удаления ломаются о 409 (каждый хочет сдвинуть одну и ту же ветку). Здесь
+// число подзапросов постоянное, сколько бы файлов ни удалялось: ref → коммит →
+// дерево (узнать, какие пути реально есть) → новое дерево → коммит → сдвиг
+// ветки, то есть 6 на попытку и не больше 18 на все DELETE_COMMIT_ATTEMPTS.
+//
+// Новое дерево строится от base_tree с записями sha:null — так GitHub убирает
+// именно эти файлы и не трогает остальное (в отличие от restoreCode, которому
+// нужен полный заменяющий снимок без base_tree). sha:null на несуществующий
+// путь GitHub отвергает, поэтому существование проверяем сами по рекурсивному
+// дереву, а не вслепую.
+//
+// Идемпотентно, как и ghDeleteFile: пути, которых уже нет (двойной клик,
+// устаревший список на экране), не ошибка, а попадают в missing; если нет ни
+// одного — коммит вообще не создаётся. Если пока мы работали, ветку сдвинул
+// workflow бэкапа (он пушит в main раз в сутки), PATCH без force отклонится с
+// 422/409 — тогда всё повторяется с чтения ref, уже поверх свежей ветки, до
+// DELETE_COMMIT_ATTEMPTS раз. Возвращает { deleted, missing } — реально
+// удалённые и уже отсутствовавшие пути (в порядке, в котором их передали).
+async function ghDeleteFiles(env, paths) {
+  const repo = `/repos/${GITHUB_OWNER}/${DATA_REPO}`;
+  const wanted = [...new Set(paths)];
+  const jsonReq = (body, method = 'POST') => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  for (let attempt = 1; attempt <= DELETE_COMMIT_ATTEMPTS; attempt++) {
+    const refData = await ghApi(`${repo}/git/ref/heads/main`, env.GITHUB_TOKEN);
+    const headSha = refData.object.sha;
+    const headCommit = await ghApi(`${repo}/git/commits/${headSha}`, env.GITHUB_TOKEN);
+    const baseTreeSha = headCommit.tree.sha;
+    const baseTree = await ghApi(`${repo}/git/trees/${baseTreeSha}?recursive=1`, env.GITHUB_TOKEN);
+    // GitHub обрезает слишком большое рекурсивное дерево и честно пишет об
+    // этом — по неполному списку нельзя ни решать «файла нет», ни удалять
+    if (baseTree.truncated) {
+      throw new Error('дерево репозитория слишком большое — GitHub отдал его не целиком, удалять вслепую нельзя');
+    }
+    // только файлы (blob): если по такому пути в репозитории окажется папка,
+    // это не снимок — трогать её нельзя, путь уйдёт в missing
+    const existing = new Set((baseTree.tree || []).filter((e) => e.type === 'blob').map((e) => e.path));
+    const present = wanted.filter((p) => existing.has(p));
+    const missing = wanted.filter((p) => !existing.has(p));
+    if (!present.length) return { deleted: [], missing };
+
+    const newTree = await ghApi(`${repo}/git/trees`, env.GITHUB_TOKEN, jsonReq({
+      base_tree: baseTreeSha,
+      tree: present.map((path) => ({ path, mode: '100644', type: 'blob', sha: null })),
+    }));
+    // в сообщении — первые 10 путей, остальные числом: при 100 снимках оно не раздувается
+    const shown = present.slice(0, 10).join(', ');
+    const rest = present.length > 10 ? ` … и ещё ${present.length - 10}` : '';
+    const newCommit = await ghApi(`${repo}/git/commits`, env.GITHUB_TOKEN, jsonReq({
+      message: `Удаление снимков (${present.length} шт.): ${shown}${rest}`,
+      tree: newTree.sha,
+      parents: [headSha],
+    }));
+    try {
+      await ghApi(`${repo}/git/refs/heads/main`, env.GITHUB_TOKEN, jsonReq({ sha: newCommit.sha, force: false }, 'PATCH'));
+    } catch (err) {
+      // 422 (не fast-forward) / 409: main сдвинули между нашим чтением и
+      // записью. Наш коммит остаётся висеть без ветки — безвредно, GitHub
+      // его соберёт сам; читаем main заново и повторяем.
+      if (err.status !== 422 && err.status !== 409) throw err;
+      if (attempt === DELETE_COMMIT_ATTEMPTS) {
+        throw new Error(`ветку main меняли прямо во время удаления, после ${DELETE_COMMIT_ATTEMPTS} попыток ничего не удалено — можно повторить`);
+      }
+      continue;
+    }
+    return { deleted: present, missing };
+  }
 }
 
 // Запускает оба workflow бэкапа battle-data-admin-bot немедленно (кнопка
@@ -952,7 +1049,7 @@ export default {
       return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null, botError: bot.error || null, telegramWebhook });
     }
 
-    const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup'].includes(url.pathname);
+    const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup', '/delete-backups'].includes(url.pathname);
     if (!env.BOT_TOKEN || !env.FIREBASE_SERVICE_ACCOUNT || (needsGithubToken && !env.GITHUB_TOKEN)) {
       return jsonResponse({ error: 'Worker не настроен (нет секретов)' }, 500);
     }
@@ -1355,7 +1452,7 @@ export default {
       }
       // Тот же allowlist, что и у download-backup — удалять из приватного
       // репозитория можно только сами снимки, ничего больше.
-      if (typeof path !== 'string' || path.includes('..') || !/^(code-backups\/(index\.html|battle-admin-bot)\/[A-Za-z0-9._-]+\.zip|db-snapshots\/[A-Za-z0-9._-]+\.json)$/.test(path)) {
+      if (!isBackupPathAllowed(path)) {
         return jsonResponse({ error: 'путь недопустим' }, 400);
       }
 
@@ -1376,6 +1473,51 @@ export default {
       }
 
       return jsonResponse({ ok: true });
+    }
+
+    // Пакетное удаление: тот же контракт и те же проверки, что у /delete-backup,
+    // но paths — список, а удаление идёт одним коммитом (см. ghDeleteFiles:
+    // N вызовов /delete-backup упёрлись бы в лимит подзапросов и в 409).
+    if (url.pathname === '/delete-backups' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const { paths } = body || {};
+      if (!Array.isArray(paths) || !paths.length) {
+        return jsonResponse({ error: 'нужен paths — непустой список путей' }, 400);
+      }
+      if (paths.length > MAX_DELETE_PATHS) {
+        return jsonResponse({ error: `слишком много путей за раз (максимум ${MAX_DELETE_PATHS})` }, 400);
+      }
+      // Каждый путь — через тот же allowlist, что и у /delete-backup: одного
+      // недопустимого достаточно, чтобы отклонить весь запрос целиком, ничего
+      // не удаляя.
+      if (!paths.every(isBackupPathAllowed)) {
+        return jsonResponse({ error: 'путь недопустим' }, 400);
+      }
+
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      if (!hasBackupsAccess(env, verified.userId, requesterRole)) {
+        return jsonResponse({ error: 'Нет прав на управление бэкапами' }, 403);
+      }
+
+      let result;
+      try {
+        result = await ghDeleteFiles(env, paths);
+      } catch (err) {
+        return jsonResponse({ error: 'GitHub отказал: ' + err.message }, 502);
+      }
+
+      return jsonResponse({ ok: true, deleted: result.deleted, missing: result.missing });
     }
 
     return jsonResponse({ error: 'not found' }, 404);

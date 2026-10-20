@@ -428,7 +428,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.21</span></div>
+    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.22</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -1018,6 +1018,13 @@
         <div id="errors-list"></div>
         <div class="admin-empty" id="errors-empty" style="display:none;">Пока никто ничего не присылал</div>
       </div>
+      </div>
+
+      <!-- жалобы игроков из окна итога боя в игре (reports/<pushId>, пишет index.html) -->
+      <div id="logs-section-reports" style="margin-top:22px;">
+        <div class="section-label" id="reports-title">Жалобы игроков (0)</div>
+        <div id="reports-list"></div>
+        <div class="admin-empty" id="reports-empty" style="display:none;">Жалоб нет</div>
       </div>
     </div>
 
@@ -2725,6 +2732,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function showLogsSection() {
     openAllLogs();
     loadErrorReports();
+    loadPlayerReports();
   }
 
   // «Заявки»: заявки на бета-тест и модерация кланов тоже сразу обе. Своё
@@ -3838,6 +3846,66 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const data = snap.val() || {};
       renderErrorReports(Object.entries(data).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)));
     });
+  }
+
+  // ===== Жалобы игроков (reports/<pushId>) =====
+  // Пишет игра (окно итога боя). Ключи — push-id, то есть уже по времени, поэтому limitToLast
+  // не нужен индекс. Каждое значение из базы — только через escapeHtml/textContent: база открыта на
+  // запись, жалобу может написать кто угодно.
+  const REPORT_REASON_LABELS = {
+    threats: 'Угрозы или травля',
+    discrimination: 'Дискриминация',
+    sexual: 'Сексуальные домогательства',
+    spam: 'Спам или реклама',
+    other: 'Другое',
+  };
+
+  function renderPlayerReports(entries) {
+    const listEl = document.getElementById('reports-list');
+    const emptyEl = document.getElementById('reports-empty');
+    const open = entries.filter(([, r]) => r.status !== 'closed');
+    document.getElementById('reports-title').textContent = `Жалобы игроков (${open.length} новых)`;
+    listEl.innerHTML = '';
+    if (!entries.length) { emptyEl.style.display = 'block'; return; }
+    emptyEl.style.display = 'none';
+    entries.forEach(([id, report]) => {
+      const closed = report.status === 'closed';
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      if (closed) row.style.opacity = '0.55';
+      const date = new Date(report.createdAt || 0).toLocaleString('ru-RU');
+      const reason = REPORT_REASON_LABELS[report.reason] || 'Другое';
+      row.innerHTML = `
+        <div class="l-title">${escapeHtml(reason)} — на ${escapeHtml(report.targetName || '—')} (${escapeHtml(report.targetId || '—')})</div>
+        <div class="l-body">Пожаловался: ${escapeHtml(report.reporterId || '—')}${report.battleCode ? ' · бой ' + escapeHtml(report.battleCode) : ''}</div>
+        <div class="l-time">${date}${closed ? ' · закрыта' : ''}</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn btn-line report-find" style="flex:1; padding:7px; font-size:11.5px;">Найти игрока</button>
+          ${closed ? '' : '<button class="btn btn-line report-close" style="flex:1; padding:7px; font-size:11.5px;">Закрыть жалобу</button>'}
+        </div>
+      `;
+      row.querySelector('.report-find').addEventListener('click', () => {
+        document.querySelector('.tab[data-tab="panel"]').click();
+        document.getElementById('admin-search-input').value = String(report.targetId || '');
+        searchPlayer();
+      });
+      const closeBtn = row.querySelector('.report-close');
+      if (closeBtn) closeBtn.addEventListener('click', () => {
+        closeBtn.disabled = true;
+        db.ref('reports/' + id + '/status').set('closed').then(() => {
+          logAction('report_closed', String(report.targetId || ''), report.targetName || '—', report.targetId || '—', `Жалоба закрыта: ${reason}`);
+          loadPlayerReports();
+        }).catch((err) => { closeBtn.disabled = false; alert('Не удалось закрыть жалобу: ' + (err.message || err)); });
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  function loadPlayerReports() {
+    db.ref('reports').limitToLast(100).once('value').then((snap) => {
+      const data = snap.val() || {};
+      renderPlayerReports(Object.entries(data).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)));
+    }).catch((err) => console.error('reports load failed:', err));
   }
 
   document.getElementById('btn-open-player-history').addEventListener('click', () => {

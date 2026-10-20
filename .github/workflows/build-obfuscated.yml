@@ -8,8 +8,8 @@ on:
   workflow_dispatch: {}
 
 # Guard against an infinite loop: this workflow's own commit step only
-# touches public/admin.html, never src/admin.html, so it can never match
-# its own path filter above and re-trigger itself.
+# touches public/admin.html and public/build-id.json, never src/admin.html, so
+# it can never match its own path filter above and re-trigger itself.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -79,6 +79,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/admin.html
-          git diff --cached --quiet || git commit -m "Auto-build: minify+mangle admin.html from src/admin.html [skip ci]"
+          git add public/admin.html public/build-id.json
+          git diff --cached --quiet || git commit -m "Auto-build: minify+mangle admin.html from src/admin.html, stamp build-id.json [skip ci]"
           git push

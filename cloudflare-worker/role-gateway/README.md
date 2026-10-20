@@ -38,7 +38,10 @@ repo, files }` — `repo` — `index.html`/`battle-admin-bot`, `files` —
 снимка), `POST /download-backup` и `POST /delete-backup` (оба — `{
 initData, path }`, path — `code-backups/<repo>/<файл>.zip` или
 `db-snapshots/<файл>.json`; download отдаёт сырые байты файла, delete
-удаляет его из репозитория навсегда): проверка `initData` + только
+удаляет его из репозитория навсегда), `POST /delete-backups` (`{ initData,
+paths }` — то же, но сразу много снимков: `paths` — от 1 до 100 путей такого
+же вида, повторы убираются; отдаёт `{ ok: true, deleted, missing }` — какие
+пути удалены и каких уже не было): проверка `initData` + только
 **superadmin**, сам вызов GitHub API идёт с `GITHUB_TOKEN` этого Worker'а.
 Делегируемого права `permissions/backups` больше нет: правила базы
 позволяют записать его кому угодно, и любой игрок через `/restore-code`
@@ -54,9 +57,9 @@ initData, path }`, path — `code-backups/<repo>/<файл>.zip` или
 `/restore-database` — тоже строго superadmin (полная перезапись базы —
 самое разрушительное действие из всех).
 
-Все шесть бэкап-эндпоинтов (`/backup-now`, `/restore-code`,
-`/restore-database`, `/list-backups`, `/download-backup`, `/delete-backup`)
-и, отдельно, `/grant-role`/`/set-status` принимают `initData` ИЛИ
+Все семь бэкап-эндпоинтов (`/backup-now`, `/restore-code`,
+`/restore-database`, `/list-backups`, `/download-backup`, `/delete-backup`,
+`/delete-backups`) и, отдельно, `/grant-role`/`/set-status` принимают `initData` ИЛИ
 `{ telegramId, deviceId }` — второе нужно, чтобы все эти действия работали
 не только внутри настоящей Telegram-сессии, но и из desktop-приложения/
 обычного браузера (initData там физически недоступна — это не Telegram
@@ -101,6 +104,21 @@ Cloudflare Worker ограничивает число исходящих зап�
 при одном blob-запросе на файл восстановление большого репозитория
 (полсотни+ файлов) падало с "Too many subrequests by single Worker
 invocation" ещё до того, как вообще пытался собраться коммит.
+
+`/delete-backups` по той же причине удаляет все выбранные снимки **одним
+коммитом** через Git Data API, а не вызывает `/delete-backup` по разу на файл:
+тот тратит два подзапроса на файл (чтение + удаление через Contents API), а
+лимит бесплатного плана — 50 на один вызов Worker'а; к тому же каждое такое
+удаление — отдельный коммит в `main`, и параллельные ломаются о 409. Здесь
+подзапросов на попытку всегда 6 (прочитать ветку и её дерево, собрать новое
+дерево без этих файлов, коммит, сдвинуть ветку) — хоть для 1 снимка, хоть для
+100. Если `main` успели сдвинуть (например, ежедневный workflow бэкапа запушил
+новый снимок), Worker повторяет всё с начала, до 3 попыток (то есть не больше
+18 подзапросов), потом отвечает 502.
+Повторный вызов безопасен: уже удалённые пути приходят в `missing`, а если
+удалять нечего, коммит не создаётся. Другой путь, не похожий на снимок
+(`.github/…`, `public/…` и т. п.), отклоняется целиком (400) — тем же
+списком допустимых путей, что у `/delete-backup` и `/download-backup`.
 
 ## Бот: заявки на вход, кнопки «Разрешить/Отклонить», команды
 
@@ -160,8 +178,10 @@ Secrets) — после того как правила без ключа выл�
 **`GITHUB_TOKEN`** — fine-grained Personal Access Token
 (github.com → Settings → Developer settings → Fine-grained tokens),
 выданный только на три репозитория: `battle-data-admin-bot` (Actions: Read
-and write), `index.html` и `battle-admin-bot` (оба — Contents: Read and
-write). Никогда не расширяй его scope на "все репозитории".
+and write — запуск бэкапа; Contents: Read and write — список, скачивание и
+удаление снимков, в том числе `/delete-backups`: репозиторий приватный),
+`index.html` и `battle-admin-bot` (оба — Contents: Read and write). Никогда не
+расширяй его scope на "все репозитории".
 
 ## Выкладка без терминала (GitHub Actions)
 

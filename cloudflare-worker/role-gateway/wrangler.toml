@@ -15,3 +15,8 @@ compatibility_date = "2024-11-01"
 # Несколько id — через запятую. Чтобы добавить второго superadmin, допишите
 # его id сюда и выложите Worker заново.
 OWNER_IDS = "871656058"
+
+# Mini App ВидеоЧата у @BotFather (/newapp → Web App URL https://botsystemtioxsit.github.io/videochat/):
+# «имя_бота/короткое_имя». Пока пусто — кнопка /call в группах ведёт по обычной ссылке на страницу;
+# когда Mini App создан и сюда вписано, /call открывает ВидеоЧат прямо внутри Телеграма.
+VIDEOCHAT_MINIAPP = ""

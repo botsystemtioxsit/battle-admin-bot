@@ -773,6 +773,18 @@ async function handlePairingCode(env, message, code) {
 // страница видеочата спрашивает у Worker'а (/vc-membership): ответ даёт Telegram, а не база.
 const VIDEOCHAT_URL = 'https://botsystemtioxsit.github.io/videochat/';
 const VC_MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
+// Mini App ВидеоЧата, зарегистрированное у @BotFather (/newapp): значение «имя_бота/короткое_имя», например
+// troll_battle_Terminal_bot/video (wrangler.toml → VIDEOCHAT_MINIAPP). Пока не задано (или задано криво) —
+// кнопки ведут по обычной ссылке на страницу, она откроется в браузере Телеграма.
+function videochatMiniAppLink(env) {
+  const v = String((env && env.VIDEOCHAT_MINIAPP) || '').trim();
+  return /^[A-Za-z0-9_]{5,64}\/[A-Za-z0-9_]{3,64}$/.test(v) ? `https://t.me/${v}` : null;
+}
+// Кнопка входа в комнату чата: в группе web_app-кнопки Телеграм не разрешает, поэтому только ссылка
+function videochatRoomUrl(env, key) {
+  const mini = videochatMiniAppLink(env);
+  return mini ? `${mini}?startapp=${encodeURIComponent(key)}` : `${VIDEOCHAT_URL}?room=${encodeURIComponent(key)}`;
+}
 
 // Telegram гарантирует getChatMember про ДРУГИХ людей только боту-администратору группы. Поэтому для
 // администраторов есть запасной путь — getChatAdministrators (он доступен любому боту в группе); для
@@ -843,7 +855,7 @@ async function handleGroupMessage(env, message) {
       return;
     }
     await say(`📹 Видеокомната «${String(community.title || title).slice(0, 60)}»\nКод комнаты: ${String(community.joinCode || '—')}`, {
-      reply_markup: { inline_keyboard: [[{ text: '📹 Войти в комнату', url: `${VIDEOCHAT_URL}?room=${encodeURIComponent(key)}` }]] },
+      reply_markup: { inline_keyboard: [[{ text: '📹 Войти в комнату', url: videochatRoomUrl(env, key) }]] },
     });
     return;
   }
@@ -915,16 +927,25 @@ async function handleBotMessage(env, message) {
     return;
   }
   const command = message.text.trim().split(/\s+/)[0].split('@')[0];
-  if (command === '/start' || command === '/admin') {
+  if (command === '/video' || command === '/videochat') {
+    // в личном чате web_app-кнопка разрешена: ВидеоЧат откроется внутри Телеграма, вход — по Telegram-аккаунту
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Открой панель управления БАТТЛ. Доступ проверяется по твоей роли в базе — если её ещё не выдали, страница сама покажет «доступ запрещён».',
-      reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
+      text: '📹 ВидеоЧат — видеозвонки для ваших Telegram-чатов. Комнаты подключённых чатов появятся в списке; в группе их открывает команда /call.',
+      reply_markup: { inline_keyboard: [[{ text: '📹 Открыть ВидеоЧат', web_app: { url: `${VIDEOCHAT_URL}?v=${Date.now()}` } }]] },
+    });
+  } else if (command === '/start' || command === '/admin') {
+    const rows = [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]];
+    if (command === '/start') rows.push([{ text: '📹 Открыть ВидеоЧат', web_app: { url: `${VIDEOCHAT_URL}?v=${Date.now()}` } }]);
+    await tgApi(env, 'sendMessage', {
+      chat_id: chatId,
+      text: 'Открой панель управления БАТТЛ. Доступ проверяется по твоей роли в базе — если её ещё не выдали, страница сама покажет «доступ запрещён».' + (command === '/start' ? '\n\nВидеозвонки для Telegram-чатов — кнопка «ВидеоЧат» ниже (или команда /video).' : ''),
+      reply_markup: { inline_keyboard: rows },
     });
   } else if (command === '/help') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу и сделай его администратором (права не нужны), администратор группы пишет там /connect, потом любой участник — /call.',
+      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/video — открыть ВидеоЧат\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу и сделай его администратором (права не нужны), администратор группы пишет там /connect, потом любой участник — /call.',
     });
   } else if (command === '/requests') {
     const fromId = String((message.from && message.from.id) || '');

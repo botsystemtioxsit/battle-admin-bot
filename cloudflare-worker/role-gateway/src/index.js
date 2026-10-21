@@ -774,12 +774,31 @@ async function handlePairingCode(env, message, code) {
 const VIDEOCHAT_URL = 'https://botsystemtioxsit.github.io/videochat/';
 const VC_MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
 
+// Telegram гарантирует getChatMember про ДРУГИХ людей только боту-администратору группы. Поэтому для
+// администраторов есть запасной путь — getChatAdministrators (он доступен любому боту в группе); для
+// обычных участников без прав бота ответа не будет (null) — об этом пишем человеку явно.
 async function chatMemberStatus(env, chatId, userId) {
   const data = await tgApi(env, 'getChatMember', { chat_id: chatId, user_id: Number(userId) }, 6000);
+  if (data.ok && data.result) {
+    const r = data.result;
+    if (r.status === 'restricted') return r.is_member ? 'member' : 'left';
+    return r.status;
+  }
+  const admins = await tgApi(env, 'getChatAdministrators', { chat_id: chatId }, 6000);
+  if (admins.ok && Array.isArray(admins.result)) {
+    const hit = admins.result.find((m) => m && m.user && String(m.user.id) === String(userId));
+    if (hit) return hit.status === 'creator' ? 'creator' : 'administrator';
+  }
+  return null;
+}
+
+// Администратор ли бот в этой группе (нужно, чтобы проверять обычных участников)
+async function botIsAdminIn(env, chatId) {
+  const info = await getBotInfo(env);
+  if (!info || !info.id) return null;
+  const data = await tgApi(env, 'getChatMember', { chat_id: chatId, user_id: Number(info.id) }, 6000);
   if (!data.ok || !data.result) return null;
-  const r = data.result;
-  if (r.status === 'restricted') return r.is_member ? 'member' : 'left';
-  return r.status;
+  return data.result.status === 'administrator' || data.result.status === 'creator';
 }
 
 async function dbReadPublic(path) {
@@ -811,7 +830,7 @@ async function handleGroupMessage(env, message) {
   const title = String(chat.title || 'Чат').slice(0, 60);
 
   if (cmd === 'help') {
-    await say('Видеозвонки для этого чата.\n\n/connect — подключить чат (только администратор чата; заявку подтверждает владелец проекта)\n/call — открыть видеокомнату чата');
+    await say('Видеозвонки для этого чата.\n\n/connect — подключить чат (только администратор чата; заявку подтверждает владелец проекта)\n/call — открыть видеокомнату чата\n\nЧтобы всё работало, этот бот должен быть администратором группы (никакие права ему не нужны).');
     return;
   }
 
@@ -867,7 +886,9 @@ async function handleGroupMessage(env, message) {
       reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
     });
   }
-  await say('✅ Заявка отправлена владельцу проекта. Когда её подтвердят, в этом чате заработает команда /call — она откроет видеокомнату.');
+  const botAdmin = await botIsAdminIn(env, chat.id);
+  await say('✅ Заявка отправлена владельцу проекта. Когда её подтвердят, в этом чате заработает команда /call — она откроет видеокомнату.'
+    + (botAdmin === false ? '\n\n⚠️ Сделайте этого бота администратором группы (права не нужны) — иначе он не сможет проверять, кто состоит в чате, и участники не смогут войти в комнату.' : ''));
 }
 
 // Страница видеочата перед входом спрашивает, состоит ли человек в Telegram-чате этой комнаты.
@@ -879,7 +900,7 @@ async function checkVideochatMembership(env, body) {
   if (!community || community.status !== 'active') return { ok: false, error: 'Комната не найдена или отключена.' };
   if (ownerIds(env).has(userId)) return { ok: true };
   const status = await chatMemberStatus(env, community.tgChatId != null ? community.tgChatId : key, userId);
-  if (status === null) return { ok: false, error: 'Не удалось проверить участие в чате — бот должен оставаться в группе.' };
+  if (status === null) return { ok: false, error: 'Не удалось проверить участие в чате. Администратор группы должен сделать бота @troll_battle_Terminal_bot администратором группы (права ему не нужны).' };
   if (!VC_MEMBER_STATUSES.has(status)) return { ok: false, error: 'Вы не состоите в этом Telegram-чате.' };
   return { ok: true };
 }
@@ -903,7 +924,7 @@ async function handleBotMessage(env, message) {
   } else if (command === '/help') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу, администратор пишет там /connect, потом любой участник — /call.',
+      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу и сделай его администратором (права не нужны), администратор группы пишет там /connect, потом любой участник — /call.',
     });
   } else if (command === '/requests') {
     const fromId = String((message.from && message.from.id) || '');

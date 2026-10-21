@@ -1027,7 +1027,7 @@ async function handleBotMessage(env, message) {
   } else if (command === '/admin') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Открой панель управления БАТТЛ. Доступ проверяется по твоей роли в базе — если её ещё не выдали, страница сама покажет «доступ запрещён».',
+      text: 'Открой панель БАТТЛ. Команде проекта открываются инструменты управления (по выданным правам); остальные видят своё окно аккаунта: где вы подключены, как работает бот и наши продукты.',
       reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
     });
   } else if (command === '/help') {

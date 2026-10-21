@@ -433,7 +433,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.29</span></div>
+    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.30</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -2114,7 +2114,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (user && user.role === 'superadmin') return { ...base, app_troll: true, app_videochat: true, app_community: false };
     const role = user && (user.role || (user.isAdmin ? 'admin' : 'user'));
     // обычный игрок (без роли в панели) — только «Моя комната», если его назначили в команду комнаты
-    if (!user || !ALLOWED_ROLES.includes(role)) return { ...base, app_troll: false, app_videochat: false, app_community: hasRoom };
+    // токен доступа (псевдо-роль 'token', см. loadAccessTokenAndShowApp) приложения берёт из своих ключей, как админ
+    if (!user || (!ALLOWED_ROLES.includes(role) && role !== 'token')) return { ...base, app_troll: false, app_videochat: false, app_community: hasRoom };
     const p = user.permissions;
     const explicit = !!p && (p.app_troll !== undefined || p.app_videochat !== undefined);
     return { ...base, app_troll: explicit ? !!p.app_troll : true, app_videochat: explicit ? !!p.app_videochat : false, app_community: hasRoom };
@@ -2122,6 +2123,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function resolveBasePermissions(user) {
     if (!user) return { ...ALL_PERMISSIONS_OFF };
     if (user.role === 'superadmin') return { ...ALL_PERMISSIONS_ON }; // супердоступ — всегда всё, это не настраивается
+    // v5.29: обычный игрок (роль user) — никаких прав, даже если у него остались «хвосты» permissions от прошлой роли
+    // (при понижении админа permissions не стираются). Раньше такого не пускали в панель вовсе, теперь он видит «Мой аккаунт».
+    if ((user.role || (user.isAdmin ? 'admin' : 'user')) === 'user') return { ...ALL_PERMISSIONS_OFF };
     if (user.permissions) return { ...ALL_PERMISSIONS_OFF, ...user.permissions };
     if (user.role === 'admin') return { ...ALL_PERMISSIONS_ON }; // легаси-admin до появления гибких прав — имел всё
     if (user.role === 'moderator') return { ...ALL_PERMISSIONS_OFF, bans: true, clans: true }; // легаси-moderator
@@ -2180,11 +2184,39 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // входом, либо экран screen-login (см. ниже).
   let profileCreateTried = false;
   // Профиль, как его создаёт игра при первом визите (playerId, role, points, stats…) — один аккаунт на все проекты.
-  // Только для настоящего Telegram-входа (id подписан Telegram), и не в обход закрытого бета-теста.
+  // Только при заходе из Telegram и не в обход закрытого бета-теста.
+  // Анонимный вход нужен только для привязки владельца нового профиля (owners/<id> = auth.uid) — ровно как в игре
+  // (см. anonAuthReady в index.html): правила потом разрешают менять status/points/stars только этому uid. Это не вход
+  // «по почте» и не заводит никаких аккаунтов Firebase Auth с паролем. SDK грузится только когда создаём профиль.
+  function loadFirebaseAuthSdk() {
+    if (window.firebase && firebase.auth) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js';
+      el.onload = resolve;
+      el.onerror = () => reject(new Error('firebase-auth не загрузился'));
+      document.head.appendChild(el);
+    });
+  }
+  async function anonymousAuthUid() {
+    try {
+      await loadFirebaseAuthSdk();
+      const cred = await firebase.auth().signInAnonymously();
+      return cred.user.uid;
+    } catch (err) {
+      console.error('anonymous auth failed:', err); // как в игре: не вышло — профиль создаём без привязки, вход не блокируем
+      return null;
+    }
+  }
+  // Id берётся из tg.initDataUnsafe (подпись Telegram здесь не проверяется — как и везде в панели и в игре; база открыта,
+  // так что «подделать» можно и без панели). Поэтому запись максимально бережная: ничего существующего не трогаем.
   async function createMissingProfile(telegramId) {
     const tu = tg?.initDataUnsafe?.user;
     if (!tu || !/^\d+$/.test(String(telegramId)) || String(tu.id) !== String(telegramId)) return 'no';
     if ((await db.ref('config/closedBeta').once('value')).val()) return 'beta';
+    const authUid = await anonymousAuthUid();
+    // профиль мог появиться, пока мы думали (например, из игры) — тогда ничего не пишем
+    if ((await db.ref('users/' + telegramId + '/role').once('value')).exists()) return 'ok';
     const fresh = {
       playerId: generatePlayerId(),
       firstName: String(tu.first_name || 'Игрок').slice(0, 64),
@@ -2198,10 +2230,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       restrictedUntil: null,
       createdAt: Date.now()
     };
-    // «создать, только если пусто»: если профиль успел появиться (например, из игры), его не трогаем
-    await db.ref('users/' + telegramId).transaction((cur) => (cur === null ? fresh : undefined), undefined, false);
+    // одной атомарной записью, как в игре: иначе между «создали» и «привязали» чужой анонимный вход мог бы занять owners/<id>
+    const updates = { ['users/' + telegramId]: fresh };
+    if (authUid) updates['owners/' + telegramId] = authUid;
+    await db.ref().update(updates);
+    // индекс «@username → id» — только если ключ свободен (чужую привязку не перезаписываем)
     const ukey = tu.username ? String(tu.username).toLowerCase() : '';
-    if (/^[a-z0-9_]{1,64}$/.test(ukey)) db.ref('usernames/' + ukey).set(String(telegramId)).catch(() => {});
+    if (/^[a-z0-9_]{1,64}$/.test(ukey)) db.ref('usernames/' + ukey).transaction((cur) => (cur === null ? String(telegramId) : undefined), undefined, false).catch(() => {});
     return 'ok';
   }
 
@@ -3686,7 +3721,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const fromTelegram = !!tg?.initDataUnsafe?.user;
     const loginHow = fromTelegram ? 'через Telegram' : (isDesktopApp() ? 'приложение для компьютера (по заявке)' : 'браузер (по заявке)');
     const rooms = u.vcJoined && typeof u.vcJoined === 'object' ? Object.keys(u.vcJoined).length : 0;
-    const devices = u.trustedDevices && typeof u.trustedDevices === 'object' ? Object.keys(u.trustedDevices).length : 0;
+    // считаем только записи, созданные Worker'ом (с подписью sig): старые без неё не действуют, список ниже так и пишет
+    const devices = u.trustedDevices && typeof u.trustedDevices === 'object' ? Object.values(u.trustedDevices).filter((d) => d && d.sig).length : 0;
     const battles = Number(u.stats && u.stats.battles) || 0;
     const rows = [
       ['Имя', (u.firstName || '—') + (u.username ? ' (' + u.username + ')' : ''), true],
@@ -3770,6 +3806,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       resultEl.textContent = '✅ Привязано — теперь с другого устройства можно запросить вход по этому email.';
       document.getElementById('account-email-input').value = '';
       document.getElementById('account-email-status').textContent = 'привязан ✅ — ' + email;
+      accountUserCache = { ...accountUserCache, attachedEmail: email };
+      renderAccountStatus(accountUserCache);
     } catch (err) {
       resultEl.style.color = 'var(--live)';
       resultEl.textContent = 'Не удалось привязать: ' + (err.message || err.code || err);
@@ -3987,6 +4025,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!listEl || !myTelegramId) return;
     db.ref('users/' + myTelegramId + '/trustedDevices').once('value').then((snap) => {
       const devices = snap.val() || {};
+      accountUserCache = { ...accountUserCache, trustedDevices: devices }; // после подключения/отзыва карточка статуса сразу верна
+      renderAccountStatus(accountUserCache);
       const keys = Object.keys(devices);
       if (!keys.length) {
         listEl.innerHTML = '';

@@ -16,7 +16,7 @@ compatibility_date = "2024-11-01"
 # его id сюда и выложите Worker заново.
 OWNER_IDS = "871656058"
 
-# Mini App ВидеоЧата у @BotFather (/newapp → Web App URL https://botsystemtioxsit.github.io/videochat/):
-# «имя_бота/короткое_имя». Пока пусто — кнопка /call в группах ведёт по обычной ссылке на страницу;
-# когда Mini App создан и сюда вписано, /call открывает ВидеоЧат прямо внутри Телеграма.
-VIDEOCHAT_MINIAPP = ""
+# Mini App ВидеоЧата: бот @TIOXSITvoice_chat_bot, у него главное приложение (BotFather → Configure Mini App) с адресом
+# https://botsystemtioxsit.github.io/videochat/. Формат «имя_бота» (главное приложение) или «имя_бота/короткое_имя».
+# /call в группах открывает ВидеоЧат прямо внутри Телеграма; если оставить пустым — обычная ссылка на страницу.
+VIDEOCHAT_MINIAPP = "TIOXSITvoice_chat_bot"

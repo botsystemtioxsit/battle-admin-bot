@@ -551,6 +551,7 @@ const LOGIN_REQUEST_TTL_MS = 10 * 60 * 1000;
 const LOGIN_APPS = {
   game: { emoji: '🎮', name: 'ИГРУ' },
   admin: { emoji: '🛠', name: 'АДМИН-ПАНЕЛЬ' },
+  videochat: { emoji: '📹', name: 'ВИДЕОЧАТ' },
 };
 
 // Метка устройства попадает в сообщение бота — только короткий безопасный
@@ -560,11 +561,11 @@ function safeDeviceLabel(value) {
   return /^[\p{L}\p{N} ._(),\/-]{1,40}$/u.test(s) ? s : 'неизвестное устройство';
 }
 
-// app пишет кто угодно — берём только два известных значения (иначе 'constructor'
+// app пишет кто угодно — берём только известные значения (иначе 'constructor'
 // и прочие ключи прототипа дали бы мусор в тексте)
 function loginApp(req) {
   const key = req && req.app;
-  return key === 'game' || key === 'admin' ? LOGIN_APPS[key] : null;
+  return key === 'game' || key === 'admin' || key === 'videochat' ? LOGIN_APPS[key] : null;
 }
 
 function loginRequestTitle(req) {

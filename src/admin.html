@@ -70,6 +70,11 @@
   .tab-grp{ font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); padding:16px 10px 6px; }
   .tab-grp:first-child{ padding-top:4px; }
   .tab-grp.empty{ display:none; }
+  .app-switch{ display:flex; gap:6px; padding:2px 4px 6px; }
+  .app-switch button{ flex:1; border:1px solid var(--line); background:var(--panel-2); color:var(--muted); border-radius:var(--radius); padding:8px 6px; font-size:12.5px; font-weight:600; cursor:pointer; }
+  .app-switch button.active{ background:var(--gold); color:var(--on-gold); border-color:var(--gold); }
+  .app-switch .app-one{ flex:1; font-size:12px; color:var(--muted); padding:4px 6px; }
+  .app-switch .app-one b{ color:var(--text); }
   .tab{ display:flex; align-items:center; gap:10px; min-height:44px; padding:0 10px; border-radius:var(--radius); font-size:14px; font-weight:500; cursor:pointer; color:var(--muted); user-select:none; white-space:nowrap; }
   .tab:hover{ background:var(--panel-2); color:var(--text); }
   .tab.active{ background:var(--line); color:var(--text); }
@@ -428,7 +433,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.24</span></div>
+    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.25</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -563,33 +568,39 @@
          диспетчер вкладок их не видит; у пустой группы (все разделы скрыты
          правами) их прячет syncTabGroups() в конце applyRoleUI(). -->
     <div class="tabs" id="app-tabs">
+      <!-- Что администрирует этот человек (v5.25): если приложений несколько — переключатель
+           «Тролль-Баттл | ВидеоЧат», если одно — просто подпись. Это не .tab, диспетчер вкладок его не видит. -->
+      <div class="app-switch" id="app-switch" style="display:none;"></div>
+      <div class="tab-grp">ВидеоЧат</div>
+      <div class="tab" data-tab="vc-overview" data-app="videochat" data-title="Обзор" data-sub="Кто сейчас в видеочате"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"></rect><path d="M15.5 10.5l6-3.5v10l-6-3.5"></path></svg>Обзор</div>
+      <div class="tab" data-tab="vc-moderation" data-app="videochat" data-title="Жалобы и блокировки" data-sub="Жалобы на собеседников и блокировки в видеочате"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M12 8v5M12 16.5v.01"></path></svg>Жалобы и блокировки</div>
       <div class="tab-grp">Игроки</div>
-      <div class="tab active" data-tab="panel" data-title="Панель" data-sub="Найдите игрока и управляйте его доступом"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18 14.4c1.8.8 3 2.7 3 5.6"></path></svg>Панель</div>
+      <div class="tab active" data-tab="panel" data-app="troll" data-title="Панель" data-sub="Найдите игрока и управляйте его доступом"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18 14.4c1.8.8 3 2.7 3 5.6"></path></svg>Панель</div>
       <!-- "Заявки" объединяет модерацию кланов ("Заявки кланов", право
            clans) и заявки на закрытый бета-тест ("Заявки на бета", право
            beta) — суб-нав внутри .subview, см. showBetaSection(). Сама
            вкладка видна, если есть хоть одно из двух прав (объединение);
            видимость кнопок суб-нава и загрузка контента — по своему
            условию у каждой части, см. applyRoleUI. -->
-      <div class="tab" data-tab="beta" data-title="Заявки" data-sub="Закрытый бета-тест и кланы"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"></path><path d="M3 13h5l1 3h6l1-3h5"></path></svg>Заявки</div>
+      <div class="tab" data-tab="beta" data-app="troll" data-title="Заявки" data-sub="Закрытый бета-тест и кланы"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"></path><path d="M3 13h5l1 3h6l1-3h5"></path></svg>Заявки</div>
       <div class="tab-grp">Контент</div>
-      <div class="tab" data-tab="event" data-title="Ивент" data-sub="Событие в игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>Ивент</div>
+      <div class="tab" data-tab="event" data-app="troll" data-title="Ивент" data-sub="Событие в игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>Ивент</div>
       <div class="tab-grp">Наблюдение</div>
       <!-- "Журнал" объединяет журнал действий ("Действия") и присланные
            игроками ошибки ("Ошибки клиента") — суб-нав внутри .subview,
            см. showLogsSection(). Обе части видны всем, у кого вообще есть
            доступ к панели — так было и раньше у каждой по отдельности. -->
-      <div class="tab" data-tab="logs" data-title="Журнал" data-sub="Что делали админы и какие ошибки прислали игроки"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Журнал</div>
+      <div class="tab" data-tab="logs" data-app="troll" data-title="Журнал" data-sub="Что делали админы и какие ошибки прислали игроки"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Журнал</div>
       <!-- два вида терминала (код в конце скрипта):
            "Эфир" — прямая трансляция событий, только чтение, видна всем, у кого есть доступ к панели;
            "Терминал" — командная строка (как cli/battle-admin.js + заявки), только Супердоступ
            (скрывается в applyRoleUI, а termOpen/termSubmit перепроверяют роль сами). -->
-      <div class="tab" data-tab="live" id="tab-live" data-title="Эфир" data-sub="Что происходит прямо сейчас"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>Эфир</div>
+      <div class="tab" data-tab="live" data-app="troll" id="tab-live" data-title="Эфир" data-sub="Что происходит прямо сейчас"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>Эфир</div>
       <!-- видна всем, у кого вообще есть доступ к панели — отчёт "только
            для чтения" (см. loadStatsTab), не отдельное переключаемое право -->
-      <div class="tab" data-tab="stats" id="tab-stats" data-title="Статистика" data-sub="Сводка по игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Статистика</div>
+      <div class="tab" data-tab="stats" data-app="troll" id="tab-stats" data-title="Статистика" data-sub="Сводка по игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Статистика</div>
       <div class="tab-grp">Инструменты</div>
-      <div class="tab" data-tab="terminal" id="tab-terminal" data-title="Терминал" data-sub="Команды для Супердоступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 10l3 2-3 2M13 15h4"></path></svg>Терминал</div>
+      <div class="tab" data-tab="terminal" data-app="troll" id="tab-terminal" data-title="Терминал" data-sub="Команды для Супердоступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 10l3 2-3 2M13 15h4"></path></svg>Терминал</div>
       <!-- ссылки на скачивание Desktop/Android/веб-версии панели + инструкция
            по установке под Linux — было засунуто внутрь бывшей вкладки
            "Ассистент" (см. её полное удаление в истории коммитов), из-за
@@ -1204,6 +1215,41 @@
           <textarea id="term-input" rows="1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="команда или несколько строк сразу"></textarea>
           <button type="submit" class="term-send" aria-label="Выполнить">↵</button>
         </form>
+      </div>
+    </div>
+
+    <!-- ===== ВидеоЧат (v5.25): обзор и модерация. Только для тех, кому Супердоступ включил
+         «Администрирует ВидеоЧат» (canManageVideochat). Схема данных — в CLAUDE.md репозитория videochat. ===== -->
+    <div class="subview" data-panel="vc-overview" id="panel-vc-overview">
+      <div class="admin-card">
+        <div class="section-label">Прямо сейчас</div>
+        <div class="stat-grid" id="vc-stat-grid"></div>
+        <div class="admin-empty" style="text-align:left; padding:10px 0 0;">Цифры живые: обновляются сами, пока открыта эта вкладка.</div>
+      </div>
+    </div>
+
+    <div class="subview" data-panel="vc-moderation" id="panel-vc-moderation">
+      <div class="admin-card">
+        <div class="section-label">Заблокировать по ID</div>
+        <div class="admin-search">
+          <input type="text" id="vc-ban-id" placeholder="PLR-XXXXXX или ID аккаунта" autocomplete="off">
+        </div>
+        <div class="admin-search" style="margin-top:8px;">
+          <input type="text" id="vc-ban-hours" placeholder="Часов (пусто — навсегда)" autocomplete="off" inputmode="numeric">
+          <input type="text" id="vc-ban-reason" placeholder="Причина" autocomplete="off" maxlength="200">
+        </div>
+        <button class="btn btn-live" id="vc-ban-btn" style="margin-top:10px; width:100%;">Заблокировать в ВидеоЧате</button>
+        <div class="admin-empty" id="vc-ban-msg" style="display:none; padding:8px 0 0;"></div>
+      </div>
+      <div class="admin-card">
+        <div class="section-label" id="vc-reports-title">Жалобы</div>
+        <div id="vc-reports-list"></div>
+        <div class="admin-empty" id="vc-reports-empty">Жалоб нет</div>
+      </div>
+      <div class="admin-card">
+        <div class="section-label" id="vc-bans-title">Блокировки</div>
+        <div id="vc-bans-list"></div>
+        <div class="admin-empty" id="vc-bans-empty">Никто не заблокирован</div>
       </div>
     </div>
 
@@ -1903,7 +1949,19 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // отдельные переключаемые возможности у каждого конкретного admin.
   // Полный сброс и выдача ролей/прав сюда не входят — они жёстко только
   // у superadmin (canManageRoles), без исключений и без переключателя.
+  // Что админ вообще администрирует (v5.25). Выбирает Супердоступ, у каждого админа
+  // отдельно: «Тролль-Баттл» и/или «ВидеоЧат». Хранится рядом с остальными правами:
+  // users/<uid>/permissions/app_troll, app_videochat (булевы — их пропускает правило
+  // permissions/$permKey). Вкладки чужого приложения админ не видит вообще (applyRoleUI).
+  // Совместимость: у админа, которому приложения ещё ни разу не выбирали, считается
+  // «Тролль-Баттл» включён, «ВидеоЧат» выключен — как было до появления видеочата.
+  const APP_DEFS = [
+    { id: 'troll', label: 'Тролль-Баттл', perm: 'app_troll' },
+    { id: 'videochat', label: 'ВидеоЧат', perm: 'app_videochat' }
+  ];
   const PERMISSION_DEFS = [
+    { id: 'app_troll', label: 'Администрирует приложение «Тролль-Баттл»' },
+    { id: 'app_videochat', label: 'Администрирует приложение «ВидеоЧат» (жалобы и блокировки)' },
     { id: 'bans', label: 'Бан и ограничения игроков' },
     { id: 'clans', label: 'Модерация кланов и ссылок на чаты' },
     { id: 'stats', label: 'Ивент-баннер и статистика игрока' },
@@ -1919,6 +1977,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   const ALL_PERMISSIONS_OFF = { bans: false, clans: false, stats: false, badges: false, beta: false, danger: false };
   const ALL_PERMISSIONS_ON = { bans: true, clans: true, stats: true, badges: true, beta: true, danger: true };
   function resolvePermissions(user) {
+    const base = resolveBasePermissions(user);
+    if (user && user.role === 'superadmin') return { ...base, app_troll: true, app_videochat: true };
+    const p = user && user.permissions;
+    const explicit = !!p && (p.app_troll !== undefined || p.app_videochat !== undefined);
+    return { ...base, app_troll: explicit ? !!p.app_troll : true, app_videochat: explicit ? !!p.app_videochat : false };
+  }
+  function resolveBasePermissions(user) {
     if (!user) return { ...ALL_PERMISSIONS_OFF };
     if (user.role === 'superadmin') return { ...ALL_PERMISSIONS_ON }; // супердоступ — всегда всё, это не настраивается
     if (user.permissions) return { ...ALL_PERMISSIONS_OFF, ...user.permissions };
@@ -2002,6 +2067,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         showScreen('screen-denied');
         return;
       }
+      if (!myPermissions.app_troll && !myPermissions.app_videochat) {
+        document.getElementById('denied-text').textContent = 'Вам пока не назначено, что администрировать. Попросите Супердоступ выбрать для вас приложение (Тролль-Баттл или ВидеоЧат).';
+        showScreen('screen-denied');
+        return;
+      }
 
       // аварийный режим — закрывает панель для всех, включая admin/
       // moderator, кроме superadmin (см. config/emergencyLockdown, тумблер
@@ -2026,12 +2096,16 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
           rememberAccount(myTelegramId, { name: user.firstName || '', role: role });
           document.getElementById('me-box').classList.toggle('switchable', isDesktopApp());
 
+          initAppScope();
           applyRoleUI();
+          fixActiveTab();
           showScreen('screen-app');
           startLiveRequestWatchers();
-          startLiveBroadcast();
-          loadUserList(false);
-          loadBadgeDefs();
+          if (myPermissions.app_troll) {
+            startLiveBroadcast();
+            loadUserList(false);
+            loadBadgeDefs();
+          }
           renderAccountTab(user);
           // Список бэкапов больше не грузится на старте: это вызов role-gateway
           // с тремя запросами к GitHub, а нужен он только на вкладке
@@ -2126,7 +2200,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       myIsAccessToken = true;
       myAccessTokenValue = token;
       const perms = data.permissions || {};
-      myPermissions = { ...ALL_PERMISSIONS_OFF, ...perms };
+      myPermissions = resolvePermissions({ role: 'token', permissions: perms });
       myTokenBackupsAccess = !!perms.backups;
       window.localStorage.setItem('battleAccessToken', token);
 
@@ -2135,11 +2209,20 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       document.getElementById('me-role').textContent = 'Токен доступа';
       document.getElementById('me-logout-link').style.display = 'inline';
 
+      if (!myPermissions.app_troll && !myPermissions.app_videochat) {
+        document.getElementById('denied-text').textContent = 'Этот токен не открывает ни одного приложения.';
+        showScreen('screen-denied');
+        return;
+      }
+      initAppScope();
       applyRoleUI();
+      fixActiveTab();
       showScreen('screen-app');
-      startLiveBroadcast();
-      loadUserList(false);
-      loadBadgeDefs();
+      if (myPermissions.app_troll) {
+        startLiveBroadcast();
+        loadUserList(false);
+        loadBadgeDefs();
+      }
     }).catch((err) => {
       console.error(err);
       document.getElementById('denied-text').textContent = 'Не удалось проверить токен доступа: ' + (err.message || err);
@@ -2649,6 +2732,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       }
       if (tab.dataset.tab !== 'terminal') termLeave();
       if (tab.dataset.tab === 'terminal') termOpen();
+      if (tab.dataset.tab !== 'vc-overview' && tab.dataset.tab !== 'vc-moderation') vcDetach();
+      if (tab.dataset.tab === 'vc-overview') vcOpenOverview();
+      if (tab.dataset.tab === 'vc-moderation') vcOpenModeration();
       if (tab.dataset.tab !== 'live') liveLeave();
       if (tab.dataset.tab === 'live') liveOpen();
       if (tab.dataset.tab === 'logs') showLogsSection();
@@ -3014,7 +3100,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // добавлении админа) — если у него уже был свой permissions
       // (например, снова назначили admin после понижения), не затираем его
       if (newRole === 'admin' && !existing.permissions) {
-        return db.ref('users/' + userKey + '/permissions').set({ ...ALL_PERMISSIONS_OFF });
+        return db.ref('users/' + userKey + '/permissions').set({ ...ALL_PERMISSIONS_OFF, app_troll: false, app_videochat: false });
       }
     }).then(() => {
       const targetName = document.getElementById('r-name').textContent;
@@ -3052,7 +3138,18 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function setAdminPermission(userKey, permId, value, targetName, targetPlayerId) {
     if (!canManageRoles()) return Promise.reject(new Error('нет прав')); // на случай подделки клика мимо скрытого UI
     const permLabel = (PERMISSION_DEFS.find((p) => p.id === permId) || {}).label || permId;
-    return db.ref('users/' + userKey + '/permissions/' + permId).set(value).then(() => {
+    // Приложения пишем парой: если записать один ключ, второй из «не задано» стал бы «выключено»
+    // (у админа без явного выбора «Тролль-Баттл» считался включённым). Админу без своего
+    // permissions заодно фиксируем его прежние права — иначе они бы обнулились.
+    const write = (permId === 'app_troll' || permId === 'app_videochat')
+      ? db.ref('users/' + userKey).once('value').then((snap) => {
+          const u = snap.val() || {};
+          const cur = resolvePermissions(u);
+          const base = u.permissions ? {} : resolveBasePermissions(u);
+          return db.ref('users/' + userKey + '/permissions').update({ ...base, app_troll: cur.app_troll, app_videochat: cur.app_videochat, [permId]: value });
+        })
+      : db.ref('users/' + userKey + '/permissions/' + permId).set(value);
+    return write.then(() => {
       logAction('admin_permission_changed', userKey, targetName, targetPlayerId, `${permLabel}: ${value ? 'включено' : 'выключено'}`);
     });
   }
@@ -3092,6 +3189,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     document.querySelectorAll('[data-panel]').forEach((p) => p.classList.remove('active'));
     document.getElementById('panel-players').classList.add('active');
     document.querySelector('.tab[data-tab="panel"]').classList.add('active');
+    if (currentApp !== 'troll' && myAppIds().includes('troll')) setCurrentApp('troll');
     syncPageHead();
   });
 
@@ -3233,6 +3331,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // часть какого-то тира; вкладку для тех, у кого его нет, просто прячем
   // целиком, а не показываем заблокированной — как и с "Ивент" ниже.
   function applyRoleUI() {
+    // v5.25: сначала показываем/прячем вкладки по выбранному приложению; те, у кого есть своё
+    // условие ниже, переопределят это, а в самом конце чужое приложение прячется окончательно.
+    document.querySelectorAll('#app-tabs .tab[data-app]').forEach((t) => {
+      t.style.display = t.dataset.app === currentApp ? '' : 'none';
+    });
     const eventTab = document.querySelector('.tab[data-tab="event"]');
     if (eventTab) eventTab.style.display = canManageEvent() ? '' : 'none';
     // "Заявки" — объединяет "Заявки на бета" (право beta) и "Заявки кланов"
@@ -3269,8 +3372,72 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // "Статистика"/"Приложения" — видны всем, у кого вообще есть доступ к
     // панели (moderator/admin/superadmin), без отдельного переключаемого
     // права — намеренно не трогаем их display здесь.
+    document.querySelectorAll('#app-tabs .tab[data-app]').forEach((t) => {
+      if (t.dataset.app !== currentApp) t.style.display = 'none';
+    });
     syncTabGroups();
     updateDbPeekVisibility();
+  }
+
+  // ===== Приложения: что администрирует этот человек и где он сейчас «сидит» (v5.25) =====
+  // Права по приложениям — myPermissions.app_troll / app_videochat (см. APP_DEFS). У кого их
+  // несколько — переключатель в меню, выбор помнится на этом устройстве; у кого одно — он
+  // сразу там. Это удобство интерфейса, не защита (база открыта, как и всё остальное тут).
+  const APP_STORAGE_KEY = 'battlePanelApp';
+  let currentApp = 'troll';
+  function myAppIds() { return APP_DEFS.filter((a) => myPermissions[a.perm]).map((a) => a.id); }
+  function canManageVideochat() { return !!myPermissions.app_videochat; }
+  function initAppScope() {
+    const ids = myAppIds();
+    let saved = null;
+    try { saved = window.localStorage.getItem(APP_STORAGE_KEY); } catch (e) {}
+    currentApp = ids.includes(saved) ? saved : (ids[0] || 'troll');
+    document.body.dataset.app = currentApp;
+    renderAppSwitch();
+  }
+  function renderAppSwitch() {
+    const box = document.getElementById('app-switch');
+    if (!box) return;
+    const ids = myAppIds();
+    box.innerHTML = '';
+    if (!ids.length) { box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    if (ids.length === 1) {
+      const one = document.createElement('div');
+      one.className = 'app-one';
+      one.appendChild(document.createTextNode('Вы администрируете: '));
+      const b = document.createElement('b');
+      b.textContent = APP_DEFS.find((a) => a.id === ids[0]).label;
+      one.appendChild(b);
+      box.appendChild(one);
+      return;
+    }
+    ids.forEach((id) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = APP_DEFS.find((a) => a.id === id).label;
+      btn.classList.toggle('active', id === currentApp);
+      btn.addEventListener('click', () => setCurrentApp(id));
+      box.appendChild(btn);
+    });
+  }
+  // если открытая вкладка принадлежит другому приложению (или скрыта) — открываем первую подходящую
+  function fixActiveTab() {
+    const active = document.querySelector('#app-tabs .tab.active');
+    if (active && active.style.display !== 'none') return;
+    const tabs = Array.from(document.querySelectorAll('#app-tabs .tab')).filter((t) => t.style.display !== 'none');
+    const target = tabs.find((t) => t.dataset.app === currentApp) || tabs[0];
+    if (target) target.click();
+  }
+  function setCurrentApp(id) {
+    if (!myAppIds().includes(id) || id === currentApp) return;
+    currentApp = id;
+    try { window.localStorage.setItem(APP_STORAGE_KEY, id); } catch (e) {}
+    document.body.dataset.app = id;
+    renderAppSwitch();
+    applyRoleUI();
+    fixActiveTab();
+    syncPageHead();
   }
 
   // ===== "Аккаунт" — вход в панель с других устройств/браузеров =====
@@ -3763,7 +3930,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     beta_application_approved: 'Заявка на бета-тест одобрена',
     beta_application_rejected: 'Заявка на бета-тест отклонена',
     token_collision_detected: 'Обнаружен дублирующийся токен устройства — аккаунты заблокированы',
-    player_deleted: 'Профиль игрока удалён'
+    player_deleted: 'Профиль игрока удалён',
+    vc_ban: 'ВидеоЧат: блокировка',
+    vc_unban: 'ВидеоЧат: блокировка снята',
+    vc_report_closed: 'ВидеоЧат: жалоба закрыта'
   };
 
   // ключи записей, которые написала эта же вкладка — живая лента Терминала
@@ -5190,6 +5360,221 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       });
     });
   }
+
+  // ===== ВидеоЧат (v5.25): обзор, жалобы, блокировки =====
+  // Данные приложения videochat лежат в той же базе: videochat/online, queue, rooms (живые счётчики),
+  // videochat/reports/<pushId> (жалобы собеседников), videochat/bans/<uid> (блокировки: until = время
+  // окончания в мс, 0 — навсегда). Как и всё в панели, проверка права — удобство интерфейса, а не защита
+  // (база открыта на запись); каждая функция всё равно перепроверяет canManageVideochat().
+  // Всё из базы выводится через escapeHtml/textContent, а id из записей жалоб (их пишет кто угодно)
+  // проверяется VC_ID_RE, прежде чем попасть в путь базы.
+  const VC_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  let vcListeners = [];
+  function vcDetach() {
+    vcListeners.forEach((off) => { try { off(); } catch (e) {} });
+    vcListeners = [];
+  }
+  function vcWatch(ref, cb) {
+    ref.on('value', cb, (err) => console.error('videochat listener failed:', err));
+    vcListeners.push(() => ref.off('value', cb));
+  }
+
+  function vcOpenOverview() {
+    if (!canManageVideochat()) return; // на случай подделки клика мимо скрытой вкладки
+    vcDetach();
+    const st = { online: 0, queue: 0, calls: 0, reports: 0, bans: 0 };
+    const grid = document.getElementById('vc-stat-grid');
+    const draw = () => {
+      grid.innerHTML =
+        statTile(st.online, 'Онлайн') +
+        statTile(st.queue, 'Ищут собеседника') +
+        statTile(st.calls, 'Разговоров идёт') +
+        statTile(st.reports, 'Новых жалоб') +
+        statTile(st.bans, 'Активных блокировок');
+    };
+    draw();
+    vcWatch(db.ref('videochat/online'), (s) => { st.online = s.numChildren(); draw(); });
+    vcWatch(db.ref('videochat/queue'), (s) => { st.queue = s.numChildren(); draw(); });
+    vcWatch(db.ref('videochat/rooms'), (s) => { st.calls = s.numChildren(); draw(); });
+    vcWatch(db.ref('videochat/reports').limitToLast(200), (s) => {
+      st.reports = Object.values(s.val() || {}).filter((r) => r && r.status === 'new').length;
+      draw();
+    });
+    vcWatch(db.ref('videochat/bans'), (s) => {
+      st.bans = Object.values(s.val() || {}).filter(vcBanActive).length;
+      draw();
+    });
+  }
+
+  function vcBanActive(b) { return !!b && (!b.until || b.until > Date.now()); }
+
+  // имя и PLR-id по id аккаунта — читаем только два поля (в users/<id> лежит и аватарка)
+  const vcNameCache = new Map();
+  function vcUserInfo(id) {
+    if (!VC_ID_RE.test(id)) return Promise.resolve({ name: '—', playerId: '—' });
+    if (!vcNameCache.has(id)) {
+      vcNameCache.set(id, Promise.all([
+        db.ref('users/' + id + '/firstName').once('value'),
+        db.ref('users/' + id + '/playerId').once('value')
+      ]).then(([n, p]) => ({ name: n.val() || '—', playerId: p.val() || id })).catch(() => ({ name: '—', playerId: id })));
+    }
+    return vcNameCache.get(id);
+  }
+  function vcFillNames(root) {
+    root.querySelectorAll('[data-vc-user]').forEach((el) => {
+      vcUserInfo(el.dataset.vcUser).then((i) => { el.textContent = i.name + ' (' + i.playerId + ')'; });
+    });
+  }
+
+  async function vcResolveUser(query) {
+    const q = String(query || '').trim();
+    if (!q) throw new Error('Впиши ID игрока');
+    if (/^PLR-/i.test(q)) {
+      const snap = await db.ref('users').orderByChild('playerId').equalTo(q.toUpperCase()).once('value');
+      if (!snap.exists()) throw new Error('Игрок с таким ID не найден');
+      return Object.keys(snap.val())[0];
+    }
+    if (!VC_ID_RE.test(q)) throw new Error('Неверный ID');
+    if (!(await db.ref('users/' + q + '/role').once('value')).exists()) throw new Error('Аккаунт не найден');
+    return q;
+  }
+
+  async function vcBanUser(userKey, hours, reason) {
+    if (!canManageVideochat()) throw new Error('нет прав'); // на случай подделки клика мимо скрытого UI
+    if (!VC_ID_RE.test(userKey)) throw new Error('неверный ID');
+    if (String(userKey) === String(myTelegramId)) throw new Error('себя блокировать нельзя');
+    const h = Number(hours) || 0;
+    if (!Number.isInteger(h) || h < 0 || h > 24 * 365) throw new Error('часы — целое число от 1 до 8760 (или пусто — навсегда)');
+    const cleanReason = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    const until = h > 0 ? Date.now() + h * 3600 * 1000 : 0;
+    await db.ref('videochat/bans/' + userKey).set({ until, reason: cleanReason, at: Date.now(), by: (tgUser && tgUser.first_name) || (myTelegramId ? String(myTelegramId) : 'токен') });
+    const info = await vcUserInfo(userKey);
+    logAction('vc_ban', userKey, info.name, info.playerId, (h > 0 ? h + ' ч' : 'навсегда') + (cleanReason ? ' · ' + cleanReason : ''));
+  }
+
+  async function vcUnban(userKey) {
+    if (!canManageVideochat()) throw new Error('нет прав');
+    if (!VC_ID_RE.test(userKey)) throw new Error('неверный ID');
+    await db.ref('videochat/bans/' + userKey).remove();
+    const info = await vcUserInfo(userKey);
+    logAction('vc_unban', userKey, info.name, info.playerId, 'Блокировка в ВидеоЧате снята');
+  }
+
+  function vcOpenModeration() {
+    if (!canManageVideochat()) return; // на случай подделки клика мимо скрытой вкладки
+    vcDetach();
+    vcWatch(db.ref('videochat/reports').limitToLast(100), (s) => renderVcReports(s.val() || {}));
+    vcWatch(db.ref('videochat/bans'), (s) => renderVcBans(s.val() || {}));
+  }
+
+  function renderVcReports(data) {
+    const listEl = document.getElementById('vc-reports-list');
+    const emptyEl = document.getElementById('vc-reports-empty');
+    const entries = Object.entries(data).filter(([, r]) => r && typeof r === 'object').sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+    const open = entries.filter(([, r]) => r.status === 'new');
+    document.getElementById('vc-reports-title').textContent = `Жалобы (${open.length} новых)`;
+    listEl.innerHTML = '';
+    emptyEl.style.display = entries.length ? 'none' : 'block';
+    entries.forEach(([id, r]) => {
+      const closed = r.status !== 'new';
+      const target = String(r.target || '');
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      if (closed) row.style.opacity = '0.55';
+      row.innerHTML = `
+        <div class="l-title">${escapeHtml(String(r.reason || 'Другое').slice(0, 80))}</div>
+        <div class="l-body">На: <span data-vc-user="${escapeHtml(target)}">${escapeHtml(target || '—')}</span><br>Пожаловался: ${escapeHtml(String(r.fromName || '—').slice(0, 40))} (${escapeHtml(String(r.fromPlayerId || r.from || '—').slice(0, 20))})</div>
+        <div class="l-time">${escapeHtml(new Date(r.createdAt || 0).toLocaleString('ru-RU'))}${closed ? ' · закрыта' : ''}</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn btn-live vc-rep-ban" style="flex:1; padding:7px; font-size:11.5px;">Заблокировать…</button>
+          ${closed ? '' : '<button class="btn btn-line vc-rep-close" style="flex:1; padding:7px; font-size:11.5px;">Закрыть жалобу</button>'}
+        </div>
+        <div class="vc-rep-form" style="display:none; margin-top:8px;">
+          <div class="admin-search"><input type="text" class="vc-rep-hours" placeholder="Часов (пусто — навсегда)" inputmode="numeric" autocomplete="off"><input type="text" class="vc-rep-reason" placeholder="Причина" maxlength="200" autocomplete="off"></div>
+          <button class="btn btn-live vc-rep-ban-go" style="width:100%; margin-top:8px;">Подтвердить блокировку</button>
+        </div>
+      `;
+      row.querySelector('.vc-rep-reason').value = String(r.reason || '').slice(0, 80);
+      row.querySelector('.vc-rep-ban').addEventListener('click', () => {
+        const f = row.querySelector('.vc-rep-form');
+        f.style.display = f.style.display === 'none' ? 'block' : 'none';
+      });
+      row.querySelector('.vc-rep-ban-go').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          await vcBanUser(target, row.querySelector('.vc-rep-hours').value.trim(), row.querySelector('.vc-rep-reason').value);
+          if (!closed) await db.ref('videochat/reports/' + id + '/status').set('closed');
+        } catch (err) {
+          alert('Не удалось заблокировать: ' + (err.message || err));
+        }
+        btn.disabled = false;
+      });
+      const closeBtn = row.querySelector('.vc-rep-close');
+      if (closeBtn) closeBtn.addEventListener('click', async () => {
+        if (!canManageVideochat()) return;
+        closeBtn.disabled = true;
+        try {
+          await db.ref('videochat/reports/' + id + '/status').set('closed');
+          const info = await vcUserInfo(target);
+          logAction('vc_report_closed', VC_ID_RE.test(target) ? target : '', info.name, info.playerId, 'Жалоба закрыта: ' + String(r.reason || 'Другое').slice(0, 80));
+        } catch (err) {
+          closeBtn.disabled = false;
+          alert('Не удалось закрыть жалобу: ' + (err.message || err));
+        }
+      });
+      listEl.appendChild(row);
+    });
+    vcFillNames(listEl);
+  }
+
+  function renderVcBans(data) {
+    const listEl = document.getElementById('vc-bans-list');
+    const emptyEl = document.getElementById('vc-bans-empty');
+    const entries = Object.entries(data).filter(([id, b]) => VC_ID_RE.test(id) && b && typeof b === 'object').sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+    document.getElementById('vc-bans-title').textContent = `Блокировки (${entries.filter(([, b]) => vcBanActive(b)).length} активных)`;
+    listEl.innerHTML = '';
+    emptyEl.style.display = entries.length ? 'none' : 'block';
+    entries.forEach(([id, b]) => {
+      const active = vcBanActive(b);
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      if (!active) row.style.opacity = '0.55';
+      const till = b.until ? 'до ' + new Date(b.until).toLocaleString('ru-RU') : 'навсегда';
+      row.innerHTML = `
+        <div class="l-title"><span data-vc-user="${escapeHtml(id)}">${escapeHtml(id)}</span></div>
+        <div class="l-body">${escapeHtml(till)}${active ? '' : ' (срок истёк)'}${b.reason ? '<br>Причина: ' + escapeHtml(String(b.reason).slice(0, 200)) : ''}</div>
+        <div class="l-time">Выдал: ${escapeHtml(String(b.by || '—').slice(0, 40))} · ${escapeHtml(new Date(b.at || 0).toLocaleString('ru-RU'))}</div>
+        <div style="margin-top:8px;"><button class="btn btn-line vc-unban" style="padding:7px 14px; font-size:11.5px;">Снять блокировку</button></div>
+      `;
+      row.querySelector('.vc-unban').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try { await vcUnban(id); } catch (err) { btn.disabled = false; alert('Не удалось снять блокировку: ' + (err.message || err)); }
+      });
+      listEl.appendChild(row);
+    });
+    vcFillNames(listEl);
+  }
+
+  document.getElementById('vc-ban-btn').addEventListener('click', async () => {
+    if (!canManageVideochat()) return; // на случай подделки клика мимо скрытой вкладки
+    const btn = document.getElementById('vc-ban-btn');
+    const msg = document.getElementById('vc-ban-msg');
+    btn.disabled = true;
+    msg.style.display = 'none';
+    try {
+      const key = await vcResolveUser(document.getElementById('vc-ban-id').value);
+      await vcBanUser(key, document.getElementById('vc-ban-hours').value.trim(), document.getElementById('vc-ban-reason').value);
+      ['vc-ban-id', 'vc-ban-hours', 'vc-ban-reason'].forEach((i) => { document.getElementById(i).value = ''; });
+      msg.textContent = '✅ Заблокирован. Вылетит из разговора сразу.';
+    } catch (err) {
+      msg.textContent = 'Не удалось: ' + (err.message || err);
+    }
+    msg.style.display = 'block';
+    btn.disabled = false;
+  });
+
 
   // ===== "Статистика" — портировано из battle-data-admin-bot. Всё
   // считается на клиенте из once('value') на users/battles/matches/clans/

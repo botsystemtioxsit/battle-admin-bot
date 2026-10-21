@@ -773,12 +773,13 @@ async function handlePairingCode(env, message, code) {
 // страница видеочата спрашивает у Worker'а (/vc-membership): ответ даёт Telegram, а не база.
 const VIDEOCHAT_URL = 'https://botsystemtioxsit.github.io/videochat/';
 const VC_MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
-// Mini App ВидеоЧата, зарегистрированное у @BotFather (/newapp): значение «имя_бота/короткое_имя», например
-// troll_battle_Terminal_bot/video (wrangler.toml → VIDEOCHAT_MINIAPP). Пока не задано (или задано криво) —
+// Mini App ВидеоЧата, зарегистрированное у @BotFather: «имя_бота/короткое_имя» (/newapp), например
+// troll_battle_Terminal_bot/video, либо просто «имя_бота» — если приложение настроено как главное
+// (Configure Mini App) (wrangler.toml → VIDEOCHAT_MINIAPP). Пока не задано (или задано криво) —
 // кнопки ведут по обычной ссылке на страницу, она откроется в браузере Телеграма.
 function videochatMiniAppLink(env) {
   const v = String((env && env.VIDEOCHAT_MINIAPP) || '').trim();
-  return /^[A-Za-z0-9_]{5,64}\/[A-Za-z0-9_]{3,64}$/.test(v) ? `https://t.me/${v}` : null;
+  return /^[A-Za-z0-9_]{5,64}(\/[A-Za-z0-9_]{3,64})?$/.test(v) ? `https://t.me/${v}` : null;
 }
 // Кнопка входа в комнату чата: в группе web_app-кнопки Телеграм не разрешает, поэтому только ссылка
 function videochatRoomUrl(env, key) {
@@ -917,6 +918,79 @@ async function checkVideochatMembership(env, body) {
   return { ok: true };
 }
 
+
+// ===== Экосистема TIOXSIT: «хаб» бота и его профиль в Telegram =====
+// Терминал — единая точка входа во все наши продукты: игра, ВидеоЧат, лаунчер, админ-панель. Здесь же список
+// команд (меню у поля ввода), краткое и полное описание бота: Worker выставляет их сам (ensureBotProfile),
+// так что правка в @BotFather позже может быть перезаписана — менять нужно здесь.
+const GAME_BOT_URL = 'https://t.me/troll_battle_bot';
+const LAUNCHER_URL = 'https://github.com/botsystemtioxsit/launcher/releases/latest';
+
+const BOT_COMMANDS_PRIVATE = [
+  { command: 'start', description: 'Главное меню и все наши проекты' },
+  { command: 'apps', description: 'Все проекты экосистемы TIOXSIT' },
+  { command: 'video', description: 'Открыть ВидеоЧат' },
+  { command: 'game', description: 'Открыть Тролль-Баттл' },
+  { command: 'launcher', description: 'Скачать TIOXSIT Launcher для Windows' },
+  { command: 'admin', description: 'Админ-панель (для команды)' },
+  { command: 'requests', description: 'Ожидающие запросы на вход' },
+  { command: 'help', description: 'Помощь' },
+];
+const BOT_COMMANDS_GROUP = [
+  { command: 'connect', description: 'Подключить чат к ВидеоЧату (администратор чата)' },
+  { command: 'call', description: 'Открыть видеокомнату этого чата' },
+  { command: 'help', description: 'Помощь по ВидеоЧату' },
+];
+const BOT_SHORT_DESCRIPTION = 'Терминал экосистемы TIOXSIT: Тролль-Баттл, ВидеоЧат, лаунчер. Входы по заявкам, подключение чатов.';
+const BOT_DESCRIPTION = 'Терминал экосистемы TIOXSIT — общий вход во все наши проекты.\n\n🎮 Тролль-Баттл — голосовые баттлы\n📹 ВидеоЧат — видеокомнаты для Telegram-чатов\n🚀 TIOXSIT Launcher — установка и обновление приложений\n\nЗдесь подтверждаются входы в аккаунт и подключаются чаты к ВидеоЧату. Нажмите «Start», чтобы увидеть всё.';
+
+function ecosystemMessage() {
+  const text = [
+    '🌐 Экосистема TIOXSIT — все наши проекты связаны одним аккаунтом.',
+    '',
+    '🎮 Тролль-Баттл — голосовые баттлы с рейтингом, кланами и ивентами (@troll_battle_bot).',
+    '📹 ВидеоЧат — видеокомнаты для Telegram-чатов: стабильные звонки, свои админы, мут голосованием участников.',
+    '🚀 TIOXSIT Launcher — программа для Windows: ставит и обновляет наши приложения.',
+    '🛠 Админ-панель — управление проектом (для команды).',
+    '🤖 Терминал (этот бот) — подтверждает входы и подключает Telegram-чаты к ВидеоЧату.',
+    '',
+    'Все команды — в меню слева от поля ввода или /help.',
+  ].join('\n');
+  const stamp = Date.now();
+  return {
+    text,
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '📹 ВидеоЧат', web_app: { url: `${VIDEOCHAT_URL}?v=${stamp}` } }, { text: '🎮 Тролль-Баттл', url: GAME_BOT_URL }],
+        [{ text: '🚀 Лаунчер для Windows', url: LAUNCHER_URL }, { text: '🛠 Админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${stamp}` } }],
+      ],
+    },
+  };
+}
+
+// Профиль бота: команды (меню), описания, кнопка меню = список команд. Идемпотентно; не чаще раза в 6 часов на
+// экземпляр Worker'а (первое сообщение боту или /health после выкладки применяют всё сразу).
+let botProfileEnsured = { key: null, at: 0 };
+async function ensureBotProfile(env) {
+  const key = String(env.BOT_TOKEN);
+  if (botProfileEnsured.key === key && Date.now() - botProfileEnsured.at < 6 * 60 * 60 * 1000) return;
+  botProfileEnsured = { key, at: Date.now() }; // отметка сразу: параллельные запросы не дублируют работу
+  const calls = [
+    ['setMyCommands', { commands: BOT_COMMANDS_PRIVATE, scope: { type: 'default' } }],
+    ['setMyCommands', { commands: BOT_COMMANDS_PRIVATE, scope: { type: 'all_private_chats' } }],
+    ['setMyCommands', { commands: BOT_COMMANDS_GROUP, scope: { type: 'all_group_chats' } }],
+    ['setMyShortDescription', { short_description: BOT_SHORT_DESCRIPTION }],
+    ['setMyDescription', { description: BOT_DESCRIPTION }],
+    ['setChatMenuButton', { menu_button: { type: 'commands' } }],
+  ];
+  const results = await Promise.all(calls.map(([method, payload]) => tgApi(env, method, payload, 6000)));
+  const failed = results.map((r, i) => (r && r.ok ? null : calls[i][0] + ': ' + String((r && r.description) || 'нет ответа').slice(0, 80))).filter(Boolean);
+  if (failed.length) {
+    botProfileEnsured = { key, at: Date.now() - 6 * 60 * 60 * 1000 + 10 * 60 * 1000 }; // что-то не прошло — повторим через 10 минут, а не на каждом сообщении
+    console.error('ensureBotProfile:', failed.join('; '));
+  }
+}
+
 async function handleBotMessage(env, message) {
   if (message && message.chat && message.chat.type !== 'private') { await handleGroupMessage(env, message); return; }
   if (!message || !message.chat || message.chat.type !== 'private' || typeof message.text !== 'string') return;
@@ -927,25 +1001,39 @@ async function handleBotMessage(env, message) {
     return;
   }
   const command = message.text.trim().split(/\s+/)[0].split('@')[0];
-  if (command === '/video' || command === '/videochat') {
+  if (command === '/apps' || command === '/projects') {
+    await tgApi(env, 'sendMessage', { chat_id: chatId, ...ecosystemMessage() });
+  } else if (command === '/game') {
+    await tgApi(env, 'sendMessage', {
+      chat_id: chatId,
+      text: '🎮 Тролль-Баттл — голосовые баттлы: соперник, судья, зрители, рейтинг, кланы и ивенты. Играть — в боте @troll_battle_bot.',
+      reply_markup: { inline_keyboard: [[{ text: '🎮 Открыть Тролль-Баттл', url: GAME_BOT_URL }]] },
+    });
+  } else if (command === '/launcher') {
+    await tgApi(env, 'sendMessage', {
+      chat_id: chatId,
+      text: '🚀 TIOXSIT Launcher — программа для Windows: вход в аккаунт, установка, обновление и запуск наших приложений (Тролль-Баттл, ВидеоЧат, админ-панель).',
+      reply_markup: { inline_keyboard: [[{ text: '🚀 Скачать лаунчер', url: LAUNCHER_URL }]] },
+    });
+  } else if (command === '/video' || command === '/videochat') {
     // в личном чате web_app-кнопка разрешена: ВидеоЧат откроется внутри Телеграма, вход — по Telegram-аккаунту
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
       text: '📹 ВидеоЧат — видеозвонки для ваших Telegram-чатов. Комнаты подключённых чатов появятся в списке; в группе их открывает команда /call.',
       reply_markup: { inline_keyboard: [[{ text: '📹 Открыть ВидеоЧат', web_app: { url: `${VIDEOCHAT_URL}?v=${Date.now()}` } }]] },
     });
-  } else if (command === '/start' || command === '/admin') {
-    const rows = [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]];
-    if (command === '/start') rows.push([{ text: '📹 Открыть ВидеоЧат', web_app: { url: `${VIDEOCHAT_URL}?v=${Date.now()}` } }]);
+  } else if (command === '/start') {
+    await tgApi(env, 'sendMessage', { chat_id: chatId, ...ecosystemMessage() });
+  } else if (command === '/admin') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Открой панель управления БАТТЛ. Доступ проверяется по твоей роли в базе — если её ещё не выдали, страница сама покажет «доступ запрещён».' + (command === '/start' ? '\n\nВидеозвонки для Telegram-чатов — кнопка «ВидеоЧат» ниже (или команда /video).' : ''),
-      reply_markup: { inline_keyboard: rows },
+      text: 'Открой панель управления БАТТЛ. Доступ проверяется по твоей роли в базе — если её ещё не выдали, страница сама покажет «доступ запрещён».',
+      reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
     });
   } else if (command === '/help') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/video — открыть ВидеоЧат\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу и сделай его администратором (права не нужны), администратор группы пишет там /connect, потом любой участник — /call.',
+      text: 'Терминал экосистемы TIOXSIT.\n\n/start — главное меню и все наши проекты\n/apps — все проекты экосистемы\n/video — открыть ВидеоЧат\n/game — открыть Тролль-Баттл\n/launcher — скачать TIOXSIT Launcher\n/admin — админ-панель (для команды)\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре, в ВидеоЧате или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу и сделай его администратором (права не нужны), администратор группы пишет там /connect, потом любой участник — /call.',
     });
   } else if (command === '/requests') {
     const fromId = String((message.from && message.from.id) || '');
@@ -975,6 +1063,8 @@ async function handleTelegramUpdate(env, update) {
   } else if (update && update.message) {
     await handleBotMessage(env, update.message);
   }
+  // профиль бота (команды, описание) обновляем уже после ответа человеку
+  try { await ensureBotProfile(env); } catch (err) { console.error('ensureBotProfile:', err && err.message); }
 }
 
 async function ghApi(path, token, options = {}) {
@@ -1261,6 +1351,7 @@ export default {
       // кто получает обновления бота (кнопки «Разрешить/Отклонить», команды):
       // ours: true — этот Worker; host — куда указывает чужой вебхук
       const telegramWebhook = botTokenConfigured && bot.valid ? await getWebhookSummary(env, url.origin) : null;
+      if (botTokenConfigured && bot.valid) { try { await ensureBotProfile(env); } catch (err) { console.error('ensureBotProfile:', err && err.message); } } // после выкладки команды бота появляются сразу
       return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null, botError: bot.error || null, telegramWebhook });
     }
 

@@ -433,7 +433,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.25</span></div>
+    <div class="brand"><img class="brand-logo" src="logo.png" alt="" width="24" height="24">БАТТЛ<span>.</span> АДМИН <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.26</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -572,8 +572,12 @@
            «Тролль-Баттл | ВидеоЧат», если одно — просто подпись. Это не .tab, диспетчер вкладок его не видит. -->
       <div class="app-switch" id="app-switch" style="display:none;"></div>
       <div class="tab-grp">ВидеоЧат</div>
-      <div class="tab" data-tab="vc-overview" data-app="videochat" data-title="Обзор" data-sub="Кто сейчас в видеочате"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"></rect><path d="M15.5 10.5l6-3.5v10l-6-3.5"></path></svg>Обзор</div>
-      <div class="tab" data-tab="vc-moderation" data-app="videochat" data-title="Жалобы и блокировки" data-sub="Жалобы на собеседников и блокировки в видеочате"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M12 8v5M12 16.5v.01"></path></svg>Жалобы и блокировки</div>
+      <div class="tab" data-tab="vc-overview" data-app="videochat" data-title="Обзор" data-sub="Сколько людей сейчас в комнатах"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"></rect><path d="M15.5 10.5l6-3.5v10l-6-3.5"></path></svg>Обзор</div>
+      <div class="tab" data-tab="vc-communities" data-app="videochat" data-title="Сообщества" data-sub="Подключённые Telegram-чаты и заявки на подключение"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><circle cx="17" cy="9" r="2.4"></circle><path d="M2.5 20c0-3 2.5-5.5 5.5-5.5S13.5 17 13.5 20M14.5 15c2.6-.4 6 .9 6 5"></path></svg>Сообщества</div>
+      <div class="tab" data-tab="vc-moderation" data-app="videochat" data-title="Блокировки" data-sub="Запрет на весь ВидеоЧат"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M12 8v5M12 16.5v.01"></path></svg>Блокировки</div>
+      <div class="tab-grp">Комната</div>
+      <div class="tab" data-tab="cm-room" data-app="videochat community" data-title="Комната" data-sub="Кто в комнате, мут и выгон"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"></path><path d="M10 20v-5h4v5"></path></svg>Комната</div>
+      <div class="tab" data-tab="cm-team" data-app="videochat community" data-title="Команда и журнал" data-sub="Админы и минеры комнаты, журнал действий"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v16H5z"></path><path d="M9 9h6M9 13h6M9 17h3"></path></svg>Команда и журнал</div>
       <div class="tab-grp">Игроки</div>
       <div class="tab active" data-tab="panel" data-app="troll" data-title="Панель" data-sub="Найдите игрока и управляйте его доступом"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18 14.4c1.8.8 3 2.7 3 5.6"></path></svg>Панель</div>
       <!-- "Заявки" объединяет модерацию кланов ("Заявки кланов", право
@@ -1218,8 +1222,9 @@
       </div>
     </div>
 
-    <!-- ===== ВидеоЧат (v5.25): обзор и модерация. Только для тех, кому Супердоступ включил
-         «Администрирует ВидеоЧат» (canManageVideochat). Схема данных — в CLAUDE.md репозитория videochat. ===== -->
+    <!-- ===== ВидеоЧат (v5.26): обзор, сообщества, блокировки; «Комната» и «Команда» — управление одной комнатой.
+         Обзор/Сообщества/Блокировки — для тех, кому Супердоступ включил «Администрирует ВидеоЧат»
+         (canManageVideochat); «Комната»/«Команда» — ещё и суб-админам, админам и минерам своей комнаты. ===== -->
     <div class="subview" data-panel="vc-overview" id="panel-vc-overview">
       <div class="admin-card">
         <div class="section-label">Прямо сейчас</div>
@@ -1228,9 +1233,23 @@
       </div>
     </div>
 
+    <div class="subview" data-panel="vc-communities" id="panel-vc-communities">
+      <div class="admin-card">
+        <div class="section-label" id="vc-req-title">Заявки на подключение чатов</div>
+        <div id="vc-req-list"></div>
+        <div class="admin-empty" id="vc-req-empty">Новых заявок нет</div>
+        <div class="admin-empty" style="text-align:left; padding:6px 0 0;">Как подключается чат: бота «Терминал» добавляют в группу, администратор группы пишет там /connect (бот сам проверяет у Telegram, что это администратор), здесь появляется заявка. После одобрения заявитель становится суб-админом: у него появляется своя комната, где он назначает админов и минеров. В чате заработает /call.</div>
+      </div>
+      <div class="admin-card">
+        <div class="section-label" id="vc-comm-title">Сообщества</div>
+        <div id="vc-comm-list"></div>
+        <div class="admin-empty" id="vc-comm-empty">Подключённых чатов пока нет</div>
+      </div>
+    </div>
+
     <div class="subview" data-panel="vc-moderation" id="panel-vc-moderation">
       <div class="admin-card">
-        <div class="section-label">Заблокировать по ID</div>
+        <div class="section-label">Заблокировать во всём ВидеоЧате</div>
         <div class="admin-search">
           <input type="text" id="vc-ban-id" placeholder="PLR-XXXXXX или ID аккаунта" autocomplete="off">
         </div>
@@ -1238,18 +1257,59 @@
           <input type="text" id="vc-ban-hours" placeholder="Часов (пусто — навсегда)" autocomplete="off" inputmode="numeric">
           <input type="text" id="vc-ban-reason" placeholder="Причина" autocomplete="off" maxlength="200">
         </div>
-        <button class="btn btn-live" id="vc-ban-btn" style="margin-top:10px; width:100%;">Заблокировать в ВидеоЧате</button>
+        <button class="btn btn-live" id="vc-ban-btn" style="margin-top:10px; width:100%;">Заблокировать</button>
         <div class="admin-empty" id="vc-ban-msg" style="display:none; padding:8px 0 0;"></div>
-      </div>
-      <div class="admin-card">
-        <div class="section-label" id="vc-reports-title">Жалобы</div>
-        <div id="vc-reports-list"></div>
-        <div class="admin-empty" id="vc-reports-empty">Жалоб нет</div>
       </div>
       <div class="admin-card">
         <div class="section-label" id="vc-bans-title">Блокировки</div>
         <div id="vc-bans-list"></div>
         <div class="admin-empty" id="vc-bans-empty">Никто не заблокирован</div>
+      </div>
+    </div>
+
+    <div class="subview" data-panel="cm-room" id="panel-cm-room">
+      <div class="admin-empty" id="cm-empty" style="display:none;">Вам пока не доступна ни одна комната.</div>
+      <div id="cm-body" style="display:none;">
+        <div class="admin-card">
+          <div class="section-label">Комната</div>
+          <select id="cm-select" style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px; color:var(--text); font-size:14px;"></select>
+          <div id="cm-info"></div>
+          <div id="cm-settings" style="margin-top:8px;"></div>
+        </div>
+        <div class="admin-card">
+          <div class="section-label" id="cm-online-title">Сейчас в комнате</div>
+          <div id="cm-online"></div>
+        </div>
+        <div class="admin-card">
+          <div class="section-label">Заглушены</div>
+          <div id="cm-mutes"></div>
+        </div>
+        <div class="admin-card">
+          <div class="section-label">Выгнаны и забанены</div>
+          <div id="cm-bans"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subview" data-panel="cm-team" id="panel-cm-team">
+      <div class="admin-empty" id="cm-team-empty" style="display:none;">Вам пока не доступна ни одна комната.</div>
+      <div id="cm-team-body" style="display:none;">
+        <div class="admin-card">
+          <div class="section-label" id="cm-team-title">Команда комнаты</div>
+          <div id="cm-staff"></div>
+          <div id="cm-add-form" style="display:none; margin-top:12px;">
+            <div class="section-label" style="margin-top:6px;">Назначить</div>
+            <div class="admin-search"><input type="text" id="cm-add-id" placeholder="PLR-XXXXXX или ID человека" autocomplete="off"></div>
+            <select id="cm-add-rank" style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px; color:var(--text); font-size:14px; margin-top:8px;"></select>
+            <button class="btn btn-gold" id="cm-add-btn" style="width:100%; margin-top:8px;">Назначить</button>
+            <div class="admin-empty" id="cm-add-msg" style="display:none; padding:8px 0 0;"></div>
+            <div class="admin-empty" style="text-align:left; padding:8px 0 0;">Звания: суб-админ (назначает владелец) → админ (мут, выгон, бан, назначает минеров) → минер (только мут до 30 минут). Назначать можно только тех, у кого уже есть профиль — пусть человек один раз откроет ВидеоЧат.</div>
+          </div>
+        </div>
+        <div class="admin-card">
+          <div class="section-label">Журнал комнаты</div>
+          <div id="cm-logs"></div>
+        </div>
       </div>
     </div>
 
@@ -1957,7 +2017,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // «Тролль-Баттл» включён, «ВидеоЧат» выключен — как было до появления видеочата.
   const APP_DEFS = [
     { id: 'troll', label: 'Тролль-Баттл', perm: 'app_troll' },
-    { id: 'videochat', label: 'ВидеоЧат', perm: 'app_videochat' }
+    { id: 'videochat', label: 'ВидеоЧат', perm: 'app_videochat' },
+    // v5.26: «Моя комната» — суб-админ/админ/минер одной комнаты ВидеоЧата. Это не переключаемое право:
+    // оно появляется само, если у человека есть users/<uid>/vcCommunities (ставится при назначении на
+    // должность), и только если нет права app_videochat (у админа видеочата те же вкладки лежат внутри него).
+    { id: 'community', label: 'Моя комната', perm: 'app_community' }
   ];
   const PERMISSION_DEFS = [
     { id: 'app_troll', label: 'Администрирует приложение «Тролль-Баттл»' },
@@ -1978,10 +2042,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   const ALL_PERMISSIONS_ON = { bans: true, clans: true, stats: true, badges: true, beta: true, danger: true };
   function resolvePermissions(user) {
     const base = resolveBasePermissions(user);
-    if (user && user.role === 'superadmin') return { ...base, app_troll: true, app_videochat: true };
-    const p = user && user.permissions;
+    const hasRoom = !!(user && user.vcCommunities && typeof user.vcCommunities === 'object' && Object.keys(user.vcCommunities).length);
+    if (user && user.role === 'superadmin') return { ...base, app_troll: true, app_videochat: true, app_community: false };
+    const role = user && (user.role || (user.isAdmin ? 'admin' : 'user'));
+    // обычный игрок (без роли в панели) — только «Моя комната», если его назначили в команду комнаты
+    if (!user || !ALLOWED_ROLES.includes(role)) return { ...base, app_troll: false, app_videochat: false, app_community: hasRoom };
+    const p = user.permissions;
     const explicit = !!p && (p.app_troll !== undefined || p.app_videochat !== undefined);
-    return { ...base, app_troll: explicit ? !!p.app_troll : true, app_videochat: explicit ? !!p.app_videochat : false };
+    return { ...base, app_troll: explicit ? !!p.app_troll : true, app_videochat: explicit ? !!p.app_videochat : false, app_community: hasRoom };
   }
   function resolveBasePermissions(user) {
     if (!user) return { ...ALL_PERMISSIONS_OFF };
@@ -2063,11 +2131,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       myRole = role;
       myPermissions = resolvePermissions(user);
 
-      if (!user || !ALLOWED_ROLES.includes(role)) {
+      myCommunityRanks = (user && user.vcCommunities && typeof user.vcCommunities === 'object') ? user.vcCommunities : {};
+      if (!user || (!ALLOWED_ROLES.includes(role) && !myPermissions.app_community)) {
         showScreen('screen-denied');
         return;
       }
-      if (!myPermissions.app_troll && !myPermissions.app_videochat) {
+      if (!myPermissions.app_troll && !myPermissions.app_videochat && !myPermissions.app_community) {
         document.getElementById('denied-text').textContent = 'Вам пока не назначено, что администрировать. Попросите Супердоступ выбрать для вас приложение (Тролль-Баттл или ВидеоЧат).';
         showScreen('screen-denied');
         return;
@@ -2087,7 +2156,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         function proceedToApp() {
           document.getElementById('me-box').style.display = 'block';
           document.getElementById('me-name').textContent = user.firstName || 'Игрок';
-          document.getElementById('me-role').textContent = ROLE_LABELS[role] || role;
+          document.getElementById('me-role').textContent = (role === 'user' && myPermissions.app_community)
+            ? (VC_RANK_NAMES[Object.values(myCommunityRanks).sort((x, y) => vcLvl(y) - vcLvl(x))[0]] || 'Команда комнаты') + ' комнаты'
+            : (ROLE_LABELS[role] || role);
           // выйти можно только из сессии, поднятой через email-заявку —
           // сессию внутри Telegram выходить незачем, она и так привязана к
           // аккаунту через tgUser.id при каждом открытии
@@ -2732,9 +2803,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       }
       if (tab.dataset.tab !== 'terminal') termLeave();
       if (tab.dataset.tab === 'terminal') termOpen();
-      if (tab.dataset.tab !== 'vc-overview' && tab.dataset.tab !== 'vc-moderation') vcDetach();
+      if (!['vc-overview', 'vc-communities', 'vc-moderation', 'cm-room', 'cm-team'].includes(tab.dataset.tab)) vcDetach();
       if (tab.dataset.tab === 'vc-overview') vcOpenOverview();
+      if (tab.dataset.tab === 'vc-communities') vcOpenCommunities();
       if (tab.dataset.tab === 'vc-moderation') vcOpenModeration();
+      if (tab.dataset.tab === 'cm-room') cmOpenRoom();
+      if (tab.dataset.tab === 'cm-team') cmOpenTeam();
       if (tab.dataset.tab !== 'live') liveLeave();
       if (tab.dataset.tab === 'live') liveOpen();
       if (tab.dataset.tab === 'logs') showLogsSection();
@@ -3334,7 +3408,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // v5.25: сначала показываем/прячем вкладки по выбранному приложению; те, у кого есть своё
     // условие ниже, переопределят это, а в самом конце чужое приложение прячется окончательно.
     document.querySelectorAll('#app-tabs .tab[data-app]').forEach((t) => {
-      t.style.display = t.dataset.app === currentApp ? '' : 'none';
+      t.style.display = tabInApp(t, currentApp) ? '' : 'none';
     });
     const eventTab = document.querySelector('.tab[data-tab="event"]');
     if (eventTab) eventTab.style.display = canManageEvent() ? '' : 'none';
@@ -3373,7 +3447,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // панели (moderator/admin/superadmin), без отдельного переключаемого
     // права — намеренно не трогаем их display здесь.
     document.querySelectorAll('#app-tabs .tab[data-app]').forEach((t) => {
-      if (t.dataset.app !== currentApp) t.style.display = 'none';
+      if (!tabInApp(t, currentApp)) t.style.display = 'none';
     });
     syncTabGroups();
     updateDbPeekVisibility();
@@ -3385,7 +3459,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // сразу там. Это удобство интерфейса, не защита (база открыта, как и всё остальное тут).
   const APP_STORAGE_KEY = 'battlePanelApp';
   let currentApp = 'troll';
-  function myAppIds() { return APP_DEFS.filter((a) => myPermissions[a.perm]).map((a) => a.id); }
+  function myAppIds() {
+    return APP_DEFS.filter((a) => myPermissions[a.perm] && !(a.id === 'community' && myPermissions.app_videochat)).map((a) => a.id);
+  }
+  // у вкладки data-app может быть несколько приложений через пробел («videochat community»)
+  function tabInApp(t, app) { return (t.dataset.app || '').split(' ').includes(app); }
   function canManageVideochat() { return !!myPermissions.app_videochat; }
   function initAppScope() {
     const ids = myAppIds();
@@ -3426,7 +3504,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const active = document.querySelector('#app-tabs .tab.active');
     if (active && active.style.display !== 'none') return;
     const tabs = Array.from(document.querySelectorAll('#app-tabs .tab')).filter((t) => t.style.display !== 'none');
-    const target = tabs.find((t) => t.dataset.app === currentApp) || tabs[0];
+    const target = tabs.find((t) => tabInApp(t, currentApp)) || tabs[0];
     if (target) target.click();
   }
   function setCurrentApp(id) {
@@ -3933,7 +4011,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     player_deleted: 'Профиль игрока удалён',
     vc_ban: 'ВидеоЧат: блокировка',
     vc_unban: 'ВидеоЧат: блокировка снята',
-    vc_report_closed: 'ВидеоЧат: жалоба закрыта'
+    vc_report_closed: 'ВидеоЧат: жалоба закрыта',
+    vcg_action: 'Комната ВидеоЧата: действие модерации',
+    vc_comm_approved: 'ВидеоЧат: чат подключён',
+    vc_comm_rejected: 'ВидеоЧат: заявка чата отклонена',
+    vc_comm_toggled: 'ВидеоЧат: комната включена/отключена',
+    vc_comm_subadmin: 'ВидеоЧат: назначен суб-админ комнаты',
+    vc_comm_deleted: 'ВидеоЧат: сообщество удалено'
   };
 
   // ключи записей, которые написала эта же вкладка — живая лента Терминала
@@ -5361,14 +5445,38 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
   }
 
-  // ===== ВидеоЧат (v5.25): обзор, жалобы, блокировки =====
-  // Данные приложения videochat лежат в той же базе: videochat/online, queue, rooms (живые счётчики),
-  // videochat/reports/<pushId> (жалобы собеседников), videochat/bans/<uid> (блокировки: until = время
-  // окончания в мс, 0 — навсегда). Как и всё в панели, проверка права — удобство интерфейса, а не защита
-  // (база открыта на запись); каждая функция всё равно перепроверяет canManageVideochat().
-  // Всё из базы выводится через escapeHtml/textContent, а id из записей жалоб (их пишет кто угодно)
-  // проверяется VC_ID_RE, прежде чем попасть в путь базы.
+  // ===== ВидеоЧат (v5.26): сообщества — комнаты Telegram-чатов =====
+  // Приложение videochat (отдельный репозиторий) даёт каждому подключённому Telegram-чату свою комнату.
+  // Схема в базе (подробности — CLAUDE.md репозитория videochat):
+  //   videochat/communityRequests/<chatId> = {chatId, title, requestedBy:{id,name,username}, at, status}
+  //     — заявку пишет Worker, когда администратор чата отправил /connect (Telegram сам подтвердил, что он админ);
+  //   videochat/communities/<chatId> = {title, status:'active'|'disabled', joinCode, createdAt, createdBy,
+  //     settings:{autoMod}, staff:{<uid>:'subadmin'|'admin'|'miner'}} — лёгкая мета, читается целиком;
+  //   users/<uid>/vcCommunities/<chatId> = звание — обратный индекс, по нему суб-админ попадает в панель;
+  //   videochat/roomState/<chatId>/{online,mutes,bans,votes,logs} — живое состояние комнаты;
+  //   videochat/bans/<uid> — запрет на весь видеочат (ставит админ видеочата).
+  // Звания: владелец проекта (superadmin) > суб-админ (назначает владелец; заперт в своей комнате, назначает
+  // админов и минеров) > админ (мут/выгон/бан, назначает минеров) > минер (только мут до 30 минут).
+  // Админ видеочата (право app_videochat) действует во всех комнатах на уровне «админ».
+  // Как и всё в панели, это удобство интерфейса, а не защита (база открыта на запись); каждая функция
+  // перепроверяет права. Всё из базы выводится через escapeHtml/textContent, а id из записей базы проходит
+  // VC_ID_RE, прежде чем попасть в путь.
   const VC_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  const VC_RANK_NAMES = { owner: 'Владелец', subadmin: 'Суб-админ', admin: 'Админ', miner: 'Минер' };
+  const VC_RANK_LEVEL = { owner: 4, subadmin: 3, admin: 2, miner: 1 };
+  const VC_MINER_MAX_MUTE_MS = 30 * 60 * 1000;
+  const vcLvl = (r) => VC_RANK_LEVEL[r] || 0;
+  let myCommunityRanks = {}; // users/<я>/vcCommunities, читается при входе
+  function vcMyRank(cid) {
+    if (myRole === 'superadmin') return 'owner';
+    if (myPermissions.app_videochat) return 'admin';
+    const r = myCommunityRanks[cid];
+    return VC_RANK_LEVEL[r] ? r : null;
+  }
+  function vcActor() {
+    return { id: myTelegramId ? String(myTelegramId) : 'token', name: String(document.getElementById('me-name').textContent || '—').slice(0, 40) };
+  }
+
   let vcListeners = [];
   function vcDetach() {
     vcListeners.forEach((off) => { try { off(); } catch (e) {} });
@@ -5378,35 +5486,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     ref.on('value', cb, (err) => console.error('videochat listener failed:', err));
     vcListeners.push(() => ref.off('value', cb));
   }
-
-  function vcOpenOverview() {
-    if (!canManageVideochat()) return; // на случай подделки клика мимо скрытой вкладки
-    vcDetach();
-    const st = { online: 0, queue: 0, calls: 0, reports: 0, bans: 0 };
-    const grid = document.getElementById('vc-stat-grid');
-    const draw = () => {
-      grid.innerHTML =
-        statTile(st.online, 'Онлайн') +
-        statTile(st.queue, 'Ищут собеседника') +
-        statTile(st.calls, 'Разговоров идёт') +
-        statTile(st.reports, 'Новых жалоб') +
-        statTile(st.bans, 'Активных блокировок');
-    };
-    draw();
-    vcWatch(db.ref('videochat/online'), (s) => { st.online = s.numChildren(); draw(); });
-    vcWatch(db.ref('videochat/queue'), (s) => { st.queue = s.numChildren(); draw(); });
-    vcWatch(db.ref('videochat/rooms'), (s) => { st.calls = s.numChildren(); draw(); });
-    vcWatch(db.ref('videochat/reports').limitToLast(200), (s) => {
-      st.reports = Object.values(s.val() || {}).filter((r) => r && r.status === 'new').length;
-      draw();
-    });
-    vcWatch(db.ref('videochat/bans'), (s) => {
-      st.bans = Object.values(s.val() || {}).filter(vcBanActive).length;
-      draw();
-    });
-  }
-
   function vcBanActive(b) { return !!b && (!b.until || b.until > Date.now()); }
+  function vcWhen(ts) { return new Date(ts || 0).toLocaleString('ru-RU'); }
 
   // имя и PLR-id по id аккаунта — читаем только два поля (в users/<id> лежит и аватарка)
   const vcNameCache = new Map();
@@ -5425,7 +5506,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       vcUserInfo(el.dataset.vcUser).then((i) => { el.textContent = i.name + ' (' + i.playerId + ')'; });
     });
   }
-
   async function vcResolveUser(query) {
     const q = String(query || '').trim();
     if (!q) throw new Error('Впиши ID игрока');
@@ -5438,20 +5518,241 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (!(await db.ref('users/' + q + '/role').once('value')).exists()) throw new Error('Аккаунт не найден');
     return q;
   }
+  function vcLog(cid, action, targetUid, targetName, details) {
+    const a = vcActor();
+    const rank = vcMyRank(cid) || 'member';
+    db.ref('videochat/roomState/' + cid + '/logs').push({ at: Date.now(), actor: a.id, actorName: a.name, actorRank: rank, action, target: targetUid || '', targetName: targetName || '', details: details || '', via: 'panel' }).catch(() => {});
+    logAction('vcg_action', targetUid || '', targetName || '', targetUid || '', '[' + (cmMeta.title || cid) + '] ' + action + (details ? ' · ' + details : ''));
+  }
 
+  // ----- Обзор -----
+  function vcOpenOverview() {
+    if (!canManageVideochat()) return; // на случай подделки клика мимо скрытой вкладки
+    vcDetach();
+    const st = { comm: 0, active: 0, pending: 0, inRooms: 0, bans: 0 };
+    const online = {};
+    const watched = new Set();
+    const grid = document.getElementById('vc-stat-grid');
+    const draw = () => {
+      st.inRooms = Object.values(online).reduce((a, b) => a + b, 0);
+      grid.innerHTML =
+        statTile(st.inRooms, 'Сейчас в комнатах') +
+        statTile(st.active + ' / ' + st.comm, 'Активных сообществ') +
+        statTile(st.pending, 'Заявок на подключение') +
+        statTile(st.bans, 'Блокировок на весь видеочат');
+    };
+    draw();
+    vcWatch(db.ref('videochat/communities'), (s) => {
+      const v = s.val() || {};
+      const ids = Object.keys(v).filter((id) => VC_ID_RE.test(id));
+      st.comm = ids.length;
+      st.active = ids.filter((id) => v[id] && v[id].status === 'active').length;
+      ids.forEach((id) => {
+        if (watched.has(id)) return;
+        watched.add(id);
+        vcWatch(db.ref('videochat/roomState/' + id + '/online'), (o) => { online[id] = o.numChildren(); draw(); });
+      });
+      draw();
+    });
+    vcWatch(db.ref('videochat/communityRequests').limitToLast(100), (s) => {
+      st.pending = Object.values(s.val() || {}).filter((r) => r && r.status === 'pending').length;
+      draw();
+    });
+    vcWatch(db.ref('videochat/bans'), (s) => { st.bans = Object.values(s.val() || {}).filter(vcBanActive).length; draw(); });
+  }
+
+  // ----- Сообщества: заявки и список -----
+  let vcCommunitiesCache = {};
+  function vcOpenCommunities() {
+    if (!canManageVideochat()) return;
+    vcDetach();
+    vcWatch(db.ref('videochat/communityRequests').limitToLast(50), (s) => renderVcRequests(s.val() || {}));
+    vcWatch(db.ref('videochat/communities'), (s) => { vcCommunitiesCache = s.val() || {}; renderVcCommunities(vcCommunitiesCache); });
+  }
+
+  async function vcFreshJoinCode() {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    for (let attempt = 0; attempt < 6; attempt++) {
+      let code = '';
+      for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+      if (!(await db.ref('videochat/communities').orderByChild('joinCode').equalTo(code).once('value')).exists()) return code;
+    }
+    throw new Error('не удалось подобрать код, попробуйте ещё раз');
+  }
+
+  async function vcApproveRequest(key, req) {
+    if (!canManageRoles()) throw new Error('нет прав'); // только владелец проекта
+    if (!VC_ID_RE.test(key)) throw new Error('неверный id чата');
+    const by = req.requestedBy || {};
+    const sub = String(by.id || '');
+    if (!VC_ID_RE.test(sub)) throw new Error('в заявке нет id заявителя');
+    if (!(await db.ref('users/' + sub + '/role').once('value')).exists()) {
+      throw new Error('У заявителя нет профиля. Пусть он один раз откроет ВидеоЧат (вход по заявке) и отправит /connect в чате заново.');
+    }
+    if ((await db.ref('videochat/communities/' + key + '/status').once('value')).exists()) throw new Error('Этот чат уже подключён');
+    const title = String(req.title || 'Чат').slice(0, 60);
+    const code = await vcFreshJoinCode();
+    await db.ref().update({
+      ['videochat/communities/' + key]: { title, status: 'active', joinCode: code, createdAt: Date.now(), createdBy: vcActor().id, tgChatId: key, settings: { autoMod: true }, staff: { [sub]: 'subadmin' } },
+      ['users/' + sub + '/vcCommunities/' + key]: 'subadmin',
+      ['videochat/communityRequests/' + key + '/status']: 'approved'
+    });
+    logAction('vc_comm_approved', sub, String(by.name || '—').slice(0, 60), sub, 'Чат «' + title + '» подключён, суб-админ — заявитель');
+  }
+  async function vcRejectRequest(key, req) {
+    if (!canManageRoles()) throw new Error('нет прав');
+    if (!VC_ID_RE.test(key)) throw new Error('неверный id чата');
+    await db.ref('videochat/communityRequests/' + key + '/status').set('rejected');
+    logAction('vc_comm_rejected', '', String((req.requestedBy && req.requestedBy.name) || '—').slice(0, 60), '', 'Заявка чата «' + String(req.title || '').slice(0, 60) + '» отклонена');
+  }
+
+  function renderVcRequests(data) {
+    const listEl = document.getElementById('vc-req-list');
+    const emptyEl = document.getElementById('vc-req-empty');
+    const entries = Object.entries(data).filter(([k, r]) => VC_ID_RE.test(k) && r && r.status === 'pending').sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+    document.getElementById('vc-req-title').textContent = `Заявки на подключение чатов (${entries.length})`;
+    listEl.innerHTML = '';
+    emptyEl.style.display = entries.length ? 'none' : 'block';
+    entries.forEach(([key, r]) => {
+      const by = r.requestedBy || {};
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      row.innerHTML = `
+        <div class="l-title">${escapeHtml(String(r.title || 'Чат').slice(0, 60))}</div>
+        <div class="l-body">От: ${escapeHtml(String(by.name || '—').slice(0, 60))}${by.username ? ' (@' + escapeHtml(String(by.username).slice(0, 40)) + ')' : ''} · id ${escapeHtml(String(by.id || '—').slice(0, 20))}<br>Чат: ${escapeHtml(key)}</div>
+        <div class="l-time">${escapeHtml(vcWhen(r.at))}</div>
+        ${canManageRoles() ? `<div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn btn-gold vc-req-ok" style="flex:1; padding:7px; font-size:11.5px;">Одобрить — заявитель станет суб-админом</button>
+          <button class="btn btn-line vc-req-no" style="padding:7px 14px; font-size:11.5px;">Отклонить</button></div>` : '<div class="admin-empty" style="text-align:left; padding:6px 0 0;">Одобряет только владелец проекта</div>'}
+      `;
+      const ok = row.querySelector('.vc-req-ok');
+      const no = row.querySelector('.vc-req-no');
+      if (ok) ok.addEventListener('click', async () => {
+        ok.disabled = true; no.disabled = true;
+        try { await vcApproveRequest(key, r); } catch (err) { ok.disabled = false; no.disabled = false; alert('Не получилось: ' + (err.message || err)); }
+      });
+      if (no) no.addEventListener('click', async () => {
+        if (!confirm('Отклонить заявку чата «' + String(r.title || '').slice(0, 60) + '»?')) return;
+        ok.disabled = true; no.disabled = true;
+        try { await vcRejectRequest(key, r); } catch (err) { ok.disabled = false; no.disabled = false; alert('Не получилось: ' + (err.message || err)); }
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  function vcSubadminOf(c) {
+    const staff = (c && c.staff) || {};
+    return Object.keys(staff).find((u) => staff[u] === 'subadmin') || null;
+  }
+
+  async function vcSetStatus(key, status) {
+    if (!canManageRoles()) throw new Error('нет прав');
+    if (!VC_ID_RE.test(key)) throw new Error('неверный id');
+    await db.ref('videochat/communities/' + key + '/status').set(status);
+    logAction('vc_comm_toggled', '', String((vcCommunitiesCache[key] || {}).title || key).slice(0, 60), '', status === 'active' ? 'Комната включена' : 'Комната отключена');
+  }
+  async function vcChangeSubadmin(key, targetKey) {
+    if (!canManageRoles()) throw new Error('нет прав');
+    if (!VC_ID_RE.test(key) || !VC_ID_RE.test(targetKey)) throw new Error('неверный id');
+    const c = vcCommunitiesCache[key];
+    if (!c) throw new Error('сообщество не найдено');
+    const updates = {};
+    Object.keys(c.staff || {}).forEach((u) => {
+      if (c.staff[u] === 'subadmin' && u !== targetKey && VC_ID_RE.test(u)) { // прежний суб-админ остаётся админом комнаты
+        updates['videochat/communities/' + key + '/staff/' + u] = 'admin';
+        updates['users/' + u + '/vcCommunities/' + key] = 'admin';
+      }
+    });
+    updates['videochat/communities/' + key + '/staff/' + targetKey] = 'subadmin';
+    updates['users/' + targetKey + '/vcCommunities/' + key] = 'subadmin';
+    await db.ref().update(updates);
+    const info = await vcUserInfo(targetKey);
+    logAction('vc_comm_subadmin', targetKey, info.name, info.playerId, 'Суб-админ комнаты «' + String(c.title || key).slice(0, 60) + '»');
+  }
+  async function vcDeleteCommunity(key) {
+    if (!canManageRoles()) throw new Error('нет прав');
+    if (!VC_ID_RE.test(key)) throw new Error('неверный id');
+    const c = vcCommunitiesCache[key] || {};
+    const updates = { ['videochat/communities/' + key]: null, ['videochat/roomState/' + key]: null, ['videochat/communityRequests/' + key]: null };
+    Object.keys(c.staff || {}).forEach((u) => { if (VC_ID_RE.test(u)) updates['users/' + u + '/vcCommunities/' + key] = null; });
+    await db.ref().update(updates);
+    logAction('vc_comm_deleted', '', String(c.title || key).slice(0, 60), '', 'Сообщество удалено вместе с комнатой и журналом');
+  }
+
+  function renderVcCommunities(data) {
+    const listEl = document.getElementById('vc-comm-list');
+    const emptyEl = document.getElementById('vc-comm-empty');
+    const entries = Object.entries(data).filter(([k, c]) => VC_ID_RE.test(k) && c && typeof c === 'object').sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+    document.getElementById('vc-comm-title').textContent = `Сообщества (${entries.length})`;
+    listEl.innerHTML = '';
+    emptyEl.style.display = entries.length ? 'none' : 'block';
+    entries.forEach(([key, c]) => {
+      const sub = vcSubadminOf(c);
+      const active = c.status === 'active';
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      if (!active) row.style.opacity = '0.6';
+      row.innerHTML = `
+        <div class="l-title">${escapeHtml(String(c.title || key).slice(0, 60))}${active ? '' : ' · отключено'}</div>
+        <div class="l-body">Код комнаты: <b>${escapeHtml(String(c.joinCode || '—'))}</b><br>Суб-админ: ${sub ? `<span data-vc-user="${escapeHtml(sub)}">${escapeHtml(sub)}</span>` : '—'} · в команде ${Object.keys(c.staff || {}).length}</div>
+        <div class="l-time">${escapeHtml(vcWhen(c.createdAt))}</div>
+        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+          <button class="btn btn-gold vc-comm-open" style="padding:7px 14px; font-size:11.5px;">Управлять</button>
+          ${canManageRoles() ? `<button class="btn btn-line vc-comm-toggle" style="padding:7px 14px; font-size:11.5px;">${active ? 'Отключить' : 'Включить'}</button>
+          <button class="btn btn-line vc-comm-sub" style="padding:7px 14px; font-size:11.5px;">Суб-админ…</button>
+          <button class="btn btn-live vc-comm-del" style="padding:7px 14px; font-size:11.5px;">Удалить</button>` : ''}
+        </div>
+        <div class="vc-comm-subform" style="display:none; margin-top:8px;">
+          <div class="admin-search"><input type="text" class="vc-comm-subid" placeholder="PLR-XXXXXX или ID нового суб-админа" autocomplete="off"></div>
+          <button class="btn btn-gold vc-comm-subgo" style="width:100%; margin-top:8px;">Назначить суб-админом (прежний станет админом)</button>
+        </div>
+      `;
+      row.querySelector('.vc-comm-open').addEventListener('click', () => { cmCurrent = key; document.querySelector('.tab[data-tab="cm-room"]').click(); });
+      const tg = row.querySelector('.vc-comm-toggle');
+      if (tg) tg.addEventListener('click', async () => {
+        tg.disabled = true;
+        try { await vcSetStatus(key, active ? 'disabled' : 'active'); } catch (err) { tg.disabled = false; alert('Не получилось: ' + (err.message || err)); }
+      });
+      const sb = row.querySelector('.vc-comm-sub');
+      if (sb) sb.addEventListener('click', () => { const f = row.querySelector('.vc-comm-subform'); f.style.display = f.style.display === 'none' ? 'block' : 'none'; });
+      const go = row.querySelector('.vc-comm-subgo');
+      if (go) go.addEventListener('click', async () => {
+        go.disabled = true;
+        try {
+          const target = await vcResolveUser(row.querySelector('.vc-comm-subid').value);
+          await vcChangeSubadmin(key, target);
+        } catch (err) { alert('Не получилось: ' + (err.message || err)); }
+        go.disabled = false;
+      });
+      const del = row.querySelector('.vc-comm-del');
+      if (del) del.addEventListener('click', async () => {
+        if (!confirm('Удалить сообщество «' + String(c.title || key).slice(0, 60) + '» вместе с комнатой, командой и журналом? Это нельзя отменить.')) return;
+        del.disabled = true;
+        try { await vcDeleteCommunity(key); } catch (err) { del.disabled = false; alert('Не получилось: ' + (err.message || err)); }
+      });
+      listEl.appendChild(row);
+    });
+    vcFillNames(listEl);
+  }
+
+  // ----- Запрет на весь видеочат (админ видеочата) -----
+  function vcOpenModeration() {
+    if (!canManageVideochat()) return;
+    vcDetach();
+    vcWatch(db.ref('videochat/bans'), (s) => renderVcBans(s.val() || {}));
+  }
   async function vcBanUser(userKey, hours, reason) {
-    if (!canManageVideochat()) throw new Error('нет прав'); // на случай подделки клика мимо скрытого UI
+    if (!canManageVideochat()) throw new Error('нет прав');
     if (!VC_ID_RE.test(userKey)) throw new Error('неверный ID');
     if (String(userKey) === String(myTelegramId)) throw new Error('себя блокировать нельзя');
     const h = Number(hours) || 0;
     if (!Number.isInteger(h) || h < 0 || h > 24 * 365) throw new Error('часы — целое число от 1 до 8760 (или пусто — навсегда)');
     const cleanReason = String(reason || '').replace(/\s+/g, ' ').trim().slice(0, 200);
     const until = h > 0 ? Date.now() + h * 3600 * 1000 : 0;
-    await db.ref('videochat/bans/' + userKey).set({ until, reason: cleanReason, at: Date.now(), by: (tgUser && tgUser.first_name) || (myTelegramId ? String(myTelegramId) : 'токен') });
+    await db.ref('videochat/bans/' + userKey).set({ until, reason: cleanReason, at: Date.now(), by: vcActor().name });
     const info = await vcUserInfo(userKey);
     logAction('vc_ban', userKey, info.name, info.playerId, (h > 0 ? h + ' ч' : 'навсегда') + (cleanReason ? ' · ' + cleanReason : ''));
   }
-
   async function vcUnban(userKey) {
     if (!canManageVideochat()) throw new Error('нет прав');
     if (!VC_ID_RE.test(userKey)) throw new Error('неверный ID');
@@ -5459,75 +5760,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const info = await vcUserInfo(userKey);
     logAction('vc_unban', userKey, info.name, info.playerId, 'Блокировка в ВидеоЧате снята');
   }
-
-  function vcOpenModeration() {
-    if (!canManageVideochat()) return; // на случай подделки клика мимо скрытой вкладки
-    vcDetach();
-    vcWatch(db.ref('videochat/reports').limitToLast(100), (s) => renderVcReports(s.val() || {}));
-    vcWatch(db.ref('videochat/bans'), (s) => renderVcBans(s.val() || {}));
-  }
-
-  function renderVcReports(data) {
-    const listEl = document.getElementById('vc-reports-list');
-    const emptyEl = document.getElementById('vc-reports-empty');
-    const entries = Object.entries(data).filter(([, r]) => r && typeof r === 'object').sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
-    const open = entries.filter(([, r]) => r.status === 'new');
-    document.getElementById('vc-reports-title').textContent = `Жалобы (${open.length} новых)`;
-    listEl.innerHTML = '';
-    emptyEl.style.display = entries.length ? 'none' : 'block';
-    entries.forEach(([id, r]) => {
-      const closed = r.status !== 'new';
-      const target = String(r.target || '');
-      const row = document.createElement('div');
-      row.className = 'log-row';
-      if (closed) row.style.opacity = '0.55';
-      row.innerHTML = `
-        <div class="l-title">${escapeHtml(String(r.reason || 'Другое').slice(0, 80))}</div>
-        <div class="l-body">На: <span data-vc-user="${escapeHtml(target)}">${escapeHtml(target || '—')}</span><br>Пожаловался: ${escapeHtml(String(r.fromName || '—').slice(0, 40))} (${escapeHtml(String(r.fromPlayerId || r.from || '—').slice(0, 20))})</div>
-        <div class="l-time">${escapeHtml(new Date(r.createdAt || 0).toLocaleString('ru-RU'))}${closed ? ' · закрыта' : ''}</div>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-          <button class="btn btn-live vc-rep-ban" style="flex:1; padding:7px; font-size:11.5px;">Заблокировать…</button>
-          ${closed ? '' : '<button class="btn btn-line vc-rep-close" style="flex:1; padding:7px; font-size:11.5px;">Закрыть жалобу</button>'}
-        </div>
-        <div class="vc-rep-form" style="display:none; margin-top:8px;">
-          <div class="admin-search"><input type="text" class="vc-rep-hours" placeholder="Часов (пусто — навсегда)" inputmode="numeric" autocomplete="off"><input type="text" class="vc-rep-reason" placeholder="Причина" maxlength="200" autocomplete="off"></div>
-          <button class="btn btn-live vc-rep-ban-go" style="width:100%; margin-top:8px;">Подтвердить блокировку</button>
-        </div>
-      `;
-      row.querySelector('.vc-rep-reason').value = String(r.reason || '').slice(0, 80);
-      row.querySelector('.vc-rep-ban').addEventListener('click', () => {
-        const f = row.querySelector('.vc-rep-form');
-        f.style.display = f.style.display === 'none' ? 'block' : 'none';
-      });
-      row.querySelector('.vc-rep-ban-go').addEventListener('click', async (e) => {
-        const btn = e.currentTarget;
-        btn.disabled = true;
-        try {
-          await vcBanUser(target, row.querySelector('.vc-rep-hours').value.trim(), row.querySelector('.vc-rep-reason').value);
-          if (!closed) await db.ref('videochat/reports/' + id + '/status').set('closed');
-        } catch (err) {
-          alert('Не удалось заблокировать: ' + (err.message || err));
-        }
-        btn.disabled = false;
-      });
-      const closeBtn = row.querySelector('.vc-rep-close');
-      if (closeBtn) closeBtn.addEventListener('click', async () => {
-        if (!canManageVideochat()) return;
-        closeBtn.disabled = true;
-        try {
-          await db.ref('videochat/reports/' + id + '/status').set('closed');
-          const info = await vcUserInfo(target);
-          logAction('vc_report_closed', VC_ID_RE.test(target) ? target : '', info.name, info.playerId, 'Жалоба закрыта: ' + String(r.reason || 'Другое').slice(0, 80));
-        } catch (err) {
-          closeBtn.disabled = false;
-          alert('Не удалось закрыть жалобу: ' + (err.message || err));
-        }
-      });
-      listEl.appendChild(row);
-    });
-    vcFillNames(listEl);
-  }
-
   function renderVcBans(data) {
     const listEl = document.getElementById('vc-bans-list');
     const emptyEl = document.getElementById('vc-bans-empty');
@@ -5540,11 +5772,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const row = document.createElement('div');
       row.className = 'log-row';
       if (!active) row.style.opacity = '0.55';
-      const till = b.until ? 'до ' + new Date(b.until).toLocaleString('ru-RU') : 'навсегда';
       row.innerHTML = `
         <div class="l-title"><span data-vc-user="${escapeHtml(id)}">${escapeHtml(id)}</span></div>
-        <div class="l-body">${escapeHtml(till)}${active ? '' : ' (срок истёк)'}${b.reason ? '<br>Причина: ' + escapeHtml(String(b.reason).slice(0, 200)) : ''}</div>
-        <div class="l-time">Выдал: ${escapeHtml(String(b.by || '—').slice(0, 40))} · ${escapeHtml(new Date(b.at || 0).toLocaleString('ru-RU'))}</div>
+        <div class="l-body">${escapeHtml(b.until ? 'до ' + vcWhen(b.until) : 'навсегда')}${active ? '' : ' (срок истёк)'}${b.reason ? '<br>Причина: ' + escapeHtml(String(b.reason).slice(0, 200)) : ''}</div>
+        <div class="l-time">Выдал: ${escapeHtml(String(b.by || '—').slice(0, 40))} · ${escapeHtml(vcWhen(b.at))}</div>
         <div style="margin-top:8px;"><button class="btn btn-line vc-unban" style="padding:7px 14px; font-size:11.5px;">Снять блокировку</button></div>
       `;
       row.querySelector('.vc-unban').addEventListener('click', async (e) => {
@@ -5556,9 +5787,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
     vcFillNames(listEl);
   }
-
   document.getElementById('vc-ban-btn').addEventListener('click', async () => {
-    if (!canManageVideochat()) return; // на случай подделки клика мимо скрытой вкладки
+    if (!canManageVideochat()) return;
     const btn = document.getElementById('vc-ban-btn');
     const msg = document.getElementById('vc-ban-msg');
     btn.disabled = true;
@@ -5567,7 +5797,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const key = await vcResolveUser(document.getElementById('vc-ban-id').value);
       await vcBanUser(key, document.getElementById('vc-ban-hours').value.trim(), document.getElementById('vc-ban-reason').value);
       ['vc-ban-id', 'vc-ban-hours', 'vc-ban-reason'].forEach((i) => { document.getElementById(i).value = ''; });
-      msg.textContent = '✅ Заблокирован. Вылетит из разговора сразу.';
+      msg.textContent = '✅ Заблокирован во всём ВидеоЧате — вылетит из комнаты сразу.';
     } catch (err) {
       msg.textContent = 'Не удалось: ' + (err.message || err);
     }
@@ -5575,6 +5805,261 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     btn.disabled = false;
   });
 
+  // ----- «Комната»: управление одной комнатой (суб-админ — своей, владелец и админ видеочата — любой) -----
+  let cmCurrent = null;
+  let cmMeta = {};
+  let cmOnline = {}, cmMutes = {}, cmBans = {}, cmLogs = {};
+  function cmRank() { return cmCurrent ? vcMyRank(cmCurrent) : null; }
+
+  async function cmAccessibleList() {
+    const seeAll = myRole === 'superadmin' || !!myPermissions.app_videochat;
+    if (seeAll) {
+      const v = (await db.ref('videochat/communities').once('value')).val() || {};
+      return Object.keys(v).filter((id) => VC_ID_RE.test(id) && v[id]).map((id) => ({ id, title: String(v[id].title || id).slice(0, 60) }));
+    }
+    const ids = Object.keys(myCommunityRanks).filter((id) => VC_ID_RE.test(id));
+    const out = [];
+    for (const id of ids) {
+      const t = (await db.ref('videochat/communities/' + id + '/title').once('value')).val();
+      if (t) out.push({ id, title: String(t).slice(0, 60) });
+    }
+    return out;
+  }
+
+  async function cmStart() {
+    vcDetach();
+    const list = await cmAccessibleList();
+    const sel = document.getElementById('cm-select');
+    sel.innerHTML = '';
+    list.forEach((c) => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.title; sel.appendChild(o); });
+    const none = !list.length;
+    document.getElementById('cm-empty').style.display = none ? 'block' : 'none';
+    document.getElementById('cm-body').style.display = none ? 'none' : 'block';
+    document.getElementById('cm-team-body').style.display = none ? 'none' : 'block';
+    document.getElementById('cm-team-empty').style.display = none ? 'block' : 'none';
+    if (none) { cmCurrent = null; return; }
+    if (!list.some((c) => c.id === cmCurrent)) cmCurrent = list[0].id;
+    sel.value = cmCurrent;
+    cmAttach();
+  }
+  function cmAttach() {
+    vcDetach();
+    cmMeta = {}; cmOnline = {}; cmMutes = {}; cmBans = {}; cmLogs = {};
+    const cid = cmCurrent;
+    const base = 'videochat/roomState/' + cid + '/';
+    vcWatch(db.ref('videochat/communities/' + cid), (s) => { cmMeta = s.val() || {}; cmRender(); });
+    vcWatch(db.ref(base + 'online'), (s) => { cmOnline = s.val() || {}; cmRender(); });
+    vcWatch(db.ref(base + 'mutes'), (s) => { cmMutes = s.val() || {}; cmRender(); });
+    vcWatch(db.ref(base + 'bans'), (s) => { cmBans = s.val() || {}; cmRender(); });
+    vcWatch(db.ref(base + 'logs').limitToLast(100), (s) => { cmLogs = s.val() || {}; cmRender(); });
+  }
+  document.getElementById('cm-select').addEventListener('change', (e) => {
+    if (!VC_ID_RE.test(e.target.value)) return;
+    cmCurrent = e.target.value;
+    cmAttach();
+  });
+
+  // права на действия в текущей комнате
+  function cmRankOfUid(uid) {
+    if (cmOnline[uid] && cmOnline[uid].rank === 'owner') return 'owner'; // владельца проекта заглушить и выгнать нельзя
+    const r = (cmMeta.staff || {})[uid];
+    return VC_RANK_LEVEL[r] ? r : null;
+  }
+  function cmCanAct(targetUid, need) {
+    const my = vcLvl(cmRank());
+    return my >= need && my > vcLvl(cmRankOfUid(targetUid)) && String(targetUid) !== String(myTelegramId);
+  }
+  async function cmMute(uid, ms) {
+    if (!cmCurrent || !VC_ID_RE.test(uid)) return;
+    if (cmRank() === 'miner' && (ms === 0 || ms > VC_MINER_MAX_MUTE_MS)) { alert('Минер может заглушать не больше чем на 30 минут'); return; }
+    if (!cmCanAct(uid, 1)) return;
+    const a = vcActor();
+    await db.ref('videochat/roomState/' + cmCurrent + '/mutes/' + uid).set({ until: ms ? Date.now() + ms : 0, by: a.id, byName: a.name, at: Date.now() });
+    const info = await vcUserInfo(uid);
+    vcLog(cmCurrent, 'мут', uid, info.name, ms ? Math.round(ms / 60000) + ' мин' : 'без срока');
+  }
+  async function cmUnmute(uid) {
+    if (!cmCurrent || !VC_ID_RE.test(uid) || !cmCanAct(uid, 1)) return;
+    await db.ref('videochat/roomState/' + cmCurrent + '/mutes/' + uid).remove();
+    db.ref('videochat/roomState/' + cmCurrent + '/votes/' + uid).remove().catch(() => {});
+    const info = await vcUserInfo(uid);
+    vcLog(cmCurrent, 'снят мут', uid, info.name, '');
+  }
+  async function cmBan(uid, ms) {
+    if (!cmCurrent || !VC_ID_RE.test(uid) || !cmCanAct(uid, 2)) return;
+    const a = vcActor();
+    await db.ref('videochat/roomState/' + cmCurrent + '/bans/' + uid).set({ until: ms ? Date.now() + ms : 0, by: a.id, byName: a.name, at: Date.now() });
+    const info = await vcUserInfo(uid);
+    vcLog(cmCurrent, ms ? 'выгнан' : 'бан', uid, info.name, ms ? Math.round(ms / 60000) + ' мин' : 'навсегда');
+  }
+  async function cmUnban(uid) {
+    if (!cmCurrent || !VC_ID_RE.test(uid) || !cmCanAct(uid, 2)) return;
+    await db.ref('videochat/roomState/' + cmCurrent + '/bans/' + uid).remove();
+    const info = await vcUserInfo(uid);
+    vcLog(cmCurrent, 'снят бан', uid, info.name, '');
+  }
+  async function cmSetAutoMod(on) {
+    if (!cmCurrent || vcLvl(cmRank()) < 3) return;
+    await db.ref('videochat/communities/' + cmCurrent + '/settings/autoMod').set(!!on);
+    vcLog(cmCurrent, 'настройка', '', '', 'Голосование участников ' + (on ? 'включено' : 'выключено'));
+  }
+  async function cmAppoint(targetKey, rank) {
+    const my = vcLvl(cmRank());
+    if (!cmCurrent || my < 2 || !VC_RANK_LEVEL[rank] || my <= vcLvl(rank)) throw new Error('у вас нет права назначать это звание');
+    if (!VC_ID_RE.test(targetKey)) throw new Error('неверный ID');
+    if (my <= vcLvl(cmRankOfUid(targetKey))) throw new Error('нельзя менять звание тому, кто выше или равен вам');
+    await db.ref().update({
+      ['videochat/communities/' + cmCurrent + '/staff/' + targetKey]: rank,
+      ['users/' + targetKey + '/vcCommunities/' + cmCurrent]: rank
+    });
+    const info = await vcUserInfo(targetKey);
+    vcLog(cmCurrent, 'назначен: ' + VC_RANK_NAMES[rank], targetKey, info.name, '');
+  }
+  async function cmRemoveStaff(uid) {
+    const my = vcLvl(cmRank());
+    if (!cmCurrent || my < 2 || !VC_ID_RE.test(uid) || my <= vcLvl(cmRankOfUid(uid))) throw new Error('нельзя');
+    const was = cmRankOfUid(uid);
+    await db.ref().update({
+      ['videochat/communities/' + cmCurrent + '/staff/' + uid]: null,
+      ['users/' + uid + '/vcCommunities/' + cmCurrent]: null
+    });
+    const info = await vcUserInfo(uid);
+    vcLog(cmCurrent, 'снят с должности: ' + (VC_RANK_NAMES[was] || ''), uid, info.name, '');
+  }
+
+  function cmBtn(text, fn, cls) {
+    const b = document.createElement('button');
+    b.className = 'btn ' + (cls || 'btn-line');
+    b.style.cssText = 'padding:5px 10px; font-size:11.5px;';
+    b.textContent = text;
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await fn(); } catch (err) { alert('Не получилось: ' + (err.message || err)); }
+      b.disabled = false;
+    });
+    return b;
+  }
+
+  function cmRender() {
+    if (!cmCurrent) return;
+    const rank = cmRank();
+    const my = vcLvl(rank);
+    // ---- шапка и настройки
+    const info = document.getElementById('cm-info');
+    const link = 'https://botsystemtioxsit.github.io/videochat/?room=' + encodeURIComponent(cmCurrent);
+    info.innerHTML = `<div class="admin-empty" style="text-align:left; padding:10px 0 0; line-height:1.6;">
+      Статус: <b>${cmMeta.status === 'active' ? 'работает' : 'отключена'}</b> · ваше звание: <b>${escapeHtml(VC_RANK_NAMES[rank] || '—')}</b><br>
+      Код комнаты: <b>${escapeHtml(String(cmMeta.joinCode || '—'))}</b><br>
+      Ссылка: <span style="user-select:all; word-break:break-all;">${escapeHtml(link)}</span></div>`;
+    const setBox = document.getElementById('cm-settings');
+    setBox.innerHTML = '';
+    if (my >= 3) {
+      const on = !(cmMeta.settings && cmMeta.settings.autoMod === false);
+      const row = document.createElement('div');
+      row.className = 'toggle-row' + (on ? ' on' : '');
+      row.innerHTML = '<div class="toggle-check"></div><div class="toggle-label">Участники могут голосовать за мут, когда в комнате нет админов и не меньше 5 человек</div>';
+      row.addEventListener('click', () => { cmSetAutoMod(!on).catch((err) => alert('Не получилось: ' + (err.message || err))); });
+      setBox.appendChild(row);
+    }
+    // ---- кто в комнате
+    const onlineEl = document.getElementById('cm-online');
+    onlineEl.innerHTML = '';
+    const uids = Object.keys(cmOnline).filter((u) => VC_ID_RE.test(u));
+    document.getElementById('cm-online-title').textContent = `Сейчас в комнате (${uids.length})`;
+    if (!uids.length) onlineEl.innerHTML = '<div class="admin-empty">В комнате никого нет</div>';
+    uids.forEach((uid) => {
+      const o = cmOnline[uid] || {};
+      const rk = cmRankOfUid(uid);
+      const muted = vcBanActive(cmMutes[uid]);
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      row.innerHTML = `<div class="l-title">${escapeHtml(String(o.name || uid).slice(0, 40))}${rk ? ' · ' + escapeHtml(VC_RANK_NAMES[rk]) : ''}${muted ? ' · 🔇 мут' : ''}</div><div class="l-body"><span data-vc-user="${escapeHtml(uid)}">${escapeHtml(uid)}</span></div>`;
+      const act = document.createElement('div');
+      act.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin-top:7px;';
+      if (muted) { if (cmCanAct(uid, 1)) act.appendChild(cmBtn('Снять мут', () => cmUnmute(uid))); }
+      else if (cmCanAct(uid, 1)) {
+        act.appendChild(cmBtn('🔇 10 мин', () => cmMute(uid, 10 * 60000)));
+        act.appendChild(cmBtn('🔇 30 мин', () => cmMute(uid, 30 * 60000)));
+        if (my >= 2) { act.appendChild(cmBtn('🔇 1 час', () => cmMute(uid, 3600000))); act.appendChild(cmBtn('🔇 навсегда', () => cmMute(uid, 0))); }
+      }
+      if (cmCanAct(uid, 2)) {
+        act.appendChild(cmBtn('Выгнать на час', () => cmBan(uid, 3600000), 'btn-live'));
+        act.appendChild(cmBtn('Бан', () => cmBan(uid, 0), 'btn-live'));
+      }
+      if (act.childNodes.length) row.appendChild(act);
+      onlineEl.appendChild(row);
+    });
+    vcFillNames(onlineEl);
+    // ---- заглушены / выгнаны
+    const mkList = (elId, data, undo, canUndo, emptyText) => {
+      const el = document.getElementById(elId);
+      el.innerHTML = '';
+      const ids = Object.keys(data).filter((u) => VC_ID_RE.test(u) && vcBanActive(data[u]));
+      if (!ids.length) { el.innerHTML = `<div class="admin-empty">${emptyText}</div>`; return; }
+      ids.forEach((uid) => {
+        const d = data[uid];
+        const row = document.createElement('div');
+        row.className = 'log-row';
+        row.innerHTML = `<div class="l-title"><span data-vc-user="${escapeHtml(uid)}">${escapeHtml(uid)}</span></div><div class="l-body">${escapeHtml(d.until ? 'до ' + vcWhen(d.until) : 'без срока')} · назначил ${escapeHtml(String(d.byName || '—').slice(0, 40))}</div>`;
+        if (canUndo(uid)) { const w = document.createElement('div'); w.style.marginTop = '7px'; w.appendChild(cmBtn('Снять', () => undo(uid))); row.appendChild(w); }
+        el.appendChild(row);
+      });
+      vcFillNames(el);
+    };
+    mkList('cm-mutes', cmMutes, cmUnmute, (u) => cmCanAct(u, 1), 'Никто не заглушён');
+    mkList('cm-bans', cmBans, cmUnban, (u) => cmCanAct(u, 2), 'Никто не выгнан');
+    // ---- команда
+    document.getElementById('cm-team-title').textContent = 'Команда комнаты «' + String(cmMeta.title || cmCurrent).slice(0, 60) + '»';
+    const staffEl = document.getElementById('cm-staff');
+    staffEl.innerHTML = '';
+    const staff = cmMeta.staff || {};
+    const order = Object.keys(staff).filter((u) => VC_ID_RE.test(u) && VC_RANK_LEVEL[staff[u]]).sort((a, b) => vcLvl(staff[b]) - vcLvl(staff[a]));
+    if (!order.length) staffEl.innerHTML = '<div class="admin-empty">В команде никого нет</div>';
+    order.forEach((uid) => {
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      row.innerHTML = `<div class="l-title"><span data-vc-user="${escapeHtml(uid)}">${escapeHtml(uid)}</span></div><div class="l-body">${escapeHtml(VC_RANK_NAMES[staff[uid]])}</div>`;
+      if (my >= 2 && my > vcLvl(staff[uid])) { const w = document.createElement('div'); w.style.marginTop = '7px'; w.appendChild(cmBtn('Снять с должности', () => { if (confirm('Снять с должности?')) return cmRemoveStaff(uid); }, 'btn-live')); row.appendChild(w); }
+      staffEl.appendChild(row);
+    });
+    vcFillNames(staffEl);
+    // кого можно назначать: только звания ниже своего
+    const rankSel = document.getElementById('cm-add-rank');
+    const prev = rankSel.value;
+    rankSel.innerHTML = '';
+    ['subadmin', 'admin', 'miner'].filter((r) => my >= 2 && my > vcLvl(r)).forEach((r) => { const o = document.createElement('option'); o.value = r; o.textContent = VC_RANK_NAMES[r]; rankSel.appendChild(o); });
+    if (prev && rankSel.querySelector(`option[value="${prev}"]`)) rankSel.value = prev;
+    document.getElementById('cm-add-form').style.display = rankSel.options.length ? 'block' : 'none';
+    // ---- журнал комнаты
+    const logEl = document.getElementById('cm-logs');
+    logEl.innerHTML = '';
+    const logs = Object.values(cmLogs).filter((l) => l && typeof l === 'object').sort((a, b) => (b.at || 0) - (a.at || 0));
+    if (!logs.length) logEl.innerHTML = '<div class="admin-empty">Записей пока нет</div>';
+    logs.forEach((l) => {
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      row.innerHTML = `<div class="l-title">${escapeHtml(String(l.action || '').slice(0, 60))}${l.targetName ? ' — ' + escapeHtml(String(l.targetName).slice(0, 40)) : ''}</div>
+        <div class="l-body">${escapeHtml(String(l.actorName || '—').slice(0, 40))} (${escapeHtml(VC_RANK_NAMES[l.actorRank] || 'участник')})${l.details ? '<br>' + escapeHtml(String(l.details).slice(0, 200)) : ''}</div>
+        <div class="l-time">${escapeHtml(vcWhen(l.at))}</div>`;
+      logEl.appendChild(row);
+    });
+  }
+  document.getElementById('cm-add-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('cm-add-btn');
+    const msg = document.getElementById('cm-add-msg');
+    btn.disabled = true;
+    msg.style.display = 'none';
+    try {
+      const key = await vcResolveUser(document.getElementById('cm-add-id').value);
+      await cmAppoint(key, document.getElementById('cm-add-rank').value);
+      document.getElementById('cm-add-id').value = '';
+      msg.textContent = '✅ Назначено.';
+    } catch (err) { msg.textContent = 'Не удалось: ' + (err.message || err); }
+    msg.style.display = 'block';
+    btn.disabled = false;
+  });
+  function cmOpenRoom() { cmStart().catch((err) => console.error('cm start failed:', err)); }
+  function cmOpenTeam() { cmStart().catch((err) => console.error('cm start failed:', err)); }
 
   // ===== "Статистика" — портировано из battle-data-admin-bot. Всё
   // считается на клиенте из once('value') на users/battles/matches/clans/

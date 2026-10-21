@@ -763,7 +763,129 @@ async function handlePairingCode(env, message, code) {
   await say(`✅ Устройство подключено: ${label}.\n\nЕсли это были не вы — отзовите его в админ-панели («Аккаунт» → «Отозвать»).`);
 }
 
+
+// ===== ВидеоЧат: комнаты Telegram-чатов (репозиторий videochat) =====
+// Бота добавляют в группу. Администратор группы пишет /connect — Worker САМ проверяет
+// у Telegram (getChatMember), что это администратор или создатель чата, и кладёт заявку в
+// videochat/communityRequests/<chatId>; владельцу проекта (OWNER_IDS) приходит сообщение со
+// ссылкой на панель, где он подтверждает заявку (там же появляются комната и суб-админ).
+// /call в подключённой группе присылает кнопку входа и код комнаты. Состоит ли человек в чате,
+// страница видеочата спрашивает у Worker'а (/vc-membership): ответ даёт Telegram, а не база.
+const VIDEOCHAT_URL = 'https://botsystemtioxsit.github.io/videochat/';
+const VC_MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
+
+async function chatMemberStatus(env, chatId, userId) {
+  const data = await tgApi(env, 'getChatMember', { chat_id: chatId, user_id: Number(userId) }, 6000);
+  if (!data.ok || !data.result) return null;
+  const r = data.result;
+  if (r.status === 'restricted') return r.is_member ? 'member' : 'left';
+  return r.status;
+}
+
+async function dbReadPublic(path) {
+  const res = await fetch(`${FIREBASE_DB_URL}${path}.json`, { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) throw new Error(`Firebase GET ${res.status}`);
+  return res.json();
+}
+
+// Команда вида «/call» или «/call@ИмяБота»; чужому боту (/call@other_bot) не отвечаем
+async function commandForMe(env, text) {
+  const first = String(text || '').trim().split(/\s+/)[0];
+  const m = /^\/([A-Za-z_]+)(?:@([A-Za-z0-9_]+))?$/.exec(first);
+  if (!m) return null;
+  if (m[2]) {
+    const info = await getBotInfo(env);
+    if (!info || !info.username || info.username.toLowerCase() !== m[2].toLowerCase()) return null;
+  }
+  return m[1].toLowerCase();
+}
+
+async function handleGroupMessage(env, message) {
+  const chat = message.chat;
+  if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup') || typeof message.text !== 'string') return;
+  const cmd = await commandForMe(env, message.text);
+  if (cmd !== 'connect' && cmd !== 'call' && cmd !== 'videochat' && cmd !== 'help') return;
+  const key = String(chat.id);
+  if (!SAFE_ID_RE.test(key)) return;
+  const say = (text, extra) => tgApi(env, 'sendMessage', { chat_id: chat.id, text, ...(extra || {}) });
+  const title = String(chat.title || 'Чат').slice(0, 60);
+
+  if (cmd === 'help') {
+    await say('Видеозвонки для этого чата.\n\n/connect — подключить чат (только администратор чата; заявку подтверждает владелец проекта)\n/call — открыть видеокомнату чата');
+    return;
+  }
+
+  let community = null;
+  try { community = await dbReadPublic(`/videochat/communities/${encodeURIComponent(key)}`); } catch { await say('Не удалось связаться с базой, попробуйте ещё раз.'); return; }
+
+  if (cmd === 'call' || cmd === 'videochat') {
+    if (!community || community.status !== 'active') {
+      await say('Этот чат ещё не подключён к ВидеоЧату. Администратор чата может отправить /connect.');
+      return;
+    }
+    await say(`📹 Видеокомната «${String(community.title || title).slice(0, 60)}»\nКод комнаты: ${String(community.joinCode || '—')}`, {
+      reply_markup: { inline_keyboard: [[{ text: '📹 Войти в комнату', url: `${VIDEOCHAT_URL}?room=${encodeURIComponent(key)}` }]] },
+    });
+    return;
+  }
+
+  // /connect
+  const fromId = String((message.from && message.from.id) || '');
+  if (!/^\d+$/.test(fromId)) return;
+  const status = await chatMemberStatus(env, chat.id, fromId);
+  if (status !== 'creator' && status !== 'administrator') {
+    await say('Подключить чат может только его администратор.');
+    return;
+  }
+  if (community && community.status) {
+    await say('Этот чат уже подключён. Участники могут открыть видеокомнату командой /call.');
+    return;
+  }
+  let existing = null;
+  try { existing = await dbReadPublic(`/videochat/communityRequests/${encodeURIComponent(key)}`); } catch { /* считаем, что заявки нет */ }
+  if (existing && existing.status === 'pending') {
+    await say('Заявка на подключение уже отправлена — ждём подтверждения владельца проекта.');
+    return;
+  }
+  const from = message.from || {};
+  const requestedBy = {
+    id: fromId,
+    name: String([from.first_name, from.last_name].filter(Boolean).join(' ') || 'Без имени').slice(0, 60),
+    username: from.username ? String(from.username).slice(0, 40) : null,
+  };
+  const put = await dbWrite(env, `/videochat/communityRequests/${encodeURIComponent(key)}.json`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId: key, title, requestedBy, at: Date.now(), status: 'pending' }),
+  });
+  if (!put.ok) { await say('Не удалось отправить заявку, попробуйте позже.'); return; }
+  for (const owner of ownerIds(env)) {
+    if (!/^\d+$/.test(owner)) continue;
+    await tgApi(env, 'sendMessage', {
+      chat_id: owner,
+      text: `📹 Заявка на подключение чата к ВидеоЧату\nЧат: «${title}»\nОт: ${requestedBy.name}${requestedBy.username ? ' (@' + requestedBy.username + ')' : ''}\n\nОткрой панель → ВидеоЧат → Сообщества: там можно одобрить или отклонить.`,
+      reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
+    });
+  }
+  await say('✅ Заявка отправлена владельцу проекта. Когда её подтвердят, в этом чате заработает команда /call — она откроет видеокомнату.');
+}
+
+// Страница видеочата перед входом спрашивает, состоит ли человек в Telegram-чате этой комнаты.
+async function checkVideochatMembership(env, body) {
+  const key = String((body && body.communityKey) || '');
+  const userId = String((body && body.userId) || '');
+  if (!SAFE_ID_RE.test(key) || !/^\d+$/.test(userId)) return { ok: false, error: 'Неверный запрос.' };
+  const community = await dbReadPublic(`/videochat/communities/${encodeURIComponent(key)}`);
+  if (!community || community.status !== 'active') return { ok: false, error: 'Комната не найдена или отключена.' };
+  if (ownerIds(env).has(userId)) return { ok: true };
+  const status = await chatMemberStatus(env, community.tgChatId != null ? community.tgChatId : key, userId);
+  if (status === null) return { ok: false, error: 'Не удалось проверить участие в чате — бот должен оставаться в группе.' };
+  if (!VC_MEMBER_STATUSES.has(status)) return { ok: false, error: 'Вы не состоите в этом Telegram-чате.' };
+  return { ok: true };
+}
+
 async function handleBotMessage(env, message) {
+  if (message && message.chat && message.chat.type !== 'private') { await handleGroupMessage(env, message); return; }
   if (!message || !message.chat || message.chat.type !== 'private' || typeof message.text !== 'string') return;
   const chatId = message.chat.id;
   const pairingCode = message.text.trim().toUpperCase();
@@ -781,7 +903,7 @@ async function handleBotMessage(env, message) {
   } else if (command === '/help') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».',
+      text: 'Этот бот — вход в админ-панель проекта БАТТЛ и подтверждение входов.\n\n/admin — открыть панель\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу, администратор пишет там /connect, потом любой участник — /call.',
     });
   } else if (command === '/requests') {
     const fromId = String((message.from && message.from.id) || '');
@@ -1266,6 +1388,20 @@ export default {
         console.error('telegram-webhook:', err && err.message);
       }
       return new Response('ok', { status: 200 });
+    }
+
+    if (url.pathname === '/vc-membership' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ ok: false, error: 'битый JSON' }, 400);
+      }
+      try {
+        return jsonResponse(await checkVideochatMembership(env, body));
+      } catch (err) {
+        return jsonResponse({ ok: false, error: 'Не удалось проверить: ' + String((err && err.message) || err).slice(0, 80) }, 502);
+      }
     }
 
     if (url.pathname === '/login-notify' && request.method === 'POST') {

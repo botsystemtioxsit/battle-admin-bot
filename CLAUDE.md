@@ -132,6 +132,9 @@ Every list (`list-code-index`, `list-code-admin`, `list-db`) is drawn by `render
 ### Versioning
 `#admin-version` in the topbar (a version string + a `title` tooltip summarizing the latest change) is the only version indicator — bump it on every change to this file, the same discipline `index.html` applies to its own `.version-block`.
 
+### Project icons (`brand/`)
+One shared set of icons for the whole ecosystem lives in `brand/` (see `brand/README.md` for the table). Naming is fixed: `<project>-app.png` for installed apps (APK, Electron, Telegram) and `<project>-browser.png` for the web version (same icon + orange globe, so a browser tab is told apart from the app). Projects: `game` (red star), `videochat` (green mic), `panel` (gear on grey), `launcher` (blue download arrow — **no browser variant, never add one**), `blank` (white, for future experimental apps). Use these files for any new favicon/avatar instead of drawing new ones. The files are only 71×71 px, so the working icons (`public/logo.png`, `desktop/icon.*`, `android/.../mipmap-*`) were deliberately not replaced yet — swap them only once the owner provides ≥512×512 (or SVG) versions.
+
 ## Working agreement with the owner
 
 The owner is non-technical and Russian-speaking (often dictates by voice). Standing rules, set by them:

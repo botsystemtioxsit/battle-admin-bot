@@ -931,7 +931,7 @@ const BOT_COMMANDS_PRIVATE = [
   { command: 'apps', description: 'Все проекты экосистемы TIOXSIT' },
   { command: 'video', description: 'Открыть ВидеоЧат' },
   { command: 'game', description: 'Открыть Тролль-Баттл' },
-  { command: 'launcher', description: 'Скачать TIOXSIT Launcher для Windows' },
+  { command: 'launcher', description: 'Скачать Ghost Shell Launcher для Windows' },
   { command: 'admin', description: 'Админ-панель (для команды)' },
   { command: 'requests', description: 'Ожидающие запросы на вход' },
   { command: 'help', description: 'Помощь' },
@@ -942,7 +942,7 @@ const BOT_COMMANDS_GROUP = [
   { command: 'help', description: 'Помощь по ВидеоЧату' },
 ];
 const BOT_SHORT_DESCRIPTION = 'Терминал экосистемы TIOXSIT: Тролль-Баттл, ВидеоЧат, лаунчер. Входы по заявкам, подключение чатов.';
-const BOT_DESCRIPTION = 'Терминал экосистемы TIOXSIT — общий вход во все наши проекты.\n\n🎮 Тролль-Баттл — голосовые баттлы\n📹 ВидеоЧат — видеокомнаты для Telegram-чатов\n🚀 TIOXSIT Launcher — установка и обновление приложений\n\nЗдесь подтверждаются входы в аккаунт и подключаются чаты к ВидеоЧату. Нажмите «Start», чтобы увидеть всё.';
+const BOT_DESCRIPTION = 'Терминал экосистемы TIOXSIT — общий вход во все наши проекты.\n\n🎮 Тролль-Баттл — голосовые баттлы\n📹 ВидеоЧат — видеокомнаты для Telegram-чатов\n🚀 Ghost Shell Launcher — установка и обновление приложений\n\nЗдесь подтверждаются входы в аккаунт и подключаются чаты к ВидеоЧату. Нажмите «Start», чтобы увидеть всё.';
 
 function ecosystemMessage() {
   const text = [
@@ -950,7 +950,7 @@ function ecosystemMessage() {
     '',
     '🎮 Тролль-Баттл — голосовые баттлы с рейтингом, кланами и ивентами (@troll_battle_bot).',
     '📹 ВидеоЧат — видеокомнаты для Telegram-чатов: стабильные звонки, свои админы, мут голосованием участников (@TIOXSITvoice_chat_bot).',
-    '🚀 TIOXSIT Launcher — программа для Windows: ставит и обновляет наши приложения.',
+    '🚀 Ghost Shell Launcher — программа для Windows: ставит и обновляет наши приложения.',
     '🛠 Админ-панель — управление проектом (для команды).',
     '🤖 Терминал (этот бот) — подтверждает входы и подключает Telegram-чаты к ВидеоЧату.',
     '',
@@ -1012,7 +1012,7 @@ async function handleBotMessage(env, message) {
   } else if (command === '/launcher') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: '🚀 TIOXSIT Launcher — программа для Windows: вход в аккаунт, установка, обновление и запуск наших приложений (Тролль-Баттл, ВидеоЧат, админ-панель).',
+      text: '🚀 Ghost Shell Launcher — программа для Windows: вход в аккаунт, установка, обновление и запуск наших приложений (Тролль-Баттл, ВидеоЧат, админ-панель).',
       reply_markup: { inline_keyboard: [[{ text: '🚀 Скачать лаунчер', url: LAUNCHER_URL }]] },
     });
   } else if (command === '/video' || command === '/videochat') {
@@ -1027,13 +1027,13 @@ async function handleBotMessage(env, message) {
   } else if (command === '/admin') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Открой панель БАТТЛ. Команде проекта открываются инструменты управления (по выданным правам); остальные видят своё окно аккаунта: где вы подключены, как работает бот и наши продукты.',
+      text: 'Открой Ghost Shell Terminal. Команде проекта открываются инструменты управления (по выданным правам); остальные видят своё окно аккаунта: где вы подключены, как работает бот и наши продукты.',
       reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
     });
   } else if (command === '/help') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Терминал экосистемы TIOXSIT.\n\n/start — главное меню и все наши проекты\n/apps — все проекты экосистемы\n/video — открыть ВидеоЧат\n/game — открыть Тролль-Баттл\n/launcher — скачать TIOXSIT Launcher\n/admin — админ-панель (для команды)\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре, в ВидеоЧате или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу и сделай его администратором (права не нужны), администратор группы пишет там /connect, потом любой участник — /call.',
+      text: 'Терминал экосистемы TIOXSIT.\n\n/start — главное меню и все наши проекты\n/apps — все проекты экосистемы\n/video — открыть ВидеоЧат\n/game — открыть Тролль-Баттл\n/launcher — скачать Ghost Shell Launcher\n/admin — админ-панель (для команды)\n/requests — ожидающие запросы на вход\n\nКод устройства из приложения (6 символов) просто отправь сюда сообщением — устройство подключится к твоему аккаунту.\n\nКогда кто-то запрашивает вход в твой аккаунт (в игре, в ВидеоЧате или в панели), бот пишет сюда с кнопками «Разрешить» и «Отклонить».\n\nВидеозвонки для Telegram-чатов: добавь бота в группу и сделай его администратором (права не нужны), администратор группы пишет там /connect, потом любой участник — /call.',
     });
   } else if (command === '/requests') {
     const fromId = String((message.from && message.from.id) || '');

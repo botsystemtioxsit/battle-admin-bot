@@ -36,7 +36,7 @@ fi
 ICON_DIR="$HOME/.local/share/icons"
 APPS_DIR="$HOME/.local/share/applications"
 mkdir -p "$ICON_DIR" "$APPS_DIR"
-cp "$DIR/icon.png" "$ICON_DIR/battle-admin.png"
+[ -f "$DIR/icon.png" ] && cp "$DIR/icon.png" "$ICON_DIR/battle-admin.png"
 
 cat > "$APPS_DIR/battle-admin.desktop" <<EOF
 [Desktop Entry]

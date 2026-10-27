@@ -53,7 +53,6 @@ function createWindow() {
     minWidth: 720,
     minHeight: 560,
     title: windowTitle(),
-    icon: path.join(__dirname, 'icon.png'), // значок окна/панели задач — тот же файл, что и у ярлыка меню приложений (см. install-launcher.sh) и у собранного AppImage/.deb (package.json → build.*.icon)
     autoHideMenuBar: true, // строка меню (File/Edit/...) панели не нужна — тут её просто прячем, а не убираем совсем, Alt всё ещё её покажет при необходимости
     backgroundColor: '#0b0b0f', // совпадает с тёмным фоном панели — без этого при загрузке на миг мелькает белый экран
     webPreferences: {

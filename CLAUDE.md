@@ -139,3 +139,6 @@ The owner is non-technical and Russian-speaking (often dictates by voice). Stand
 - **Your own ideas: ask first.** Anything the owner did not ask for (extra features, clean-ups, deleting things) is proposed as a short yes/no question before doing it. Creativity is welcome.
 - **Say what limits you**, plainly (e.g. cannot see the phone or PC, cannot set GitHub/Cloudflare secrets or BotFather settings, the sandbox's safety layer blocks some actions such as installing third-party skills into the agent's own config).
 - **Write short and plain.** Lead with what happened or what to do; no jargon; one check at a time; skip long explanations — the owner loses the thread in walls of text.
+
+## Главное правило владельца (действует всегда, важнее остальных пунктов выше)
+Владелец сказал раз и навсегда: **не спрашивать разрешения — делать**. Это относится и к своим идеям, и к правкам, и к публикации. Вопрос — только если без ответа физически нельзя продолжить (например, нужен секрет или выбор, который знает только владелец). Не переспрашивать «делать ли?», не просить подтверждений на очевидные шаги.

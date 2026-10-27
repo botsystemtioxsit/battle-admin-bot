@@ -41,9 +41,9 @@ function detectLinuxBuildKind() {
 }
 
 function windowTitle() {
-  if (!app.isPackaged) return 'БАТТЛ · Админ (dev)';
+  if (!app.isPackaged) return 'Ghost Shell Terminal (dev)';
   const kind = detectLinuxBuildKind();
-  return kind ? `БАТТЛ · Админ (${kind})` : 'БАТТЛ · Админ';
+  return kind ? `Ghost Shell Terminal (${kind})` : 'Ghost Shell Terminal';
 }
 
 function createWindow() {

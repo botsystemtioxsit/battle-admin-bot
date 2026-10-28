@@ -365,10 +365,24 @@ async function dbWrite(env, path, init) {
   return res;
 }
 
+// Чтение базы с токеном сервисного аккаунта (правила не действуют). Нужно для разделов, которые правилами
+// закрыты от чтения списком (accessTokens, emailLogins, usernames, devicePairings, owners, …): их видит
+// только Супердоступ через панель — см. маршрут /admin-read.
+async function dbReadAdmin(env, path, shallow) {
+  const suffix = shallow ? '&shallow=true' : '';
+  let res = await fetch((await dbWriteUrl(env, path)) + suffix);
+  if (res.status === 401 || res.status === 403) {
+    resetAdminTokenCache();
+    res = await fetch((await dbWriteUrl(env, path)) + suffix);
+  }
+  return res;
+}
+
 // Идентификатор, который подставляется в путь к базе (id пользователя, боя).
 // С токеном сервисного аккаунта правила не действуют, поэтому путь не должен
 // строиться из непроверенного текста: ни слэшей, ни точек, ни спецсимволов.
 const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const ADMIN_READ_SEGMENT_RE = /^[A-Za-z0-9_,@~-]{1,200}$/; // ключи базы (в email-ключах точка заменена на запятую)
 
 async function grantRole(env, requesterId, targetUserId, newRole) {
   const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
@@ -1620,6 +1634,40 @@ export default {
       }
 
       return jsonResponse({ ok: true });
+    }
+
+    // Чтение любого места базы — только Супердоступ (владелец). Нужен панели, чтобы показывать то, что правила
+    // базы не отдают списком: токены доступа, привязки почт, коды подключения, корень базы.
+    if (url.pathname === '/admin-read' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      }
+
+      const requesterRole = await getRole(verified.userId);
+      if (!isSuperadmin(env, verified.userId, requesterRole)) {
+        return jsonResponse({ error: 'Читать базу целиком может только superadmin' }, 403);
+      }
+
+      const segments = String(body.path ?? '').split('/').filter((s) => s !== '');
+      if (segments.length > 8 || !segments.every((s) => ADMIN_READ_SEGMENT_RE.test(s))) {
+        return jsonResponse({ error: 'недопустимый путь' }, 400);
+      }
+
+      try {
+        const res = await dbReadAdmin(env, '/' + segments.map(encodeURIComponent).join('/') + '.json', body.shallow === true);
+        if (!res.ok) return jsonResponse({ error: 'Firebase отказал: HTTP ' + res.status }, 502);
+        return jsonResponse({ data: await res.json() });
+      } catch (err) {
+        return jsonResponse({ error: 'Firebase недоступен: ' + err.message }, 502);
+      }
     }
 
     if (url.pathname === '/backup-now' && request.method === 'POST') {

@@ -120,6 +120,9 @@ invocation" ещё до того, как вообще пытался собра�
 (`.github/…`, `public/…` и т. п.), отклоняется целиком (400) — тем же
 списком допустимых путей, что у `/delete-backup` и `/download-backup`.
 
+### Gateway Plus: `POST /gateway-block`
+`{ initData | telegramId+deviceId, id?, dev?, blocked, reason?, alsoDevice? }` — блокировка и разблокировка аккаунта плагина Gateway Plus (`id` — 24 знака 0-9a-f, номер аккаунта) и/или компьютера (`dev` — 32 знака 0-9a-f). **Только superadmin** (`isSuperadmin`). Пишет `gatewayBlocks/<id>` и `gatewayBlockedDevices/<dev>` токеном сервисного аккаунта: правила базы клиентам эти узлы писать не дают, а плагин читает их по точному ключу. `alsoDevice` (по умолчанию да) — заодно блокирует компьютер, записанный в `gatewayAccounts/<id>/dev`; при разблокировке аккаунта компьютер снимается, если он заблокирован не из-за другого аккаунта. Ответ: `{ ok, accountBlocked, deviceBlocked, dev }`. Список аккаунтов панель читает через `/admin-read`. Проверка без сети: `node cloudflare-worker/role-gateway/test/gateway-block.test.mjs`.
+
 ## Бот: заявки на вход, кнопки «Разрешить/Отклонить», команды
 
 Когда игра или панель кладёт заявку в `users/<id>/loginRequests` (поля

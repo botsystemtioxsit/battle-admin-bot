@@ -384,6 +384,54 @@ async function dbReadAdmin(env, path, shallow) {
 const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const ADMIN_READ_SEGMENT_RE = /^[A-Za-z0-9_,@~-]{1,200}$/; // ключи базы (в email-ключах точка заменена на запятую)
 
+// Gateway Plus (плагин «личный VPN» в Ghost Shell Launcher): аккаунты шлюза и их блокировка. Номер аккаунта — 24 знака 0-9a-f
+// (первые 12 байт sha256 от ключа человека), номер компьютера — 32 знака 0-9a-f. Блокировки пишет ТОЛЬКО Worker (правила базы не
+// пускают клиента писать gatewayBlocks/gatewayBlockedDevices); плагин читает их по точному ключу.
+const GATEWAY_ID_RE = /^[0-9a-f]{24}$/;
+const GATEWAY_DEV_RE = /^[0-9a-f]{32}$/;
+function cleanGatewayReason(v) {
+  // одна строка без управляющих и «перевёрнутых» (RTL) знаков, до 200 знаков
+  return String(v ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+async function gatewayPut(env, path, value) {
+  const res = await dbWrite(env, path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
+  if (!res.ok) throw new Error(`Firebase PUT ${res.status}: ${await res.text()}`);
+}
+async function gatewayDelete(env, path) {
+  const res = await dbWrite(env, path, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Firebase DELETE ${res.status}: ${await res.text()}`);
+}
+// Блокировка или разблокировка. По номеру аккаунта: запись gatewayBlocks/<id> и (если просили) его компьютера из gatewayAccounts/<id>/dev;
+// только по номеру компьютера: одна запись gatewayBlockedDevices/<dev> (так разблокируют компьютер без аккаунта).
+async function gatewaySetBlock(env, { id, dev, blocked, reason, alsoDevice, by }) {
+  const out = { accountBlocked: false, deviceBlocked: false, dev: null };
+  let device = dev || null;
+  if (id && !device && (blocked ? alsoDevice : true)) {
+    const res = await dbReadAdmin(env, `/gatewayAccounts/${id}/dev.json`, false);
+    if (res.ok) {
+      const v = await res.json();
+      if (typeof v === 'string' && GATEWAY_DEV_RE.test(v)) device = v;
+    }
+  }
+  const at = Date.now();
+  if (blocked) {
+    if (id) { await gatewayPut(env, `/gatewayBlocks/${id}.json`, { at, reason, by }); out.accountBlocked = true; }
+    if (device && (dev || alsoDevice)) {
+      await gatewayPut(env, `/gatewayBlockedDevices/${device}.json`, id ? { at, reason, by, account: id } : { at, reason, by });
+      out.deviceBlocked = true; out.dev = device;
+    }
+  } else {
+    if (id) await gatewayDelete(env, `/gatewayBlocks/${id}.json`);
+    if (device) {
+      // компьютер, заблокированный из-за другого аккаунта, чужим разблокированием не трогаем
+      const res = await dbReadAdmin(env, `/gatewayBlockedDevices/${device}/account.json`, false);
+      const owner = res.ok ? await res.json() : null;
+      if (dev || !owner || owner === id) { await gatewayDelete(env, `/gatewayBlockedDevices/${device}.json`); out.dev = device; }
+    }
+  }
+  return out;
+}
+
 async function grantRole(env, requesterId, targetUserId, newRole) {
   const patchRes = await dbWrite(env, `/users/${encodeURIComponent(targetUserId)}.json`, {
     method: 'PATCH',
@@ -1634,6 +1682,44 @@ export default {
       }
 
       return jsonResponse({ ok: true });
+    }
+
+    // Gateway Plus: блокировка и разблокировка аккаунта шлюза (и его компьютера) — только Супердоступ. Плагин проверяет эти записи
+    // перед включением шлюза и мастером «Создать свой VPN»; отключить уже работающий шлюз и «Вернуть как было» блокировка не мешает.
+    if (url.pathname === '/gateway-block' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+      const id = body && body.id != null ? String(body.id) : '';
+      const dev = body && body.dev != null ? String(body.dev) : '';
+      if ((!id && !dev) || (id && !GATEWAY_ID_RE.test(id)) || (dev && !GATEWAY_DEV_RE.test(dev))) {
+        return jsonResponse({ error: 'нужен id (24 знака 0-9a-f) и/или dev (32 знака 0-9a-f)' }, 400);
+      }
+      if (typeof body.blocked !== 'boolean') {
+        return jsonResponse({ error: 'blocked должен быть true или false' }, 400);
+      }
+
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) {
+        return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      }
+      const requesterRole = await getRole(verified.userId);
+      if (!isSuperadmin(env, verified.userId, requesterRole)) {
+        return jsonResponse({ error: 'Блокировать аккаунты шлюза может только superadmin' }, 403);
+      }
+
+      try {
+        const out = await gatewaySetBlock(env, {
+          id, dev, blocked: body.blocked, reason: cleanGatewayReason(body.reason),
+          alsoDevice: body.alsoDevice !== false, by: String(verified.userId),
+        });
+        return jsonResponse({ ok: true, ...out });
+      } catch (err) {
+        return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
     }
 
     // Чтение любого места базы — только Супердоступ (владелец). Нужен панели, чтобы показывать то, что правила

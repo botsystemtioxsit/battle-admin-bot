@@ -81,7 +81,8 @@ async function signAssertion(sa, nowSec) {
   return `${signingInput}.${bytesToBase64Url(new Uint8Array(signature))}`;
 }
 
-let cached = null; // { email, token, expiresAt }
+// Токены по аккаунтам: у Worker'а два ключа (основная база и отдельная база Gateway Plus), кэш — на каждый свой.
+const cachedByAccount = new Map(); // email -> { token, expiresAt }
 
 // Возвращает действующий access_token для REST-запросов к базе
 // (`?access_token=...`). fetchImpl/now — для тестов.
@@ -94,8 +95,8 @@ let cached = null; // { email, token, expiresAt }
 export async function getAdminAccessToken(rawServiceAccount, { fetchImpl = fetch, now = Date.now } = {}) {
   const sa = parseServiceAccount(rawServiceAccount);
   const nowMs = now();
-  const sameAccount = cached && cached.email === sa.client_email;
-  if (sameAccount && cached.expiresAt - nowMs > REFRESH_MARGIN_MS) return cached.token;
+  const cached = cachedByAccount.get(sa.client_email);
+  if (cached && cached.expiresAt - nowMs > REFRESH_MARGIN_MS) return cached.token;
 
   try {
     const assertion = await signAssertion(sa, Math.floor(nowMs / 1000));
@@ -110,16 +111,16 @@ export async function getAdminAccessToken(rawServiceAccount, { fetchImpl = fetch
     }
     const data = await res.json();
     if (!data || typeof data.access_token !== 'string') throw new Error('Google OAuth: в ответе нет access_token');
-    cached = { email: sa.client_email, token: data.access_token, expiresAt: nowMs + (Number(data.expires_in) || 3600) * 1000 };
+    cachedByAccount.set(sa.client_email, { token: data.access_token, expiresAt: nowMs + (Number(data.expires_in) || 3600) * 1000 });
     return data.access_token;
   } catch (err) {
     // обновление не удалось, а прежний токен ещё действует (мы обновляем
     // заранее, за 5 минут) — не роняем все записи из-за сбоя Google
-    if (sameAccount && cached.expiresAt > nowMs) return cached.token;
+    if (cached && cached.expiresAt > nowMs) return cached.token;
     throw err;
   }
 }
 
 export function resetAdminTokenCache() {
-  cached = null;
+  cachedByAccount.clear();
 }

@@ -7,6 +7,10 @@ compatibility_date = "2024-11-01"
 # Worker" в репозитории index.html), см. README.md рядом.
 
 [vars]
+# Отдельная база Firebase для Gateway Plus (проект vpn0dns, регион europe-west1). Это НЕ секрет. Ключ её сервисного аккаунта —
+# секрет GATEWAY_FIREBASE_SERVICE_ACCOUNT (задаётся отдельно); пока его нет, Gateway Plus работает с основной базой.
+GATEWAY_DB_URL = "https://vpn0dns-default-rtdb.europe-west1.firebasedatabase.app"
+
 # Telegram-id тех, кого Worker считает superadmin: выдача ролей admin/superadmin,
 # полная перезапись базы (/restore-database), бэкапы и восстановление кода
 # (GITHUB_TOKEN). Это НЕ секрет (id виден всем в базе, а подлинность проверяет

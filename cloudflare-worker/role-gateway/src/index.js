@@ -348,7 +348,20 @@ async function getUserByPlayerId(playerId) {
 // возвращается к схеме с утечкой.
 
 // URL записи в базу; `path` — от корня, с `.json` (например '/users/1.json').
+// Узлы Gateway Plus (gatewayAccounts, gatewayBlocks, gatewayBlockedDevices) живут в ОТДЕЛЬНОМ проекте Firebase со строгими правилами
+// (адрес — переменная GATEWAY_DB_URL в wrangler.toml, ключ его сервисного аккаунта — секрет GATEWAY_FIREBASE_SERVICE_ACCOUNT).
+// Пока секрета нет, Worker работает со старыми узлами в основной базе, как раньше.
+const GATEWAY_PATH_RE = /^\/gateway(Accounts|Blocks|BlockedDevices)(\/|\.json)/;
+function gatewayDbBase(env) {
+  const url = typeof env.GATEWAY_DB_URL === 'string' ? env.GATEWAY_DB_URL.trim().replace(/\/+$/, '') : '';
+  return /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(url) && env.GATEWAY_FIREBASE_SERVICE_ACCOUNT ? url : null;
+}
 async function dbWriteUrl(env, path) {
+  const gw = GATEWAY_PATH_RE.test(path) ? gatewayDbBase(env) : null;
+  if (gw) {
+    const gToken = await getAdminAccessToken(env.GATEWAY_FIREBASE_SERVICE_ACCOUNT);
+    return `${gw}${path}?access_token=${encodeURIComponent(gToken)}`;
+  }
   const token = await getAdminAccessToken(env.FIREBASE_SERVICE_ACCOUNT);
   return `${FIREBASE_DB_URL}${path}?access_token=${encodeURIComponent(token)}`;
 }

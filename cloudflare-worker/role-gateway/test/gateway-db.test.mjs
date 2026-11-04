@@ -121,5 +121,18 @@ t('ни одна проверка не изменила users/', JSON.stringify(
 t('ни один запрос не ушёл не в ту базу (gateway* — только в новую, остальное — только в основную)', badHost.length === 0, badHost);
 t('в новой базе нет чужих узлов', Object.keys(gdb).every((k) => k.startsWith('gateway')), Object.keys(gdb));
 
+// --- /health показывает, работает ли отдельная база ---
+{
+  const hres = await worker.fetch(new Request('https://gw.test/health'), env);
+  const h = await hres.json();
+  t('/health: отдельная база настроена и ключ принят', h.gatewayDb?.separate === true && h.gatewayDb?.ok === true, h.gatewayDb);
+  const { GATEWAY_FIREBASE_SERVICE_ACCOUNT, ...envNoKey } = env;
+  const h2 = await (await worker.fetch(new Request('https://gw.test/health'), envNoKey)).json();
+  t('/health: без секрета отдельной базы — separate:false (молча остаётся старая)', h2.gatewayDb?.separate === false && h2.gatewayDb?.ok === null, h2.gatewayDb);
+  const h3 = await (await worker.fetch(new Request('https://gw.test/health'), { ...env, GATEWAY_FIREBASE_SERVICE_ACCOUNT: JSON.stringify({ client_email: 'gw@test.iam.gserviceaccount.com', private_key: 'not-a-key' }) })).json();
+  t('/health: плохой ключ — ok:false, а не падение', h3.gatewayDb?.separate === true && h3.gatewayDb?.ok === false, h3.gatewayDb);
+  t('/health не пишет в базы', writes.length === 0, writes);
+}
+
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

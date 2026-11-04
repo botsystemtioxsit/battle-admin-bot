@@ -1427,7 +1427,17 @@ export default {
       // ours: true — этот Worker; host — куда указывает чужой вебхук
       const telegramWebhook = botTokenConfigured && bot.valid ? await getWebhookSummary(env, url.origin) : null;
       if (botTokenConfigured && bot.valid) { try { await ensureBotProfile(env); } catch (err) { console.error('ensureBotProfile:', err && err.message); } } // после выкладки команды бота появляются сразу
-      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null, botError: bot.error || null, telegramWebhook });
+      // Gateway Plus: отдельная база (проект vpn0dns). separate — Worker знает её адрес и ключ; ok — ключ принят (чтение закрытого узла
+      // токеном сервисного аккаунта удалось), null — не проверялось. Без этого по /health не отличить «пишет в новую базу» от
+      // «секрета нет, молча остаётся старая» — панель и плагин при этом смотрели бы в разные базы.
+      const gatewayDb = { separate: gatewayDbBase(env) !== null, ok: null };
+      if (gatewayDb.separate) {
+        try {
+          const gr = await fetch((await dbWriteUrl(env, '/gatewayBlocks.json')) + '&shallow=true', { signal: AbortSignal.timeout(6000) });
+          gatewayDb.ok = gr.ok;
+        } catch { gatewayDb.ok = false; }
+      }
+      return jsonResponse({ botTokenConfigured, firebaseAdminConfigured, botTokenValid: bot.valid, botUsername: bot.username || null, botId: bot.id || null, botError: bot.error || null, telegramWebhook, gatewayDb });
     }
 
     const needsGithubToken = ['/backup-now', '/restore-code', '/list-backups', '/download-backup', '/delete-backup', '/delete-backups'].includes(url.pathname);

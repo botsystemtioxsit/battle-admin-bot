@@ -19,6 +19,7 @@
 // Bot API, "Validating data received via the Mini App").
 
 import { getAdminAccessToken, resetAdminTokenCache } from './firebase-admin.mjs';
+import { createChatAdmin, chatKeyOf, userKeyOf, cleanText as chatCleanText, CFG_KEYS } from './chat-admin.mjs';
 
 const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const GITHUB_OWNER = 'botsystemtioxsit';
@@ -618,6 +619,9 @@ async function restoreDatabase(env, snapshot) {
 // не срабатывало. Теперь получатель — сам Worker (см. ensureTelegramWebhook).
 
 const TELEGRAM_WEBHOOK_PATH = '/telegram-webhook';
+// chat_member / my_chat_member нужны админ-боту чатов (кто и как зашёл, бот добавлен/сделан админом); Telegram присылает их, только
+// если бот — администратор группы И эти виды перечислены здесь.
+const TELEGRAM_ALLOWED_UPDATES = ['message', 'callback_query', 'chat_member', 'my_chat_member'];
 // Кнопка «Открыть админ-панель» в /start и /admin (тот же адрес, что и в
 // telegram-serverless/handlers/message.js)
 const ADMIN_PANEL_URL = 'https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html';
@@ -695,13 +699,13 @@ function constantTimeEqual(a, b) {
 // setWebhook идемпотентен, так что повторный вызов безвреден; в пределах одного
 // экземпляра Worker'а он делается не чаще раза в 30 минут.
 let webhookEnsured = { key: null, at: 0 };
-async function ensureTelegramWebhook(env, origin) {
-  const key = origin + '|' + env.BOT_TOKEN;
-  if (webhookEnsured.key === key && Date.now() - webhookEnsured.at < 30 * 60 * 1000) return true;
+async function ensureTelegramWebhook(env, origin, force = false) {
+  const key = origin + '|' + env.BOT_TOKEN + '|' + TELEGRAM_ALLOWED_UPDATES.join(',');
+  if (!force && webhookEnsured.key === key && Date.now() - webhookEnsured.at < 30 * 60 * 1000) return true;
   const data = await tgApi(env, 'setWebhook', {
     url: origin + TELEGRAM_WEBHOOK_PATH,
     secret_token: await telegramWebhookSecret(env),
-    allowed_updates: ['message', 'callback_query'],
+    allowed_updates: TELEGRAM_ALLOWED_UPDATES,
     max_connections: 10,
   }, 5000);
   if (!data.ok) {
@@ -724,6 +728,7 @@ async function getWebhookSummary(env, origin) {
     ours: info.url === origin + TELEGRAM_WEBHOOK_PATH,
     host,
     pending: info.pending_update_count || 0,
+    chatMemberUpdates: Array.isArray(info.allowed_updates) ? info.allowed_updates.includes('chat_member') : null,
     lastError: info.last_error_message ? String(info.last_error_message).slice(0, 120) : null,
   };
 }
@@ -1012,9 +1017,27 @@ const BOT_COMMANDS_PRIVATE = [
   { command: 'help', description: 'Помощь' },
 ];
 const BOT_COMMANDS_GROUP = [
+  { command: 'rules', description: 'Правила чата' },
   { command: 'connect', description: 'Подключить чат к ВидеоЧату (администратор чата)' },
   { command: 'call', description: 'Открыть видеокомнату этого чата' },
-  { command: 'help', description: 'Помощь по ВидеоЧату' },
+  { command: 'help', description: 'Помощь' },
+];
+// Для администраторов чата — полный список (у «all_chat_administrators» свой набор: он не складывается с общим)
+const BOT_COMMANDS_GROUP_ADMIN = [
+  { command: 'stats', description: 'Статистика чата' },
+  { command: 'top', description: 'Самые активные' },
+  { command: 'joins', description: 'Кто и как заходил в чат' },
+  { command: 'ban', description: 'Заблокировать (ответом на сообщение)' },
+  { command: 'unban', description: 'Разблокировать' },
+  { command: 'kick', description: 'Удалить из чата (может вернуться)' },
+  { command: 'mute', description: 'Запретить писать: /mute 30, 2h, 1d' },
+  { command: 'unmute', description: 'Снова разрешить писать' },
+  { command: 'warn', description: 'Предупреждение (3 — мут на сутки)' },
+  { command: 'unwarn', description: 'Снять предупреждение' },
+  { command: 'del', description: 'Удалить сообщение (ответом)' },
+  { command: 'pin', description: 'Закрепить сообщение (ответом)' },
+  { command: 'settings', description: 'Настройки админ-бота' },
+  ...BOT_COMMANDS_GROUP,
 ];
 const BOT_SHORT_DESCRIPTION = 'Терминал экосистемы TIOXSIT: Тролль-Баттл, ВидеоЧат, лаунчер. Входы по заявкам, подключение чатов.';
 const BOT_DESCRIPTION = 'Терминал экосистемы TIOXSIT — общий вход во все наши проекты.\n\n🎮 Тролль-Баттл — голосовые баттлы\n📹 ВидеоЧат — видеокомнаты для Telegram-чатов\n🚀 Ghost Shell Launcher — установка и обновление приложений\n\nЗдесь подтверждаются входы в аккаунт и подключаются чаты к ВидеоЧату. Нажмите «Start», чтобы увидеть всё.';
@@ -1054,6 +1077,7 @@ async function ensureBotProfile(env) {
     ['setMyCommands', { commands: BOT_COMMANDS_PRIVATE, scope: { type: 'default' } }],
     ['setMyCommands', { commands: BOT_COMMANDS_PRIVATE, scope: { type: 'all_private_chats' } }],
     ['setMyCommands', { commands: BOT_COMMANDS_GROUP, scope: { type: 'all_group_chats' } }],
+    ['setMyCommands', { commands: BOT_COMMANDS_GROUP_ADMIN, scope: { type: 'all_chat_administrators' } }],
     ['setMyShortDescription', { short_description: BOT_SHORT_DESCRIPTION }],
     ['setMyDescription', { description: BOT_DESCRIPTION }],
     ['setChatMenuButton', { menu_button: { type: 'commands' } }],
@@ -1125,8 +1149,42 @@ async function handleBotMessage(env, message) {
   }
 }
 
-async function handleTelegramUpdate(env, update) {
-  if (update && update.callback_query) {
+// Админ-бот чатов (src/chat-admin.mjs): один экземпляр на экземпляр Worker'а — его кэши живут между запросами.
+// Все пути в базе строятся из проверенных id (цифры, 'YYYY-MM-DD', hex) и всё равно проходят проверку здесь.
+const CHAT_DB_PATH_RE = /^chatAdmin(\/[A-Za-z0-9_-]{1,64}){0,8}$/;
+let chatAdminHolder = { key: null, inst: null };
+async function getChatAdmin(env, origin) {
+  const info = await getBotInfo(env);
+  const key = String(env.BOT_TOKEN);
+  if (chatAdminHolder.key === key && chatAdminHolder.inst && chatAdminHolder.botId === (info && info.id)) return chatAdminHolder.inst;
+  const inst = createChatAdmin({
+    tg: (method, payload) => tgApi(env, method, payload),
+    dbGet: async (path, o) => {
+      if (!CHAT_DB_PATH_RE.test(path)) throw new Error('недопустимый путь');
+      const res = await dbReadAdmin(env, '/' + path + '.json', !!(o && o.shallow));
+      if (!res.ok) throw new Error('Firebase GET ' + res.status);
+      return res.json();
+    },
+    dbUpdate: async (updates) => {
+      for (const p of Object.keys(updates)) if (!CHAT_DB_PATH_RE.test(p)) throw new Error('недопустимый путь записи');
+      const res = await dbWrite(env, '/.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
+      if (!res.ok) throw new Error('Firebase PATCH ' + res.status);
+    },
+    owners: ownerIds(env),
+    botId: info && info.id ? String(info.id) : null,
+    botUsername: info && info.username ? info.username : null,
+    onEnabled: origin ? () => ensureTelegramWebhook(env, origin) : null,
+  });
+  if (info && info.id) chatAdminHolder = { key, inst, botId: info.id };
+  return inst;
+}
+
+async function handleTelegramUpdate(env, update, origin) {
+  if (update && update.chat_member) {
+    try { await (await getChatAdmin(env, origin)).onChatMember(update); } catch (err) { console.error('chat_member:', err && err.message); }
+  } else if (update && update.my_chat_member) {
+    try { await (await getChatAdmin(env, origin)).onMyChatMember(update); } catch (err) { console.error('my_chat_member:', err && err.message); }
+  } else if (update && update.callback_query) {
     try {
       await handleLoginCallback(env, update.callback_query);
     } catch (err) {
@@ -1136,7 +1194,13 @@ async function handleTelegramUpdate(env, update) {
       await tgApi(env, 'answerCallbackQuery', { callback_query_id: update.callback_query.id, text: 'Что-то пошло не так, попробуй ещё раз.' });
     }
   } else if (update && update.message) {
-    await handleBotMessage(env, update.message);
+    let consumed = false;
+    const t = update.message.chat && update.message.chat.type;
+    if (t === 'group' || t === 'supergroup') {
+      // сначала админ-бот чатов (модерация, статистика); он сам решает, чей это чат, и возвращает true, если сообщение обработано
+      try { consumed = await (await getChatAdmin(env, origin)).onMessage(update.message); } catch (err) { console.error('chat-admin message:', err && err.message); }
+    }
+    if (!consumed) await handleBotMessage(env, update.message);
   }
   // профиль бота (команды, описание) обновляем уже после ответа человеку
   try { await ensureBotProfile(env); } catch (err) { console.error('ensureBotProfile:', err && err.message); }
@@ -1426,6 +1490,7 @@ export default {
       // кто получает обновления бота (кнопки «Разрешить/Отклонить», команды):
       // ours: true — этот Worker; host — куда указывает чужой вебхук
       const telegramWebhook = botTokenConfigured && bot.valid ? await getWebhookSummary(env, url.origin) : null;
+      if (telegramWebhook && telegramWebhook.ours && telegramWebhook.chatMemberUpdates === false) { telegramWebhook.reapplied = await ensureTelegramWebhook(env, url.origin, true); }
       if (botTokenConfigured && bot.valid) { try { await ensureBotProfile(env); } catch (err) { console.error('ensureBotProfile:', err && err.message); } } // после выкладки команды бота появляются сразу
       // Gateway Plus: отдельная база (проект vpn0dns). separate — Worker знает её адрес и ключ; ok — ключ принят (чтение закрытого узла
       // токеном сервисного аккаунта удалось), null — не проверялось. Без этого по /health не отличить «пишет в новую базу» от
@@ -1601,7 +1666,7 @@ export default {
       }
       if (Number(request.headers.get('Content-Length') || 0) > 64 * 1024) return new Response('too large', { status: 413 });
       try {
-        await handleTelegramUpdate(env, await request.json());
+        await handleTelegramUpdate(env, await request.json(), url.origin);
       } catch (err) {
         console.error('telegram-webhook:', err && err.message);
       }
@@ -1776,6 +1841,71 @@ export default {
         return jsonResponse({ data: await res.json() });
       } catch (err) {
         return jsonResponse({ error: 'Firebase недоступен: ' + err.message }, 502);
+      }
+    }
+
+    // Админ-бот чатов, действия из панели (только Супердоступ): состояние, включить/выключить чат, настройки, модерация.
+    // Читает панель сама, через /admin-read (узел chatAdmin закрыт правилами базы). Здесь — то, что требует токена бота и записи.
+    if (url.pathname === '/chat-admin' && request.method === 'POST') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return jsonResponse({ error: 'битый JSON' }, 400);
+      }
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      const requesterRole = await getRole(verified.userId);
+      if (!isSuperadmin(env, verified.userId, requesterRole)) return jsonResponse({ error: 'Только superadmin' }, 403);
+
+      const action = String(body.action || '');
+      const ca = await getChatAdmin(env, url.origin);
+      const chatKey = body.chatId === undefined ? null : chatKeyOf(body.chatId);
+      try {
+        if (action === 'status') {
+          const webhook = await getWebhookSummary(env, url.origin);
+          const out = { ok: true, webhook, botId: (await getBotInfo(env)).id || null };
+          if (webhook && webhook.ours && webhook.chatMemberUpdates === false) { out.reapplied = await ensureTelegramWebhook(env, url.origin, true); }
+          if (chatKey) {
+            const me = await tgApi(env, 'getChatMember', { chat_id: Number(chatKey), user_id: Number(out.botId) });
+            const cnt = await tgApi(env, 'getChatMemberCount', { chat_id: Number(chatKey) });
+            const m = me.ok ? me.result : null;
+            out.chat = { botStatus: m ? m.status : null, error: me.ok ? null : String(me.description || '').slice(0, 100), memberCount: cnt.ok ? cnt.result : null,
+              canRestrict: !!(m && m.can_restrict_members), canDelete: !!(m && m.can_delete_messages), canInvite: !!(m && m.can_invite_users), canPin: !!(m && m.can_pin_messages) };
+          }
+          return jsonResponse(out);
+        }
+        if (!chatKey) return jsonResponse({ error: 'нужен chatId' }, 400);
+        if (action === 'enable') {
+          const info = await tgApi(env, 'getChat', { chat_id: Number(chatKey) });
+          if (!info.ok) return jsonResponse({ ok: false, text: 'Бот не видит этот чат: ' + String(info.description || '').slice(0, 100) });
+          const botAdmin = await ca.enable({ id: Number(chatKey), title: info.result.title, type: info.result.type }, { id: verified.userId });
+          await ensureTelegramWebhook(env, url.origin);
+          return jsonResponse({ ok: true, botAdmin });
+        }
+        if (action === 'disable') {
+          const res = await dbWrite(env, '/.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [`chatAdmin/${chatKey}/meta/enabled`]: false }) });
+          ca.invalidate(chatKey);
+          return res.ok ? jsonResponse({ ok: true }) : jsonResponse({ error: 'Firebase отказал: HTTP ' + res.status }, 502);
+        }
+        if (action === 'set') {
+          const key = String(body.key || '');
+          if (!Object.prototype.hasOwnProperty.call(CFG_KEYS, key)) return jsonResponse({ error: 'такой настройки нет' }, 400);
+          const r = await ca.applySetting(chatKey, null, key, String(body.value ?? ''));
+          return jsonResponse(r);
+        }
+        if (action === 'mod') {
+          const uid = userKeyOf(body.userId);
+          if (!uid) return jsonResponse({ error: 'нужен userId (цифры)' }, 400);
+          const mod = String(body.mod || '');
+          if (!['ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn'].includes(mod)) return jsonResponse({ error: 'неизвестное действие' }, 400);
+          const minutes = Math.min(Math.max(Math.floor(Number(body.minutes) || 60), 1), 527040);
+          const r = await ca.act(Number(chatKey), mod, { id: uid, name: chatCleanText(body.name, 60) || uid }, { seconds: minutes * 60, reason: chatCleanText(body.reason, 200) }, { id: verified.userId, name: 'панель' });
+          return jsonResponse(r);
+        }
+        return jsonResponse({ error: 'неизвестное действие' }, 400);
+      } catch (err) {
+        return jsonResponse({ error: 'Не вышло: ' + String((err && err.message) || err).slice(0, 120) }, 502);
       }
     }
 

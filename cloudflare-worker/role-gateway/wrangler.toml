@@ -6,6 +6,11 @@ compatibility_date = "2024-11-01"
 # задаются отдельно (`wrangler secret put` либо workflow "Deploy role-gateway
 # Worker" в репозитории index.html), см. README.md рядом.
 
+# Раз в минуту: бот выгоняет новичков чата, не нажавших «Я не бот» вовремя (src/chat-admin.mjs). Без этого выгоняет только тогда,
+# когда в чате что-то происходит.
+[triggers]
+crons = ["* * * * *"]
+
 [vars]
 # Отдельная база Firebase для Gateway Plus (проект vpn0dns, регион europe-west1). Это НЕ секрет. Ключ её сервисного аккаунта —
 # секрет GATEWAY_FIREBASE_SERVICE_ACCOUNT (задаётся отдельно); пока его нет, Gateway Plus работает с основной базой.

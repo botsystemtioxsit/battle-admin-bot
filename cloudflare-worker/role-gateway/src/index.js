@@ -1198,6 +1198,12 @@ async function handleTelegramUpdate(env, update, origin) {
     try { await (await getChatAdmin(env, origin)).onChatMember(update); } catch (err) { console.error('chat_member:', err && err.message); }
   } else if (update && update.my_chat_member) {
     try { await (await getChatAdmin(env, origin)).onMyChatMember(update); } catch (err) { console.error('my_chat_member:', err && err.message); }
+  } else if (update && update.callback_query && /^cap:\d{1,15}$/.test(String(update.callback_query.data || ''))) {
+    // кнопка «Я не бот» (проверка новичков в чате, src/chat-admin.mjs)
+    try { await (await getChatAdmin(env, origin)).onCallback(update.callback_query); } catch (err) {
+      console.error('captcha callback:', err && err.message);
+      await tgApi(env, 'answerCallbackQuery', { callback_query_id: update.callback_query.id, text: 'Что-то пошло не так, нажмите ещё раз.' });
+    }
   } else if (update && update.callback_query) {
     try {
       await handleLoginCallback(env, update.callback_query);
@@ -1482,6 +1488,12 @@ async function restoreCode(env, repo, files) {
 }
 
 export default {
+  // Раз в минуту (wrangler.toml → [triggers] crons): выгнать новичков, не нажавших «Я не бот» вовремя (src/chat-admin.mjs, sweepAll)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try { await (await getChatAdmin(env, null)).sweepAll(); } catch (err) { console.error('captcha sweep:', err && err.message); }
+    })());
+  },
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });

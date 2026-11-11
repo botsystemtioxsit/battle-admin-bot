@@ -9,6 +9,7 @@
 //   daily/<день>          счётчики: joins, leaves, bans, messages, how_<способ>, hr/<час UTC>
 //   users/<id>            {name, username?, lang?, premium?, joinedAt?, how?, linkId?, status, lastSeen, messages, warns}
 //   links/<id>            {name, creator?, joins, lastJoin} — пригласительные ссылки (по хешу; сама ссылка НЕ хранится: по ней может войти кто угодно)
+//   pending/<id>          проверка «я не бот»: {at, until, msgId, name, kicked?} — новичок ограничен, пока не нажмёт кнопку (или его выгонят по таймеру)
 //   _global/bans/<id>     «бан везде»: {at, by, byName, reason, name, username?, game, videochat, chats:{ok,fail}} — человек заблокирован во всех
 //                         включённых чатах (пре-бан: не может зайти), в игре (users/<id>/status) и в ВидеоЧате (videochat/bans/<id>)
 //   _global/chats/<id>    список включённых чатов (чтобы «бан везде» не перебирал всю базу)
@@ -20,8 +21,8 @@ export const DAY_MS = 86_400_000;
 const GLOBAL = 'chatAdmin/_global';
 const EVENTS_KEEP_DAYS = 120;
 const DAILY_KEEP_DAYS = 800;
-const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin' });
-export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', maxWarns: 'num', tz: 'tz', welcomeText: 'text', rules: 'text' });
+const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', captcha: true, captchaMin: 3 });
+export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', captcha: 'bool', maxWarns: 'num', captchaMin: 'num', tz: 'tz', welcomeText: 'text', rules: 'text' });
 const MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
 const HOW_LABELS = { invite: 'по пригласительной ссылке', added: 'добавил участник', request: 'по заявке', folder: 'по папке чатов', direct: 'сам (поиск или публичная ссылка)' };
 
@@ -173,6 +174,7 @@ export function createChatAdmin(deps) {
   const metaCache = new Map(); // chatKey → { at, meta }
   const adminCache = new Map(); // chatKey:userId → { at, ok }
   const noticeAt = new Map(); // chatKey → мс последнего замечания про ссылки
+  const sweepAt = new Map(); // chatKey → мс последней проверки «кого пора выгнать» (не чаще раза в 30 с на чат)
   let bannedCache = { at: 0, set: new Set() }; // id людей из «бана везде», раз в минуту перечитывается
   const META_TTL = 2 * 60 * 1000;
 
@@ -291,6 +293,121 @@ export function createChatAdmin(deps) {
     return { ok: true, text: `✅ ${name}: бан везде снят (чатов ${results.filter((r) => r.ok).length}${rec.game === 'banned' ? ', игра разблокирована' : ''}).` };
   }
 
+  // ----- проверка «я не бот» -----
+  // Новичок сразу ограничен (не может писать), ему приходит кнопка. Нажал — права возвращаются; не нажал за captchaMin минут — выгоняем
+  // (может зайти снова). Ограничить не получилось (нет права / это админ) — впускаем как раньше, без проверки.
+  const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  async function defaultPerms(chatId) {
+    const r = await deps.tg('getChat', { chat_id: chatId }).catch(() => null);
+    const src = r && r.ok && r.result && r.result.permissions;
+    const out = {};
+    for (const k of Object.keys(ALL_FALSE)) out[k] = src ? !!src[k] : !['can_change_info', 'can_pin_messages', 'can_manage_topics'].includes(k);
+    return out;
+  }
+  const captchaEvent = (chatKey, at, action, target) => globalEvent(chatKey, at, action, { id: null, name: 'Проверка «я не бот»' }, target, '');
+  async function startCaptcha(chat, user, ev, cfg) {
+    const chatKey = chatKeyOf(chat.id);
+    const uid = userKeyOf(user.id);
+    if (!chatKey || !uid || owners.has(uid) || user.is_bot) return false;
+    if (ev.how === 'request') return false; // заявку уже одобрил администратор
+    if (ev.how === 'added' && ev.by && await isChatAdmin(chat.id, ev.by.id)) return false; // добавил администратор
+    if (await deps.dbGet(`chatAdmin/${chatKey}/users/${uid}/verifiedAt`).catch(() => null)) return false; // уже проходил проверку
+    const r = await deps.tg('restrictChatMember', { chat_id: chat.id, user_id: Number(user.id), permissions: ALL_FALSE, use_independent_chat_permissions: true });
+    if (!r.ok) return false;
+    const mins = Math.min(10, Math.max(1, Number(cfg.captchaMin) || 3));
+    const name = displayName(user);
+    const sent = await deps.tg('sendMessage', {
+      chat_id: chat.id, parse_mode: 'HTML',
+      text: `👋 <a href="tg://user?id=${uid}">${escHtml(name)}</a>, добро пожаловать в «${escHtml(cleanText(chat.title, 60) || 'чат')}»!\n\nНажмите кнопку ниже — так мы убедимся, что вы человек, а не бот. На это ${mins} мин., иначе придётся зайти заново.`,
+      reply_markup: { inline_keyboard: [[{ text: '✅ Я не бот', callback_data: 'cap:' + uid }]] },
+    });
+    const msgId = sent && sent.ok && sent.result ? sent.result.message_id : null;
+    const lift = async () => { const perms = await defaultPerms(chat.id); await deps.tg('restrictChatMember', { chat_id: chat.id, user_id: Number(user.id), permissions: perms, use_independent_chat_permissions: true }); };
+    if (!msgId) { await lift().catch(() => {}); return false; } // без кнопки человек остался бы немым навсегда
+    try { await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${uid}`]: { at: now(), until: now() + mins * 60_000, msgId, name } }); }
+    catch { await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msgId }); await lift().catch(() => {}); return false; }
+    return true;
+  }
+  async function sendWelcome(chat, user, cfg) {
+    if (!cfg.welcome) return;
+    const text = (cfg.welcomeText || 'Привет, {name}! Добро пожаловать в «{chat}». Правила чата — /rules')
+      .replace(/\{name\}/g, displayName(user)).replace(/\{chat\}/g, cleanText(chat.title, 60) || 'чат');
+    await say(chat.id, text);
+  }
+  // Нажатие кнопки «Я не бот». true — это наша кнопка (дальше по цепочке не идёт).
+  async function onCallback(query) {
+    const m = /^cap:(\d{1,15})$/.exec(String(query && query.data || ''));
+    if (!m) return false;
+    const uid = m[1];
+    const answer = (text, alert = false) => deps.tg('answerCallbackQuery', { callback_query_id: query.id, text, show_alert: alert });
+    const chat = query.message && query.message.chat;
+    const chatKey = chat ? chatKeyOf(chat.id) : null;
+    const meta = chatKey ? await getMeta(chatKey) : null;
+    if (!meta || !meta.enabled) { await answer('Проверка уже не нужна.'); return true; }
+    if (String(query.from && query.from.id) !== uid) { await answer('Эта кнопка для новичка — она не ваша.'); return true; }
+    const p = await deps.dbGet(`chatAdmin/${chatKey}/pending/${uid}`).catch(() => undefined);
+    if (p === undefined) { await answer('Не получилось проверить. Нажмите ещё раз.'); return true; }
+    if (!p || p.kicked) {
+      await answer('Время проверки вышло. Зайдите в чат заново.', true);
+      await deps.tg('deleteMessage', { chat_id: chat.id, message_id: query.message.message_id });
+      return true;
+    }
+    const perms = await defaultPerms(chat.id);
+    const r = await deps.tg('restrictChatMember', { chat_id: chat.id, user_id: Number(uid), permissions: perms, use_independent_chat_permissions: true });
+    if (!r.ok) { await answer('Не получилось снять ограничение — попросите администратора чата.', true); return true; }
+    const at = now();
+    const name = cleanText(p.name, 60) || displayName(query.from);
+    const [ep, ev] = captchaEvent(chatKey, at, 'captcha_pass', { id: uid, name });
+    await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${uid}`]: null, [`chatAdmin/${chatKey}/users/${uid}/verifiedAt`]: at, [`chatAdmin/${chatKey}/daily/${dayKey(at)}/captcha_ok`]: inc(), [ep]: ev }).catch(() => {});
+    await deps.tg('deleteMessage', { chat_id: chat.id, message_id: query.message.message_id });
+    await answer('✅ Готово, добро пожаловать!');
+    await sendWelcome(chat, query.from, cfgOf(meta));
+    return true;
+  }
+  // Выгнать тех, кто не нажал кнопку вовремя. Возвращает, сколько человек выгнано. Не чаще раза в 30 с на чат (force — всегда).
+  async function sweepCaptcha(chatKey, force = false) {
+    if (!chatKeyOf(chatKey)) return 0;
+    if (!force && now() - (sweepAt.get(chatKey) || 0) < 30_000) return 0;
+    sweepAt.set(chatKey, now());
+    const pend = await deps.dbGet(`chatAdmin/${chatKey}/pending`).catch(() => null);
+    if (!pend || typeof pend !== 'object') return 0;
+    let n = 0;
+    for (const [uid, p] of Object.entries(pend)) {
+      if (!userKeyOf(uid) || !p || typeof p !== 'object') continue;
+      if (p.kicked) { if (now() - Number(p.kicked) > 10 * 60_000) await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${uid}`]: null }).catch(() => {}); continue; }
+      if (Number(p.until) > now()) continue;
+      if (n >= 8) break; // у Worker'а лимит подзапросов на одно обращение — остальных выгоним в следующий раз
+      n += 1;
+      const chatId = Number(chatKey);
+      await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${uid}/kicked`]: now() }); // отметка: «бан/разбан» от этого выгоняния в статистику не идут
+      const b = await deps.tg('banChatMember', { chat_id: chatId, user_id: Number(uid), revoke_messages: false });
+      const at = now();
+      const name = cleanText(p.name, 60) || uid;
+      if (b.ok) {
+        await deps.tg('unbanChatMember', { chat_id: chatId, user_id: Number(uid), only_if_banned: true });
+        const [ep, ev] = captchaEvent(chatKey, at, 'captcha_fail', { id: uid, name });
+        await deps.dbUpdate({ [`chatAdmin/${chatKey}/users/${uid}/status`]: 'left', [`chatAdmin/${chatKey}/users/${uid}/leftAt`]: at, [`chatAdmin/${chatKey}/daily/${dayKey(at)}/captcha_fail`]: inc(), [ep]: ev }).catch(() => {});
+      } else {
+        // не можем выгнать (право отозвали) — чтобы человек не остался немым навсегда, возвращаем права
+        const perms = await defaultPerms(chatId);
+        await deps.tg('restrictChatMember', { chat_id: chatId, user_id: Number(uid), permissions: perms, use_independent_chat_permissions: true });
+        await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${uid}`]: null }).catch(() => {});
+      }
+      if (p.msgId) await deps.tg('deleteMessage', { chat_id: chatId, message_id: p.msgId });
+    }
+    return n;
+  }
+  // Раз в минуту (cron Worker'а): пройтись по включённым чатам. Возвращает, сколько человек выгнано.
+  async function sweepAll() {
+    let total = 0;
+    for (const c of (await listEnabledChats()).slice(0, 20)) {
+      const meta = await getMeta(c);
+      if (!meta || !meta.enabled || !cfgOf(meta).captcha) continue;
+      total += await sweepCaptcha(c, true).catch(() => 0);
+    }
+    return total;
+  }
+
   // ----- запись событий -----
   async function maybePrune(chatKey, meta) {
     const today = dayKey(now());
@@ -327,12 +444,22 @@ export function createChatAdmin(deps) {
     if (!ev || !userKeyOf(ev.user.id)) return;
     if (ev.user.is_bot && (ev.kind !== 'join' || String(ev.user.id) === String(deps.botId))) return;
     if (ev.kind === 'join' && (await bannedSet()).has(String(ev.user.id))) { await blockBanned(chat.id, ev.user); return; } // «бан везде»: не впускаем, статистику не пачкаем
+    const cfg = cfgOf(meta);
+    if (cfg.captcha) await sweepCaptcha(chatKey).catch(() => 0); // заодно выгоняем тех, кто не нажал кнопку вовремя
+    if (ev.kind !== 'join') {
+      // человек ушёл (или его убрали) во время проверки «я не бот»: убираем кнопку; если это сделали мы сами — в статистику «бан» не пишем
+      const p = cfg.captcha ? await deps.dbGet(`chatAdmin/${chatKey}/pending/${ev.user.id}`).catch(() => null) : null;
+      if (p && typeof p === 'object') {
+        if (!p.kicked && p.msgId) await deps.tg('deleteMessage', { chat_id: chat.id, message_id: p.msgId });
+        if (!p.kicked || ev.kind === 'unban') await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${ev.user.id}`]: null }).catch(() => {});
+        if (p.kicked && (ev.kind === 'ban' || ev.kind === 'removed' || ev.kind === 'unban')) return;
+      }
+    }
     await recordEvent(chatKey, ev);
-    if (ev.kind === 'join' && cfgOf(meta).welcome && !ev.user.is_bot) {
-      const cfg = cfgOf(meta);
-      const text = (cfg.welcomeText || 'Привет, {name}! Добро пожаловать в «{chat}». Правила чата — /rules')
-        .replace(/\{name\}/g, displayName(ev.user)).replace(/\{chat\}/g, cleanText(chat.title, 60) || 'чат');
-      await say(chat.id, text);
+    if (ev.kind === 'join' && !ev.user.is_bot) {
+      let challenged = false;
+      if (cfg.captcha) { try { challenged = await startCaptcha(chat, ev.user, ev, cfg); } catch { challenged = false; } }
+      if (!challenged) await sendWelcome(chat, ev.user, cfg); // с проверкой приветствие будет после неё
     }
   }
 
@@ -510,7 +637,7 @@ export function createChatAdmin(deps) {
     const c = cfgOf(meta);
     const on = (v) => (v ? 'включено' : 'выключено');
     return ['⚙️ Настройки чата', `welcome — приветствие новичков: ${on(c.welcome)}`, `links — удалять ссылки у обычных участников: ${on(c.links)}`, `cleanup — удалять служебные «вошёл/вышел»: ${on(c.cleanup)}`,
-      `count — считать сообщения (только счётчик): ${on(c.count)}`, `maxWarns — предупреждений до мута: ${c.maxWarns}`, `tz — часовой пояс: ${c.tz}`, '', 'Менять: /set <ключ> on|off (или число). Приветствие: /setwelcome текст ({name}, {chat}). Правила: /setrules текст.'].join('\n');
+      `captcha — проверка «я не бот» для новичков: ${on(c.captcha)} (captchaMin — минут на ответ: ${c.captchaMin})`, `count — считать сообщения (только счётчик): ${on(c.count)}`, `maxWarns — предупреждений до мута: ${c.maxWarns}`, `tz — часовой пояс: ${c.tz}`, '', 'Менять: /set <ключ> on|off (или число). Приветствие: /setwelcome текст ({name}, {chat}). Правила: /setrules текст.'].join('\n');
   }
 
   const HELP = [
@@ -519,6 +646,7 @@ export function createChatAdmin(deps) {
     '/ban, /unban, /kick, /mute [мин|2h|1d], /unmute — ответом на сообщение (или по числовому id)',
     '/warn, /unwarn — предупреждения · /del — удалить сообщение · /pin, /unpin',
     '/settings, /set, /setwelcome, /setrules — настройки · /rules — правила',
+    'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaMin 1–10 (минут на нажатие кнопки)',
     'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
     'Видеозвонки: /call, /connect',
   ].join('\n');
@@ -590,6 +718,7 @@ export function createChatAdmin(deps) {
     const meta = await getMeta(chatKey);
     if (!meta || !meta.enabled) return false;
     const cfg = cfgOf(meta);
+    if (cfg.captcha) await sweepCaptcha(chatKey).catch(() => 0);
 
     // «бан везде»: человек из списка вошёл (служебное сообщение) или написал — блокируем и убираем сообщение
     const banned = await bannedSet();
@@ -682,5 +811,5 @@ export function createChatAdmin(deps) {
     return true;
   }
 
-  return { onMessage, onChatMember, onMyChatMember, act, applySetting, enable, disable, globalBan, globalUnban, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
+  return { onMessage, onChatMember, onMyChatMember, onCallback, sweepCaptcha, sweepAll, act, applySetting, enable, disable, globalBan, globalUnban, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
 }

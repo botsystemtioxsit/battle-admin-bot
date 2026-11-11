@@ -396,8 +396,10 @@ async function withChats(envOpts) {
 const join = (id, name, over = {}) => ({ chat_member: { ...cm().chat_member, from: { id: Number(id), first_name: name }, old_chat_member: { status: 'left', user: { id: Number(id) } }, new_chat_member: { status: 'member', user: { id: Number(id), first_name: name } }, ...over } });
 const press = (from, data, msgId = 905) => ({ id: 'q1', from: { id: Number(from), first_name: 'Вася' }, data, message: { message_id: msgId, chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' } } });
 const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
+const enabledCap = (extra = {}, opts) => enabled({ ...extra, cfg: { captcha: true, ...(extra.cfg || {}) } }, opts);
+t('капча: по умолчанию ВЫКЛЮЧЕНА (владелец: пока не добавлять)', (await (async () => { const e = await enabled({}); await e.ca.onChatMember(join(7, 'Вася')); return !e.calls.some((c) => c.method === 'restrictChatMember') && !e.calls.some((c) => c.method === 'sendMessage' && c.payload.reply_markup); })()));
 {
-  const e = await enabled({ cfg: { welcome: true } });
+  const e = await enabledCap({ cfg: { welcome: true } });
   await e.ca.onChatMember(join(7, 'Вася <b>x</b>'));
   const restr = e.calls.filter((c) => c.method === 'restrictChatMember');
   t('капча: новичок сразу ограничен', restr.length === 1 && restr[0].payload.user_id === 7 && restr[0].payload.permissions.can_send_messages === false, restr);
@@ -429,7 +431,7 @@ const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
 }
 {
   // не нажал вовремя: выгоняем, в статистике «бана» нет
-  const e = await enabled({});
+  const e = await enabledCap({});
   await e.ca.onChatMember(join(7, 'Вася'));
   const p = cap(e)['7'];
   e.clock.t = NOW + 60000;
@@ -451,36 +453,36 @@ const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
 }
 {
   // кого проверка не касается
-  const addedByAdmin = await enabled({ cfg: { welcome: true } });
+  const addedByAdmin = await enabledCap({ cfg: { welcome: true } });
   await addedByAdmin.ca.onChatMember(join(7, 'Вася', { from: { id: Number(ADMIN), first_name: 'Админ' } }));
   t('капча: добавил администратор — без проверки, приветствие сразу', !addedByAdmin.calls.some((c) => c.method === 'restrictChatMember') && addedByAdmin.sent().at(-1).includes('Привет'), addedByAdmin.calls.map((c) => c.method));
-  const addedByUser = await enabled({});
+  const addedByUser = await enabledCap({});
   await addedByUser.ca.onChatMember(join(7, 'Вася', { from: { id: Number(USER), first_name: 'Обычный' } }));
   t('капча: добавил обычный участник — проверка есть', addedByUser.calls.some((c) => c.method === 'restrictChatMember') && !!cap(addedByUser)['7']);
-  const byRequest = await enabled({});
+  const byRequest = await enabledCap({});
   await byRequest.ca.onChatMember(join(7, 'Вася', { via_join_request: true }));
   t('капча: по заявке (одобрил админ) — без проверки', !byRequest.calls.some((c) => c.method === 'restrictChatMember'));
-  const owner = await enabled({});
+  const owner = await enabledCap({});
   await owner.ca.onChatMember(join(OWNER, 'Владелец'));
   t('капча: владельцу проект проверка не нужна', !owner.calls.some((c) => c.method === 'restrictChatMember'));
-  const known = await enabled({});
+  const known = await enabledCap({});
   known.db.root.chatAdmin[KEY].users = { 7: { verifiedAt: 5 } };
   await known.ca.onChatMember(join(7, 'Вася'));
   t('капча: уже проходил проверку — не мучаем снова', !known.calls.some((c) => c.method === 'restrictChatMember'));
-  const off = await enabled({ cfg: { captcha: false, welcome: true } });
+  const off = await enabledCap({ cfg: { captcha: false, welcome: true } });
   await off.ca.onChatMember(join(7, 'Вася'));
   t('капча: выключена — как раньше (приветствие сразу)', !off.calls.some((c) => c.method === 'restrictChatMember') && off.sent().at(-1).includes('Привет'));
-  const noRights = await enabled({ cfg: { welcome: true } }, { tgOverrides: { restrictChatMember: () => ({ ok: false, description: 'Bad Request: not enough rights to restrict/unrestrict chat member' }) } });
+  const noRights = await enabledCap({ cfg: { welcome: true } }, { tgOverrides: { restrictChatMember: () => ({ ok: false, description: 'Bad Request: not enough rights to restrict/unrestrict chat member' }) } });
   await noRights.ca.onChatMember(join(7, 'Вася'));
   t('капча: нет права ограничивать — впускаем как раньше, записи «ждём» нет', !cap(noRights)['7'] && noRights.sent().at(-1).includes('Привет') && !noRights.calls.some((c) => c.method === 'sendMessage' && c.payload.reply_markup));
   let sendFails = 0;
-  const noSend = await enabled({}, { tgOverrides: { sendMessage: () => { sendFails++; return { ok: false, description: 'Bad Request: chat not found' }; } } });
+  const noSend = await enabledCap({}, { tgOverrides: { sendMessage: () => { sendFails++; return { ok: false, description: 'Bad Request: chat not found' }; } } });
   await noSend.ca.onChatMember(join(7, 'Вася'));
   t('капча: кнопку отправить не вышло — права возвращены, человек не остаётся немым', noSend.calls.filter((c) => c.method === 'restrictChatMember').length === 2 && noSend.calls.filter((c) => c.method === 'restrictChatMember')[1].payload.permissions.can_send_messages === true && !cap(noSend)['7']);
 }
 {
   // ушёл сам во время проверки
-  const e = await enabled({});
+  const e = await enabledCap({});
   await e.ca.onChatMember(join(7, 'Вася'));
   const p = cap(e)['7'];
   await e.ca.onChatMember(join(7, 'Вася', { from: { id: 7, first_name: 'Вася' }, old_chat_member: { status: 'restricted', is_member: true, user: { id: 7 } }, new_chat_member: { status: 'left', user: { id: 7, first_name: 'Вася' } } }));
@@ -488,7 +490,7 @@ const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
 }
 {
   // не получилось выгнать: возвращаем права, чтобы не оставить человека немым
-  const e = await enabled({}, { tgOverrides: { banChatMember: () => ({ ok: false, description: 'Bad Request: not enough rights to restrict/unrestrict chat member' }) } });
+  const e = await enabledCap({}, { tgOverrides: { banChatMember: () => ({ ok: false, description: 'Bad Request: not enough rights to restrict/unrestrict chat member' }) } });
   await e.ca.onChatMember(join(7, 'Вася'));
   e.clock.t = NOW + 200000;
   await e.ca.sweepCaptcha(KEY, true);
@@ -498,6 +500,7 @@ const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
 {
   // много сразу + обход всех чатов (cron)
   const e = await withChats();
+  e.db.root.chatAdmin[KEY].meta.cfg = { captcha: true };
   e.db.root.chatAdmin[KEY].pending = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [String(500 + i), { at: NOW, until: NOW + 1, msgId: 10 + i, name: 'N' + i }]));
   e.clock.t = NOW + 5000;
   const n = await e.ca.sweepAll();
@@ -509,14 +512,14 @@ const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
   off.db.root.chatAdmin[KEY].pending = { 500: { at: NOW, until: NOW + 1, msgId: 1, name: 'N' } };
   off.clock.t = NOW + 5000;
   t('cron: чат с выключенной проверкой не трогаем', (await off.ca.sweepAll()) === 0);
-  const junk = await enabled({});
+  const junk = await enabledCap({});
   junk.db.root.chatAdmin[KEY].pending = { abc: { until: 1 }, 600: 'мусор', 601: null };
   junk.clock.t = NOW + 5000;
   t('таймер: мусор в базе не ломает проход', (await junk.ca.sweepCaptcha(KEY, true)) === 0);
 }
 {
   // настройки
-  const e = await enabled({});
+  const e = await enabledCap({});
   await e.ca.onMessage(msg(ADMIN, '/set captcha off'));
   t('/set captcha off', e.db.root.chatAdmin[KEY].meta.cfg.captcha === false);
   await e.ca.onMessage(msg(ADMIN, '/set captchaMin 5'));

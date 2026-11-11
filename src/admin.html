@@ -402,6 +402,17 @@
   .bar-row .bar-track{ flex:1; height:8px; background:var(--panel-2); border-radius:4px; overflow:hidden; }
   .bar-row .bar-fill{ height:100%; background:var(--gold); }
   .bar-row .bar-count{ width:44px; text-align:right; flex-shrink:0; color:var(--text); }
+  .ch-tiles{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; }
+  .ch-tile{ background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:12px; }
+  .ch-tile-n{ font-size:22px; font-weight:700; }
+  .ch-tile-l{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .ch-tile-s{ font-size:11.5px; color:var(--muted); margin-top:4px; }
+  .ch-chart{ display:flex; align-items:flex-end; gap:3px; height:96px; margin:8px 0 14px; }
+  .ch-col{ flex:1; height:100%; display:flex; align-items:flex-end; gap:1px; }
+  .ch-bar{ flex:1; min-height:1px; border-radius:2px 2px 0 0; }
+  .ch-join{ background:var(--green,#2ecc71); }
+  .ch-leave{ background:var(--live); }
+  .ch-msg{ background:var(--gold); }
   .list-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:12px; }
   .list-row:last-child{ border-bottom:none; }
   .list-row .meta{ color:var(--muted); }
@@ -446,7 +457,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.36</span></div>
+    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.37: приложение «Чаты» — админ-бот Telegram-чатов (статистика входов: кто, когда и как зашёл, по какой ссылке; модерация; настройки), команды Терминала chats и chatstats. v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.37</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -592,6 +603,10 @@
       <div class="tab" data-tab="lf-inbox" data-app="launcher" data-title="Сообщения в лаунчере" data-sub="Ошибки и предложения, которые люди присылают из Ghost Shell Launcher"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>Сообщения</div>
       <div class="tab-grp">VPN · Gateway Plus</div>
       <div class="tab" data-tab="gw-accounts" data-app="gateway" data-title="VPN · аккаунты" data-sub="Gateway Plus — личный VPN: кто пользуется и блокировка тех, кто нарушает правила"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Аккаунты</div>
+      <div class="tab-grp">Чаты</div>
+      <div class="tab" data-tab="ch-overview" data-app="chats" data-title="Чаты" data-sub="Статистика входов, настройки бота и подключение чатов"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"></path></svg>Обзор</div>
+      <div class="tab" data-tab="ch-events" data-app="chats" data-title="События" data-sub="Кто вошёл и вышел, как именно, и что делала модерация"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>События</div>
+      <div class="tab" data-tab="ch-people" data-app="chats" data-title="Участники" data-sub="Кто сколько пишет, предупреждения, мут и бан"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M17 11a3 3 0 100-6M21 20c0-2.6-1.6-4.8-4-5.6"></path></svg>Участники</div>
       <div class="tab-grp">Комната</div>
       <div class="tab" data-tab="cm-room" data-app="videochat community" data-title="Комната" data-sub="Кто в комнате, мут и выгон"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"></path><path d="M10 20v-5h4v5"></path></svg>Комната</div>
       <div class="tab" data-tab="cm-team" data-app="videochat community" data-title="Команда и журнал" data-sub="Админы и минеры комнаты, журнал действий"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v16H5z"></path><path d="M9 9h6M9 13h6M9 17h3"></path></svg>Команда и журнал</div>
@@ -1317,6 +1332,41 @@
         <div class="section-label" id="gw-dev-title">Заблокированные компьютеры</div>
         <div id="gw-dev-list"></div>
         <div class="admin-empty" id="gw-dev-empty" style="display:none;">Заблокированных компьютеров нет</div>
+      </div>
+    </div>
+
+    <div class="subview" data-panel="ch-overview" id="panel-ch-overview">
+      <div class="admin-card">
+        <div class="section-label">Чат</div>
+        <select id="ch-ov-select" style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px; color:var(--text); font-size:14px;"></select>
+      </div>
+      <div id="ch-ov-body"></div>
+      <div class="admin-card">
+        <div class="section-label">Подключить чат</div>
+        <div id="ch-connect"></div>
+      </div>
+    </div>
+
+    <div class="subview" data-panel="ch-events" id="panel-ch-events">
+      <div class="admin-card">
+        <div class="section-label" id="ch-ev-title">События чата</div>
+        <select id="ch-ev-select" style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px; color:var(--text); font-size:14px;"></select>
+        <div class="admin-search"><input type="text" id="ch-ev-search" placeholder="Поиск по имени, @нику, id или названию ссылки" autocomplete="off" maxlength="40"></div>
+        <div id="ch-ev-filters" style="display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 12px;"></div>
+        <div id="ch-ev-list"></div>
+        <button class="btn btn-line" id="ch-ev-more" style="padding:7px 14px; font-size:12px; margin-top:6px;">Показать ещё 7 дней</button>
+      </div>
+    </div>
+
+    <div class="subview" data-panel="ch-people" id="panel-ch-people">
+      <div class="admin-card">
+        <div class="section-label" id="ch-pp-title">Участники</div>
+        <select id="ch-pp-select" style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px; color:var(--text); font-size:14px;"></select>
+        <div class="admin-search"><input type="text" id="ch-pp-search" placeholder="Поиск по имени, @нику или id" autocomplete="off" maxlength="40"></div>
+        <div id="ch-pp-filters" style="display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 12px;"></div>
+        <div id="ch-pp-list"></div>
+        <button class="btn btn-line" id="ch-pp-more" style="padding:7px 14px; font-size:12px; margin-top:6px;">Показать ещё</button>
+        <div class="admin-empty" style="text-align:left; padding:8px 0 0;">Здесь только те, кого бот уже «видел»: писал в чате или вошёл, когда бот был администратором. Текст сообщений не хранится — только счётчики.</div>
       </div>
     </div>
 
@@ -2127,6 +2177,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // v5.36: «VPN» — отдельное приложение: аккаунты плагина Gateway Plus (личный VPN в Ghost Shell Launcher) и их блокировка.
     // Так же только Супердоступ и не делегируется (в PERMISSION_DEFS его нет).
     { id: 'gateway', label: 'VPN', perm: 'app_gateway', icon: '🛡️', sub: 'Личный VPN, аккаунты' },
+    // v5.37: «Чаты» — админ-бот Telegram-чатов: статистика входов, настройки, бан/мут. Только Супердоступ, не делегируется:
+    // тут имена и входы людей из чатов (см. блок «Чаты» ниже).
+    { id: 'chats', label: 'Чаты', perm: 'app_chats', icon: '👥', sub: 'Статистика и модерация' },
     // v5.26: «Моя комната» — суб-админ/админ/минер одной комнаты ВидеоЧата. Это не переключаемое право:
     // оно появляется само, если у человека есть users/<uid>/vcCommunities (ставится при назначении на
     // должность), и только если нет права app_videochat (у админа видеочата те же вкладки лежат внутри него).
@@ -2160,14 +2213,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function resolvePermissionsCore(user) {
     const base = resolveBasePermissions(user);
     const hasRoom = !!(user && user.vcCommunities && typeof user.vcCommunities === 'object' && Object.keys(user.vcCommunities).length);
-    if (user && user.role === 'superadmin') return { ...base, app_troll: true, app_videochat: true, app_launcher: true, app_gateway: true, app_community: false };
+    if (user && user.role === 'superadmin') return { ...base, app_troll: true, app_videochat: true, app_launcher: true, app_gateway: true, app_chats: true, app_community: false };
     const role = user && (user.role || (user.isAdmin ? 'admin' : 'user'));
     // обычный игрок (без роли в панели) — только «Моя комната», если его назначили в команду комнаты
     // токен доступа (псевдо-роль 'token', см. loadAccessTokenAndShowApp) приложения берёт из своих ключей, как админ
-    if (!user || (!ALLOWED_ROLES.includes(role) && role !== 'token')) return { ...base, app_troll: false, app_videochat: false, app_launcher: false, app_gateway: false, app_community: hasRoom };
+    if (!user || (!ALLOWED_ROLES.includes(role) && role !== 'token')) return { ...base, app_troll: false, app_videochat: false, app_launcher: false, app_gateway: false, app_chats: false, app_community: hasRoom };
     const p = user.permissions;
     const explicit = !!p && (p.app_troll !== undefined || p.app_videochat !== undefined);
-    return { ...base, app_troll: explicit ? !!p.app_troll : true, app_videochat: explicit ? !!p.app_videochat : false, app_launcher: false, app_gateway: false, app_community: hasRoom };
+    return { ...base, app_troll: explicit ? !!p.app_troll : true, app_videochat: explicit ? !!p.app_videochat : false, app_launcher: false, app_gateway: false, app_chats: false, app_community: hasRoom };
   }
   function resolveBasePermissions(user) {
     if (!user) return { ...ALL_PERMISSIONS_OFF };
@@ -3002,6 +3055,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (tab.dataset.tab === 'lf-inbox') lfOpen();
       if (tab.dataset.tab !== 'gw-accounts') gwDetach();
       if (tab.dataset.tab === 'gw-accounts') gwOpen();
+      if (!['ch-overview', 'ch-events', 'ch-people'].includes(tab.dataset.tab)) chDetach();
+      if (['ch-overview', 'ch-events', 'ch-people'].includes(tab.dataset.tab)) { chBindStatic(); chOpen(tab.dataset.tab); }
       if (!['vc-overview', 'vc-communities', 'vc-moderation', 'cm-room', 'cm-team'].includes(tab.dataset.tab)) vcDetach();
       if (tab.dataset.tab === 'vc-overview') vcOpenOverview();
       if (tab.dataset.tab === 'vc-communities') vcOpenCommunities();
@@ -4120,6 +4175,370 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
   }
 
+  // ===== «Чаты» (v5.37) — админ-бот Telegram-чатов: статистика входов, модерация, настройки =====
+  // Пятое приложение панели, только Супердоступ (canManageChats), не делегируется: тут имена и входы людей из чатов.
+  // Бот — тот же «Терминал» (Worker role-gateway, src/chat-admin.mjs). Данные лежат в chatAdmin/<id чата> (правила базы закрывают узел
+  // от чтения и записи клиентами), поэтому читаем через Worker (adminDbRead), а всё, что требует бота (включить чат, настройки,
+  // бан/мут), — через POST /chat-admin. Текста сообщений людей нигде нет — только счётчики. Всё из базы — через textContent.
+  // «Где» человек зашёл Telegram боту не сообщает (адреса нет): известно только КАК — по какой ссылке, добавили, заявка, сам.
+  const CH_ID_RE = /^-?\d{1,20}$/;
+  const CH_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const CH_HOW = { invite: 'По пригласительной ссылке', added: 'Добавил участник', request: 'По заявке', folder: 'По папке чатов', direct: 'Сам (поиск или публичная ссылка)' };
+  const CH_STATUS = { member: 'в чате', left: 'вышел', banned: 'заблокирован' };
+  const CH_EVENT_FILTERS = [['all', 'Все'], ['join', 'Входы'], ['leave', 'Выходы'], ['ban', 'Блокировки'], ['mod', 'Действия модерации']];
+  const CH_PEOPLE_FILTERS = [['all', 'Все'], ['member', 'В чате'], ['left', 'Вышли'], ['banned', 'Заблокированы'], ['warn', 'С предупреждениями']];
+  const CH_TOGGLES = [['welcome', 'Приветствовать новичков'], ['links', 'Удалять ссылки у обычных участников'], ['cleanup', 'Удалять служебные «вошёл / вышел»'], ['count', 'Считать сообщения (только счётчик, без текста)']];
+  const CH_SEL_KEY = 'battleChatSel';
+  let chTimer = null;
+  let chTab = 'ch-overview';
+  let chMetas = {};
+  let chSel = null;
+  let chDaily = {};
+  let chLinks = {};
+  let chUsers = {};
+  let chEvents = [];
+  let chEventDays = 7;
+  let chEventFilter = 'all';
+  let chPeopleFilter = 'all';
+  let chPeopleLimit = 100;
+  let chLoadedFor = null;
+  function canManageChats() { return !!myPermissions.app_chats && canManageRoles(); }
+  function chDayKey(ms) { return new Date(ms).toISOString().slice(0, 10); }
+  function chCfg(meta) { return { welcome: false, links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', welcomeText: '', rules: '', ...((meta && meta.cfg) || {}) }; }
+  function chTitle(id) { const m = chMetas[id]; return (m && m.title ? String(m.title) : 'Чат ' + id) + (m && m.enabled ? '' : ' — выключен'); }
+  async function chWorker(payload) {
+    if (!canManageChats()) throw new Error('нет прав');
+    const identity = panelIdentityPayload();
+    if (!identity) throw new Error('не удалось определить личность — перезайди в панель');
+    const res = await fetch(`${ROLE_GATEWAY_BASE}/chat-admin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...identity, ...payload }) });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
+  }
+  function chOpen(tab) {
+    if (!canManageChats()) return; // на случай подделки клика мимо скрытой вкладки
+    chTab = tab;
+    chRefresh(true);
+    if (chTimer) clearInterval(chTimer);
+    chTimer = setInterval(() => chRefresh(false), 60000);
+  }
+  function chDetach() { if (chTimer) clearInterval(chTimer); chTimer = null; }
+  async function chLoadChats() {
+    const ids = await adminDbRead('chatAdmin', true);
+    const list = Object.keys(ids && typeof ids === 'object' ? ids : {}).filter((k) => CH_ID_RE.test(k));
+    const metas = await Promise.all(list.map((id) => adminDbRead('chatAdmin/' + id + '/meta', false).catch(() => null)));
+    chMetas = {};
+    list.forEach((id, i) => { chMetas[id] = metas[i] && typeof metas[i] === 'object' ? metas[i] : {}; });
+    let saved = null;
+    try { saved = window.localStorage.getItem(CH_SEL_KEY); } catch (e) {}
+    if (!chSel || !chMetas[chSel]) chSel = chMetas[saved] ? saved : (Object.keys(chMetas)[0] || null);
+  }
+  async function chRefresh(force) {
+    if (!canManageChats()) return;
+    try {
+      await chLoadChats();
+      chRenderSelectors();
+      if (!chSel) { chRenderNoChat(); return; }
+      if (chTab === 'ch-overview') {
+        const [daily, links] = await Promise.all([adminDbRead('chatAdmin/' + chSel + '/daily', false), adminDbRead('chatAdmin/' + chSel + '/links', false)]);
+        chDaily = daily && typeof daily === 'object' ? daily : {};
+        chLinks = links && typeof links === 'object' ? links : {};
+        chRenderOverview();
+      } else if (chTab === 'ch-events') {
+        await chLoadEvents();
+        chRenderEvents();
+      } else if (chTab === 'ch-people') {
+        const users = await adminDbRead('chatAdmin/' + chSel + '/users', false);
+        chUsers = users && typeof users === 'object' ? users : {};
+        chRenderPeople();
+      }
+    } catch (err) {
+      const box = document.getElementById(chTab === 'ch-events' ? 'ch-ev-list' : chTab === 'ch-people' ? 'ch-pp-list' : 'ch-ov-body');
+      if (box && (force || !box.childElementCount)) box.replaceChildren(lfSet(lfEl('div', 'admin-empty'), 'Не удалось загрузить: ' + (err.message || err)));
+    }
+  }
+  function chRenderSelectors() {
+    ['ch-ov-select', 'ch-ev-select', 'ch-pp-select'].forEach((sid) => {
+      const sel = document.getElementById(sid);
+      if (!sel) return;
+      sel.replaceChildren();
+      Object.keys(chMetas).forEach((id) => { const o = document.createElement('option'); o.value = id; o.textContent = chTitle(id); sel.appendChild(o); });
+      if (chSel) sel.value = chSel;
+      if (!sel.dataset.bound) {
+        sel.dataset.bound = '1';
+        sel.addEventListener('change', () => { chSel = sel.value; try { window.localStorage.setItem(CH_SEL_KEY, chSel); } catch (e) {} chEvents = []; chLoadedFor = null; chRefresh(true); });
+      }
+    });
+  }
+  function chRenderNoChat() {
+    ['ch-ov-body', 'ch-ev-list', 'ch-pp-list'].forEach((id) => {
+      const box = document.getElementById(id);
+      if (box) box.replaceChildren(lfSet(lfEl('div', 'admin-empty'), 'Пока ни один чат не подключён. Как подключить — на вкладке «Чаты» (внизу).'));
+    });
+    chRenderConnect();
+  }
+  function chSum(n, key) {
+    let s = 0;
+    for (let i = 0; i < n; i++) { const d = chDaily[chDayKey(Date.now() - i * 86400000)]; if (d) s += Number(d[key]) || 0; }
+    return s;
+  }
+  function chTile(label, value, sub) {
+    const t = lfEl('div', 'ch-tile');
+    t.append(lfSet(lfEl('div', 'ch-tile-n'), value), lfSet(lfEl('div', 'ch-tile-l'), label));
+    if (sub) t.appendChild(lfSet(lfEl('div', 'ch-tile-s'), sub));
+    return t;
+  }
+  function chBars(rows, color) { // rows: [[подпись, число]] → горизонтальные полоски
+    const box = lfEl('div');
+    const max = Math.max(1, ...rows.map((r) => r[1]));
+    rows.forEach(([label, n]) => {
+      const row = lfEl('div', 'bar-row');
+      const track = lfEl('div', 'bar-track'); const fill = lfEl('div', 'bar-fill'); fill.style.width = Math.round((n / max) * 100) + '%'; if (color) fill.style.background = color;
+      track.appendChild(fill);
+      row.append(lfSet(lfEl('div', 'bar-label'), label), track, lfSet(lfEl('div', 'bar-count'), n));
+      box.appendChild(row);
+    });
+    return box;
+  }
+  function chDaysChart() { // входы (зелёные) и выходы (красные) по дням, 30 дней
+    const days = Array.from({ length: 30 }, (_, i) => chDayKey(Date.now() - (29 - i) * 86400000));
+    const max = Math.max(1, ...days.map((d) => Math.max(Number(chDaily[d] && chDaily[d].joins) || 0, Number(chDaily[d] && chDaily[d].leaves) || 0)));
+    const wrap = lfEl('div', 'ch-chart');
+    days.forEach((d) => {
+      const j = Number(chDaily[d] && chDaily[d].joins) || 0; const l = Number(chDaily[d] && chDaily[d].leaves) || 0;
+      const col = lfEl('div', 'ch-col'); col.title = d + ': +' + j + ' / −' + l;
+      const a = lfEl('div', 'ch-bar ch-join'); a.style.height = Math.round((j / max) * 100) + '%';
+      const b = lfEl('div', 'ch-bar ch-leave'); b.style.height = Math.round((l / max) * 100) + '%';
+      col.append(a, b); wrap.appendChild(col);
+    });
+    return wrap;
+  }
+  function chHoursChart() { // активность по часам суток (по местному времени), сумма за 30 дней
+    const per = Array(24).fill(0);
+    const offset = -new Date().getTimezoneOffset() / 60;
+    for (let i = 0; i < 30; i++) {
+      const hr = chDaily[chDayKey(Date.now() - i * 86400000)] && chDaily[chDayKey(Date.now() - i * 86400000)].hr;
+      if (hr && typeof hr === 'object') Object.entries(hr).forEach(([h, n]) => { per[(((Number(h) + offset) % 24) + 24) % 24] += Number(n) || 0; });
+    }
+    const max = Math.max(1, ...per);
+    const wrap = lfEl('div', 'ch-chart');
+    per.forEach((n, h) => {
+      const col = lfEl('div', 'ch-col'); col.title = h + ':00 — ' + n + ' сообщений';
+      const a = lfEl('div', 'ch-bar ch-msg'); a.style.height = Math.round((n / max) * 100) + '%';
+      col.appendChild(a); wrap.appendChild(col);
+    });
+    const axis = lfSet(lfEl('div', 'l-time'), 'часы суток по вашему времени: 0 — слева, 23 — справа');
+    const box = lfEl('div'); box.append(wrap, axis);
+    return box;
+  }
+  function chRenderOverview() {
+    const body = document.getElementById('ch-ov-body');
+    const meta = chMetas[chSel] || {};
+    const cfg = chCfg(meta);
+    body.replaceChildren();
+    // состояние и проверка связи
+    const st = lfEl('div', 'admin-card');
+    st.appendChild(lfSet(lfEl('div', 'section-label'), 'Состояние'));
+    const state = lfEl('div'); state.style.cssText = 'font-size:13px; line-height:1.6;';
+    state.textContent = (meta.enabled ? 'Админ-функции включены' : 'Админ-функции ВЫКЛЮЧЕНЫ') + (meta.enabledAt ? ' с ' + lfWhen(meta.enabledAt) : '') + (meta.botStatus ? ' · бот в чате: ' + meta.botStatus : '');
+    const out = lfEl('div'); out.id = 'ch-check-out'; out.style.cssText = 'font-size:13px; line-height:1.6; margin-top:6px;';
+    const actions = lfEl('div'); actions.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;';
+    const mk = (label, cls, fn) => { const b = lfSet(lfEl('button', 'btn ' + cls), label); b.style.cssText = 'padding:7px 14px; font-size:11.5px;'; b.addEventListener('click', async () => { b.disabled = true; try { await fn(); } catch (err) { alert('Не получилось: ' + (err.message || err)); } b.disabled = false; }); actions.appendChild(b); return b; };
+    mk('Проверить связь', 'btn-gold', async () => {
+      out.textContent = 'Проверяю…';
+      const r = await chWorker({ action: 'status', chatId: chSel });
+      const c = r.chat || {};
+      const yn = (v) => (v ? 'да' : 'нет');
+      out.textContent = ['Бот получает входы и выходы людей: ' + (r.webhook && r.webhook.chatMemberUpdates ? 'да' : 'нет (вебхук обновлён' + (r.reapplied ? ' только что — подождите минуту и проверьте ещё раз' : ', но Telegram пока не подтвердил') + ')'),
+        'Бот в чате: ' + (c.botStatus || '—') + (c.error ? ' (' + c.error + ')' : ''), 'Права бота: удалять сообщения — ' + yn(c.canDelete) + ', блокировать — ' + yn(c.canRestrict) + ', приглашать — ' + yn(c.canInvite),
+        'Участников в чате: ' + (c.memberCount != null ? c.memberCount : '—'), c.botStatus && c.botStatus !== 'administrator' && c.botStatus !== 'creator' ? '⚠ Сделайте бота администратором чата — без этого входы не видны.' : ''].filter(Boolean).join('\n');
+      out.style.whiteSpace = 'pre-line';
+    });
+    mk(meta.enabled ? 'Выключить для этого чата' : 'Включить для этого чата', meta.enabled ? 'btn-live' : 'btn-gold', async () => {
+      if (meta.enabled && !confirm('Выключить админ-функции для этого чата? Собранная статистика сохранится.')) return;
+      await chWorker({ action: meta.enabled ? 'disable' : 'enable', chatId: chSel });
+      logAction('chat_admin_toggle', chSel, String(meta.title || chSel).slice(0, 40), '—', 'Чаты: ' + (meta.enabled ? 'выключено' : 'включено'));
+      await chRefresh(true);
+    });
+    st.append(state, out, actions); body.appendChild(st);
+    // сводка
+    const sum = lfEl('div', 'admin-card');
+    sum.appendChild(lfSet(lfEl('div', 'section-label'), 'Сводка'));
+    const tiles = lfEl('div', 'ch-tiles');
+    [['Сегодня', 1], ['7 дней', 7], ['30 дней', 30]].forEach(([label, n]) => {
+      tiles.appendChild(chTile(label, '+' + chSum(n, 'joins') + ' / −' + chSum(n, 'leaves'), 'входы / выходы · сообщений ' + chSum(n, 'messages') + (chSum(n, 'bans') ? ' · блокировок ' + chSum(n, 'bans') : '')));
+    });
+    sum.appendChild(tiles); body.appendChild(sum);
+    // графики
+    const ch = lfEl('div', 'admin-card');
+    ch.appendChild(lfSet(lfEl('div', 'section-label'), 'Входы (зелёные) и выходы (красные) по дням — 30 дней'));
+    ch.appendChild(chDaysChart());
+    ch.appendChild(lfSet(lfEl('div', 'section-label'), 'Когда пишут'));
+    ch.appendChild(chHoursChart());
+    body.appendChild(ch);
+    // как заходят
+    const how = lfEl('div', 'admin-card');
+    how.appendChild(lfSet(lfEl('div', 'section-label'), 'Как заходят — 30 дней'));
+    const rows = Object.entries(CH_HOW).map(([k, label]) => [label, chSum(30, 'how_' + k)]).filter(([, n]) => n > 0);
+    how.appendChild(rows.length ? chBars(rows) : lfSet(lfEl('div', 'admin-empty'), 'Входов за 30 дней нет. Бот должен быть администратором чата, а чат — включён.'));
+    how.appendChild(lfSet(lfEl('div', 'admin-empty', ''), 'Откуда человек (город, адрес) Telegram боту не сообщает — известно только как он зашёл. Если ссылок несколько (для рекламы, для друзей), по ним видно, какая работает лучше.'));
+    body.appendChild(how);
+    // ссылки
+    const lk = lfEl('div', 'admin-card');
+    lk.appendChild(lfSet(lfEl('div', 'section-label'), 'Пригласительные ссылки'));
+    const links = Object.values(chLinks).filter((l) => l && typeof l === 'object' && l.joins).sort((a, b) => (b.joins || 0) - (a.joins || 0)).slice(0, 30);
+    if (!links.length) lk.appendChild(lfSet(lfEl('div', 'admin-empty'), 'Входов по ссылкам пока нет. Создайте в Telegram пригласительную ссылку с названием (например «Реклама») — здесь появится, сколько людей пришло по ней.'));
+    links.forEach((l) => { const row = lfEl('div', 'log-row'); row.style.marginBottom = '8px'; row.appendChild(lfSet(lfEl('div', 'l-title'), '«' + (l.name || 'без названия') + '» — ' + l.joins + ' чел.')); row.appendChild(lfSet(lfEl('div', 'l-time'), (l.creator ? 'создал ' + l.creator + ' · ' : '') + 'последний вход ' + lfWhen(l.lastJoin))); lk.appendChild(row); });
+    body.appendChild(lk);
+    // настройки
+    const sc = lfEl('div', 'admin-card');
+    sc.appendChild(lfSet(lfEl('div', 'section-label'), 'Настройки бота в этом чате'));
+    CH_TOGGLES.forEach(([key, label]) => {
+      const row = lfEl('label'); row.style.cssText = 'display:flex; align-items:center; gap:8px; margin:6px 0; font-size:13px;';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!cfg[key];
+      cb.addEventListener('change', async () => { cb.disabled = true; try { await chWorker({ action: 'set', chatId: chSel, key, value: cb.checked ? 'on' : 'off' }); logAction('chat_admin_set', chSel, String(meta.title || chSel).slice(0, 40), '—', 'Чаты: ' + key + ' = ' + (cb.checked ? 'вкл' : 'выкл')); } catch (err) { cb.checked = !cb.checked; alert('Не получилось: ' + (err.message || err)); } cb.disabled = false; });
+      row.append(cb, lfSet(lfEl('span'), label)); sc.appendChild(row);
+    });
+    const textField = (key, label, rowsN) => {
+      const lab = lfSet(lfEl('div', 'l-time'), label); lab.style.cssText = 'font-size:12px; margin-top:10px;'; sc.appendChild(lab);
+      const ta = document.createElement('textarea'); ta.className = 'field-input'; ta.rows = rowsN; ta.maxLength = key === 'rules' ? 1500 : 500; ta.value = cfg[key] || ''; ta.style.cssText = 'width:100%; box-sizing:border-box;';
+      const b = lfSet(lfEl('button', 'btn btn-line'), 'Сохранить'); b.style.cssText = 'padding:7px 14px; font-size:11.5px; margin:6px 0 10px;';
+      b.addEventListener('click', async () => { b.disabled = true; try { await chWorker({ action: 'set', chatId: chSel, key, value: ta.value }); b.textContent = 'Сохранено'; setTimeout(() => { b.textContent = 'Сохранить'; }, 1500); } catch (err) { alert('Не получилось: ' + (err.message || err)); } b.disabled = false; });
+      sc.append(ta, b);
+    };
+    textField('welcomeText', 'Текст приветствия ({name} — имя, {chat} — название чата; пусто — стандартный)', 3);
+    textField('rules', 'Правила чата (показываются по команде /rules)', 5);
+    sc.appendChild(lfSet(lfEl('div', 'admin-empty', ''), 'Команды в самом чате (для админов чата): /stats /top /joins /ban /unban /kick /mute /unmute /warn /del /pin /settings /help — ответом на сообщение человека.'));
+    body.appendChild(sc);
+    chRenderConnect();
+  }
+  function chRenderConnect() {
+    const box = document.getElementById('ch-connect');
+    if (!box) return;
+    box.replaceChildren();
+    ['1. Добавьте бота @troll_battle_Terminal_bot в чат.', '2. Сделайте его администратором (права: удаление сообщений, блокировка участников, приглашение по ссылкам) — без этого он не видит, кто и как заходит.', '3. В чате отправьте /admin_on (это может только владелец проекта). Чат появится в списке выше.',
+      'Либо введите номер чата здесь (бот уже должен быть в нём):'].forEach((t) => { const p = lfSet(lfEl('div', 'l-time'), t); p.style.cssText = 'margin:4px 0; font-size:12.5px;'; box.appendChild(p); });
+    const input = document.createElement('input'); input.type = 'text'; input.className = 'field-input'; input.placeholder = '-1001234567890'; input.maxLength = 22; input.style.cssText = 'width:100%; box-sizing:border-box; margin-top:6px;';
+    const b = lfSet(lfEl('button', 'btn btn-gold'), 'Включить для этого чата'); b.style.cssText = 'padding:7px 14px; font-size:11.5px; margin-top:8px;';
+    b.addEventListener('click', async () => {
+      const id = input.value.trim();
+      if (!CH_ID_RE.test(id)) { alert('Номер чата — число, у групп оно начинается с минуса.'); return; }
+      b.disabled = true;
+      try { const r = await chWorker({ action: 'enable', chatId: id }); if (r.ok === false) throw new Error(r.text || 'не вышло'); chSel = id; try { window.localStorage.setItem(CH_SEL_KEY, id); } catch (e) {} await chRefresh(true); if (r.botAdmin === false) alert('Чат включён, но бот пока не администратор — сделайте его администратором, иначе входы не видны.'); } catch (err) { alert('Не получилось: ' + (err.message || err)); }
+      b.disabled = false;
+    });
+    box.append(input, b);
+  }
+  // ----- события -----
+  async function chLoadEvents() {
+    if (chLoadedFor !== chSel + ':' + chEventDays) {
+      const days = Array.from({ length: chEventDays }, (_, i) => chDayKey(Date.now() - i * 86400000));
+      const parts = await Promise.all(days.map((d) => adminDbRead('chatAdmin/' + chSel + '/events/' + d, false).catch(() => null)));
+      chEvents = parts.flatMap((p) => (p && typeof p === 'object' ? Object.values(p) : [])).filter((e) => e && typeof e === 'object' && e.at).sort((a, b) => b.at - a.at);
+      chLoadedFor = chSel + ':' + chEventDays;
+    }
+  }
+  function chEventLabel(e) {
+    if (e.t === 'join') return ['Вошёл', 'var(--green, #2ecc71)'];
+    if (e.t === 'leave') return ['Вышел', 'var(--muted)'];
+    if (e.t === 'removed') return ['Удалён', 'var(--muted)'];
+    if (e.t === 'ban') return ['Заблокирован', 'var(--live)'];
+    if (e.t === 'unban') return ['Разблокирован', 'var(--muted)'];
+    return ['Модерация', 'var(--gold)'];
+  }
+  const CH_MOD = { ban: 'бан', unban: 'разбан', kick: 'выгнал', mute: 'мут', unmute: 'снял мут', warn: 'предупреждение', unwarn: 'снял предупреждение', del: 'удалил сообщение', pin: 'закрепил', unpin: 'открепил' };
+  function chRenderEvents() {
+    const list = document.getElementById('ch-ev-list');
+    const filters = document.getElementById('ch-ev-filters');
+    filters.replaceChildren();
+    CH_EVENT_FILTERS.forEach(([key, label]) => { const b = lfEl('button', 'btn ' + (chEventFilter === key ? 'btn-gold' : 'btn-line'), label); b.style.cssText = 'padding:7px 14px; font-size:12px;'; b.addEventListener('click', () => { chEventFilter = key; chRenderEvents(); }); filters.appendChild(b); });
+    const q = (document.getElementById('ch-ev-search').value || '').trim().toLowerCase();
+    const rows = chEvents.filter((e) => chEventFilter === 'all' || (chEventFilter === 'join' && e.t === 'join') || (chEventFilter === 'leave' && (e.t === 'leave' || e.t === 'removed')) || (chEventFilter === 'ban' && (e.t === 'ban' || e.t === 'unban')) || (chEventFilter === 'mod' && e.t === 'mod'))
+      .filter((e) => !q || String(e.name || '').toLowerCase().includes(q) || String(e.username || '').toLowerCase().includes(q) || String(e.id || '').includes(q) || String(e.link && e.link.name || '').toLowerCase().includes(q)).slice(0, 400);
+    list.replaceChildren();
+    document.getElementById('ch-ev-title').textContent = 'События чата «' + String((chMetas[chSel] && chMetas[chSel].title) || chSel).slice(0, 40) + '» — ' + rows.length + (chEvents.length > rows.length ? ' из ' + chEvents.length : '');
+    if (!rows.length) list.appendChild(lfSet(lfEl('div', 'admin-empty'), 'Событий за выбранный срок нет.'));
+    rows.forEach((e) => {
+      const row = lfEl('div', 'log-row'); row.style.marginBottom = '8px';
+      const [label, color] = chEventLabel(e);
+      const title = lfEl('div', 'l-title');
+      const tag = lfSet(lfEl('b'), label + ' '); tag.style.color = color;
+      title.append(tag, lfSet(lfEl('span'), (e.t === 'mod' ? (e.name || 'панель') + ': ' + (CH_MOD[e.action] || e.action) + (e.target ? ' → ' + (e.target.name || e.target.id) : '') : (e.name || e.id || '—') + (e.username ? ' (@' + e.username + ')' : ''))));
+      row.appendChild(title);
+      let more = '';
+      if (e.t === 'join') more = (CH_HOW[e.how] || 'способ неизвестен') + (e.link ? ' «' + (e.link.name || 'без названия') + '»' + (e.link.creator ? ' (создал ' + e.link.creator + ')' : '') : '') + (e.by && e.by.name ? ' · добавил ' + e.by.name : '');
+      else if (e.by && e.by.name) more = 'кто: ' + e.by.name;
+      else if (e.details) more = e.details;
+      row.appendChild(lfSet(lfEl('div', 'l-time'), lfWhen(e.at) + (more ? ' · ' + more : '') + (e.id && e.t !== 'mod' ? ' · id ' + e.id : '')));
+      list.appendChild(row);
+    });
+    const moreBtn = document.getElementById('ch-ev-more');
+    moreBtn.style.display = chEventDays < 120 ? '' : 'none';
+  }
+  // ----- участники -----
+  function chRenderPeople() {
+    const list = document.getElementById('ch-pp-list');
+    const filters = document.getElementById('ch-pp-filters');
+    filters.replaceChildren();
+    CH_PEOPLE_FILTERS.forEach(([key, label]) => { const b = lfEl('button', 'btn ' + (chPeopleFilter === key ? 'btn-gold' : 'btn-line'), label); b.style.cssText = 'padding:7px 14px; font-size:12px;'; b.addEventListener('click', () => { chPeopleFilter = key; chPeopleLimit = 100; chRenderPeople(); }); filters.appendChild(b); });
+    const q = (document.getElementById('ch-pp-search').value || '').trim().toLowerCase();
+    const all = Object.entries(chUsers).filter(([id, u]) => /^\d{1,15}$/.test(id) && u && typeof u === 'object');
+    const rows = all.filter(([, u]) => chPeopleFilter === 'all' || (chPeopleFilter === 'warn' ? (u.warns || 0) > 0 : (u.status || 'member') === chPeopleFilter))
+      .filter(([id, u]) => !q || id.includes(q) || String(u.name || '').toLowerCase().includes(q) || String(u.username || '').toLowerCase().includes(q))
+      .sort((a, b) => (b[1].messages || 0) - (a[1].messages || 0) || (b[1].joinedAt || 0) - (a[1].joinedAt || 0));
+    document.getElementById('ch-pp-title').textContent = 'Участники — ' + rows.length + (all.length > rows.length ? ' из ' + all.length : '');
+    list.replaceChildren();
+    if (!rows.length) list.appendChild(lfSet(lfEl('div', 'admin-empty'), 'Никого нет. Люди появляются здесь, когда пишут в чате или входят в него (при включённых функциях).'));
+    rows.slice(0, chPeopleLimit).forEach(([id, u]) => list.appendChild(chPersonCard(id, u)));
+    const more = document.getElementById('ch-pp-more');
+    more.style.display = rows.length > chPeopleLimit ? '' : 'none';
+  }
+  function chPersonCard(id, u) {
+    const row = lfEl('div', 'log-row'); row.style.marginBottom = '10px';
+    const st = u.status || 'member';
+    const title = lfEl('div', 'l-title');
+    title.appendChild(lfSet(lfEl('span'), (u.name || 'без имени') + (u.username ? ' (@' + u.username + ')' : '') + ' · '));
+    const stEl = lfSet(lfEl('b'), CH_STATUS[st] || st); stEl.style.color = st === 'banned' ? 'var(--live)' : st === 'left' ? 'var(--muted)' : 'var(--green, #2ecc71)';
+    title.appendChild(stEl); row.appendChild(title);
+    const bits = ['сообщений: ' + (u.messages || 0)];
+    if (u.warns) bits.push('предупреждений: ' + u.warns);
+    if (u.joinedAt) bits.push('вошёл ' + lfWhen(u.joinedAt) + (u.how ? ' (' + (CH_HOW[u.how] || u.how).toLowerCase() + ')' : ''));
+    if (u.lastSeen) bits.push('писал ' + lfWhen(u.lastSeen));
+    if (u.lang) bits.push('язык ' + u.lang);
+    if (u.premium) bits.push('Telegram Premium');
+    row.appendChild(lfSet(lfEl('div', 'l-time'), bits.join(' · ') + ' · id ' + id));
+    const actions = lfEl('div'); actions.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;';
+    const mod = async (m, label, extra) => {
+      if (!confirm(label + ': ' + (u.name || id) + '?')) return;
+      const r = await chWorker({ action: 'mod', mod: m, chatId: chSel, userId: id, name: u.name || id, ...(extra || {}) });
+      if (r.ok === false) throw new Error(r.text || 'не вышло');
+      logAction('chat_admin_mod', id, String(u.name || id).slice(0, 40), '—', 'Чаты: ' + (CH_MOD[m] || m) + ' · ' + String((chMetas[chSel] && chMetas[chSel].title) || chSel).slice(0, 30));
+      await chRefresh(true);
+    };
+    const mk = (label, cls, fn) => { const b = lfSet(lfEl('button', 'btn ' + cls), label); b.style.cssText = 'padding:6px 12px; font-size:11.5px;'; b.addEventListener('click', async () => { b.disabled = true; try { await fn(); } catch (err) { alert('Не получилось: ' + (err.message || err)); } b.disabled = false; }); actions.appendChild(b); };
+    if (st === 'banned') mk('Разблокировать', 'btn-gold', () => mod('unban', 'Разблокировать'));
+    else {
+      mk('Мут 1 час', 'btn-line', () => mod('mute', 'Запретить писать на 1 час', { minutes: 60 }));
+      mk('Мут 1 день', 'btn-line', () => mod('mute', 'Запретить писать на сутки', { minutes: 1440 }));
+      mk('Снять мут', 'btn-line', () => mod('unmute', 'Снять мут'));
+      mk('Предупредить', 'btn-line', () => mod('warn', 'Выдать предупреждение'));
+      mk('Выгнать', 'btn-line', () => mod('kick', 'Выгнать из чата (сможет вернуться)'));
+      mk('Заблокировать', 'btn-live', () => mod('ban', 'Заблокировать навсегда'));
+    }
+    row.appendChild(actions);
+    return row;
+  }
+  function chBindStatic() {
+    const evSearch = document.getElementById('ch-ev-search');
+    if (evSearch && !evSearch.dataset.bound) { evSearch.dataset.bound = '1'; evSearch.addEventListener('input', () => chRenderEvents()); }
+    const ppSearch = document.getElementById('ch-pp-search');
+    if (ppSearch && !ppSearch.dataset.bound) { ppSearch.dataset.bound = '1'; ppSearch.addEventListener('input', () => { chPeopleLimit = 100; chRenderPeople(); }); }
+    const evMore = document.getElementById('ch-ev-more');
+    if (evMore && !evMore.dataset.bound) { evMore.dataset.bound = '1'; evMore.addEventListener('click', () => { chEventDays = Math.min(chEventDays + 7, 120); chRefresh(true); }); }
+    const ppMore = document.getElementById('ch-pp-more');
+    if (ppMore && !ppMore.dataset.bound) { ppMore.dataset.bound = '1'; ppMore.addEventListener('click', () => { chPeopleLimit += 100; chRenderPeople(); }); }
+  }
+
   // ===== Приложения: что администрирует этот человек и где он сейчас «сидит» (v5.25) =====
   // Права по приложениям — myPermissions.app_troll / app_videochat (см. APP_DEFS). У кого их
   // несколько — переключатель в меню, выбор помнится на этом устройстве; у кого одно — он
@@ -4811,6 +5230,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     badge_given: 'Выдан значок', badge_revoked: 'Снят значок', badge_created: 'Создан новый значок',
     event_published: 'Опубликован ивент', event_removed: 'Ивент снят с главного экрана',
     full_reset: '⚠️ Полный сброс перед бета-тестом',
+    chat_admin_toggle: 'Чаты: включено/выключено', chat_admin_set: 'Чаты: настройка', chat_admin_mod: 'Чаты: модерация',
     reset_secret_changed: 'Пароль сброса задан/изменён',
     badge_mass_given: 'Значок выдан всем игрокам',
     guests_deleted: 'Удалены все гостевые аккаунты',
@@ -8281,6 +8701,28 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     ].join('\n'));
   }
 
+  // Чаты (v5.37): список подключённых чатов и сводка по одному — читает через Worker (adminDbRead), только Супердоступ
+  let termChatIndex = [];
+  async function termCmdChats() {
+    const ids = await adminDbRead('chatAdmin', true);
+    const list = Object.keys(ids && typeof ids === 'object' ? ids : {}).filter((k) => CH_ID_RE.test(k));
+    termChatIndex = list;
+    if (!list.length) { termPrint('Чатов нет. Добавьте бота в чат, сделайте администратором и отправьте там /admin_on.', 'dim'); return; }
+    const metas = await Promise.all(list.map((id) => adminDbRead('chatAdmin/' + id + '/meta', false).catch(() => null)));
+    termPrint(list.map((id, i) => ' ' + (i + 1) + ') ' + termClean((metas[i] && metas[i].title) || id, 40) + ' · ' + (metas[i] && metas[i].enabled ? 'включён' : 'выключен') + ' · ' + id).join('\n'));
+  }
+  async function termCmdChatStats(args) {
+    const n = Number(args[0]);
+    const id = Number.isInteger(n) && n >= 1 && n <= termChatIndex.length ? termChatIndex[n - 1] : (CH_ID_RE.test(args[0] || '') ? args[0] : null);
+    if (!id) throw new Error('chatstats <номер из chats или id чата>');
+    const [daily, links] = await Promise.all([adminDbRead('chatAdmin/' + id + '/daily', false), adminDbRead('chatAdmin/' + id + '/links', false)]);
+    const d = daily && typeof daily === 'object' ? daily : {};
+    const sum = (days, key) => { let s = 0; for (let i = 0; i < days; i++) { const r = d[chDayKey(Date.now() - i * 86400000)]; if (r) s += Number(r[key]) || 0; } return s; };
+    const top = Object.values(links && typeof links === 'object' ? links : {}).filter((l) => l && l.joins).sort((a, b) => b.joins - a.joins).slice(0, 3).map((l) => '«' + termClean(l.name || '—', 30) + '» ' + l.joins);
+    termPrint(['Сегодня: +' + sum(1, 'joins') + ' / −' + sum(1, 'leaves') + ', сообщений ' + sum(1, 'messages'), '7 дней:  +' + sum(7, 'joins') + ' / −' + sum(7, 'leaves') + ', сообщений ' + sum(7, 'messages'),
+      '30 дней: +' + sum(30, 'joins') + ' / −' + sum(30, 'leaves') + ', сообщений ' + sum(30, 'messages'), top.length ? 'Ссылки: ' + top.join(', ') : 'Ссылки: пока нет входов по ним'].join('\n'));
+  }
+
   const TERM_COMMANDS = new Map([
     ['help',        { usage: 'help',                                    desc: 'список команд',                                    allowed: () => true,                                   run: () => termCmdHelp() }],
     ['find',        { usage: 'find <telegramId|PLR-XXXXXX>',            desc: 'найти игрока',                                     allowed: () => true,                                   check: (args) => { termParseUserArg(args[0]); }, run: termCmdFind }],
@@ -8294,6 +8736,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     ['online',      { usage: 'online',                                  desc: 'сколько игроков онлайн',                           allowed: () => true,                                   run: termCmdOnline }],
     ['maintenance', { usage: 'maintenance on|off [сообщение]',          desc: 'режим обслуживания',                               allowed: () => canManageDanger() || myRole === 'superadmin', check: (args) => { termOnOff(args[0]); }, run: termCmdMaintenance }],
     ['lockdown',    { usage: 'lockdown on|off [сообщение]',             desc: 'аварийный режим (только Супердоступ)',             allowed: () => myRole === 'superadmin',                check: (args) => { termOnOff(args[0]); }, run: termCmdLockdown }],
+    ['chats',       { usage: 'chats',                                   desc: 'подключённые Telegram-чаты (Супердоступ)',          allowed: () => canManageChats(),                       run: termCmdChats }],
+    ['chatstats',   { usage: 'chatstats <номер|id>',                    desc: 'статистика чата: входы, выходы, сообщения',        allowed: () => canManageChats(),                       check: (args) => { if (!args[0]) throw new Error('chatstats <номер из chats или id чата>'); }, run: termCmdChatStats }],
     ['whoami',      { usage: 'whoami',                                  desc: 'кто я и что мне можно',                            allowed: () => true,                                   run: termCmdWhoami }],
     ['clear',       { usage: 'clear',                                   desc: 'очистить экран',                                   allowed: () => true,                                   run: () => { document.getElementById('term-out').textContent = ''; } }],
   ]);

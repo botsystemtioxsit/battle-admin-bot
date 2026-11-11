@@ -20,7 +20,6 @@
 
 import { getAdminAccessToken, resetAdminTokenCache } from './firebase-admin.mjs';
 import { createChatAdmin, chatKeyOf, userKeyOf, cleanText as chatCleanText, CFG_KEYS } from './chat-admin.mjs';
-import { createMailer } from './mailer.mjs';
 
 const FIREBASE_DB_URL = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const GITHUB_OWNER = 'botsystemtioxsit';
@@ -1195,60 +1194,6 @@ async function getChatAdmin(env, origin) {
 }
 
 
-// Рассылки (src/mailer.mjs): регулярные сообщения в чаты от главного бота и добавленных ботов. Токены добавленных ботов лежат в базе ТОЛЬКО
-// зашифрованными (AES-GCM, ключ выводится из BOT_TOKEN — новых секретов заводить не нужно; сменили BOT_TOKEN — ботов добавляют заново).
-const MAILER_DB_RE = /^mailer(\/[A-Za-z0-9_-]{1,64}){0,8}$/;
-const bytesToB64 = (u8) => btoa(String.fromCharCode(...u8)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const b64ToBytes = (s) => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-async function mailerKey(env) {
-  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(env.BOT_TOKEN) + '|mailer-bots-v1'));
-  return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-async function mailerSeal(env, text) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await mailerKey(env), new TextEncoder().encode(String(text))));
-  return 'v1.' + bytesToB64(iv) + '.' + bytesToB64(ct);
-}
-async function mailerUnseal(env, sealed) {
-  const m = /^v1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(String(sealed || ''));
-  if (!m) throw new Error('не тот формат');
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(m[1]) }, await mailerKey(env), b64ToBytes(m[2]));
-  return new TextDecoder().decode(pt);
-}
-async function tgApiWithToken(token, method, payload, timeoutMs = 8000) {
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload || {}), signal: AbortSignal.timeout(timeoutMs) });
-    return await res.json().catch(() => ({ ok: false, description: 'ответ не JSON' }));
-  } catch (err) {
-    return { ok: false, description: String((err && err.message) || err) };
-  }
-}
-let mailerHolder = { key: null, inst: null };
-function getMailer(env) {
-  const key = String(env.BOT_TOKEN);
-  if (mailerHolder.key === key && mailerHolder.inst) return mailerHolder.inst;
-  const inst = createMailer({
-    tg: (method, payload) => tgApi(env, method, payload),
-    tgWithToken: (token, method, payload) => tgApiWithToken(token, method, payload),
-    mainBot: async () => { const i = await getBotInfo(env); return { id: i && i.id, username: i && i.username }; },
-    seal: (text) => mailerSeal(env, text),
-    unseal: (sealed) => mailerUnseal(env, sealed),
-    dbGet: async (path, o) => {
-      if (!MAILER_DB_RE.test(path) && path !== 'chatAdmin/_global/chats') throw new Error('недопустимый путь');
-      const res = await dbReadAdmin(env, '/' + path + '.json', !!(o && o.shallow));
-      if (!res.ok) throw new Error('Firebase GET ' + res.status);
-      return res.json();
-    },
-    dbUpdate: async (updates) => {
-      for (const p of Object.keys(updates)) if (!MAILER_DB_RE.test(p)) throw new Error('недопустимый путь записи');
-      const res = await dbWrite(env, '/.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
-      if (!res.ok) throw new Error('Firebase PATCH ' + res.status);
-    },
-  });
-  mailerHolder = { key, inst };
-  return inst;
-}
-
 async function handleTelegramUpdate(env, update, origin) {
   if (update && update.chat_member) {
     try { await (await getChatAdmin(env, origin)).onChatMember(update); } catch (err) { console.error('chat_member:', err && err.message); }
@@ -1545,11 +1490,9 @@ async function restoreCode(env, repo, files) {
 
 export default {
   // Раз в минуту (wrangler.toml → [triggers] crons): выгнать новичков, не нажавших «Я не бот» вовремя (src/chat-admin.mjs, sweepAll),
-  // и отправить то, что пора, из рассылок (src/mailer.mjs, tick)
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
       try { await (await getChatAdmin(env, null)).sweepAll(); } catch (err) { console.error('captcha sweep:', err && err.message); }
-      try { await getMailer(env).tick(); } catch (err) { console.error('mailer tick:', err && err.message); }
     })());
   },
   async fetch(request, env) {
@@ -1994,36 +1937,6 @@ export default {
           const r = await ca.act(Number(chatKey), mod, { id: uid, name: chatCleanText(body.name, 60) || uid }, { seconds: minutes * 60, reason: chatCleanText(body.reason, 200) }, { id: verified.userId, name: 'панель' });
           return jsonResponse(r);
         }
-        return jsonResponse({ error: 'неизвестное действие' }, 400);
-      } catch (err) {
-        return jsonResponse({ error: 'Не вышло: ' + String((err && err.message) || err).slice(0, 120) }, 502);
-      }
-    }
-
-    // Рассылки, действия из панели (только Супердоступ). Всё читает и пишет Worker: токены добавленных ботов в базе зашифрованы и наружу не отдаются.
-    if (url.pathname === '/mailer' && request.method === 'POST') {
-      let body;
-      try {
-        body = await request.json();
-      } catch {
-        return jsonResponse({ error: 'битый JSON' }, 400);
-      }
-      const verified = await verifyIdentity(body, env);
-      if (!verified.ok) return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
-      const requesterRole = await getRole(verified.userId);
-      if (!isSuperadmin(env, verified.userId, requesterRole)) return jsonResponse({ error: 'Только superadmin' }, 403);
-      const action = String(body.action || '');
-      const ml = getMailer(env);
-      try {
-        if (action === 'list') return jsonResponse(await ml.view());
-        if (action === 'log') return jsonResponse(await ml.recentLog(Math.min(Math.max(Number(body.limit) || 40, 1), 100)));
-        if (action === 'bot-add') return jsonResponse(await ml.addBot(body.token));
-        if (action === 'bot-remove') return jsonResponse(await ml.removeBot(String(body.id || '')));
-        if (action === 'save') return jsonResponse(await ml.save(body.campaign, body.id ? String(body.id) : null));
-        if (action === 'set-status') return jsonResponse(await ml.setStatus(String(body.id || ''), String(body.status || '')));
-        if (action === 'delete') return jsonResponse(await ml.remove(String(body.id || '')));
-        if (action === 'send-now') return jsonResponse(await ml.sendNow(String(body.id || ''), body.chatId));
-        if (action === 'check') return jsonResponse(await ml.check(String(body.id || '')));
         return jsonResponse({ error: 'неизвестное действие' }, 400);
       } catch (err) {
         return jsonResponse({ error: 'Не вышло: ' + String((err && err.message) || err).slice(0, 120) }, 502);

@@ -41,7 +41,9 @@ globalThis.fetch = async (input, init = {}) => {
     if (method === 'GET') return new Response(JSON.stringify(dbGet(path) ?? null));
     if (!authed) return new Response('{"error":"Permission denied"}', { status: 401 });
     if (method === 'PATCH' && path === '') { const u = JSON.parse(init.body); dbWrites.push(u); for (const [p, v] of Object.entries(u)) setPath(p, v); return new Response(init.body); }
+    if (method === 'PATCH' && path !== '') { for (const [k, v] of Object.entries(JSON.parse(init.body))) setPath(path + '/' + k, v); return new Response(init.body); }
     if (method === 'PUT') { setPath(path, JSON.parse(init.body)); return new Response(init.body); }
+    if (method === 'DELETE') { setPath(path, null); return new Response('null'); }
   }
   const m = /^https:\/\/api\.telegram\.org\/bot[^/]+\/(\w+)$/.exec(url.href);
   if (m) {
@@ -133,6 +135,29 @@ r = await panel({ initData: initData(100), action: 'mod', mod: 'ban', chatId: CH
 t('/chat-admin mod: плохой id — 400', r.status === 400, r);
 r = await panel({ initData: initData(100), action: 'mod', mod: 'ban', chatId: CHAT, userId: String(OWNER) });
 t('/chat-admin mod: владельца банить нельзя', r.json.ok === false && !tg.some((c) => c.method === 'banChatMember'), r);
+// ----- бан везде -----
+const GV = '4000000001';
+db.users[GV] = { firstName: 'Вася', status: 'active', role: 'user' };
+r = await panel({ initData: initData(200), action: 'gban', userId: GV, reason: 'x' });
+t('бан везде: админ (не владелец) — 403 и ничего не изменено', r.status === 403 && db.users[GV].status === 'active' && !db.videochat, r);
+r = await panel({ initData: initData(100), action: 'gban', userId: GV, name: 'Вася', username: 'vasya', reason: 'реклама казино' });
+const gbans = tg.filter((c) => c.method === 'banChatMember' && c.payload.user_id === Number(GV));
+t('бан везде: заблокирован во включённом чате', r.json.ok === true && gbans.length === 1 && gbans[0].payload.chat_id === CHAT, { r, gbans });
+t('бан везде: в игре статус banned, в ВидеоЧате запрет без срока', db.users[GV].status === 'banned' && db.videochat.bans[GV].until === 0 && db.videochat.bans[GV].reason === 'реклама казино', { u: db.users[GV], vc: db.videochat });
+t('бан везде: запись с причиной и кто поставил', db.chatAdmin._global.bans[GV].reason === 'реклама казино' && db.chatAdmin._global.bans[GV].by === OWNER && db.chatAdmin._global.bans[GV].game === 'banned', db.chatAdmin._global);
+// вход человека из списка — не впускаем (бот видит chat_member)
+tg.length = 0;
+await hook({ update_id: 9, chat_member: { chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' }, from: { id: Number(GV), first_name: 'Вася' }, date: Math.floor(Date.now() / 1000),
+  old_chat_member: { status: 'left', user: { id: Number(GV), first_name: 'Вася' } }, new_chat_member: { status: 'member', user: { id: Number(GV), first_name: 'Вася' } } } });
+t('вход человека из «бана везде»: бот банит и ничего не приветствует', tg.some((c) => c.method === 'banChatMember' && c.payload.user_id === Number(GV)) && !tg.some((c) => c.method === 'sendMessage'), tg);
+r = await panel({ initData: initData(100), action: 'gban', userId: '200' });
+t('бан везде: админа проекта нельзя', r.json.ok === false && db.users['200'].role === 'admin' && db.users['200'].status !== 'banned', r);
+r = await panel({ initData: initData(100), action: 'gban', userId: String(OWNER) });
+t('бан везде: себя (владельца) нельзя', r.json.ok === false, r);
+r = await panel({ initData: initData(100), action: 'gban', userId: '../x' });
+t('бан везде: плохой id — 400', r.status === 400, r);
+r = await panel({ initData: initData(100), action: 'ungban', userId: GV });
+t('разбан везде: игра снова active, ВидеоЧат открыт, запись убрана', r.json.ok === true && db.users[GV].status === 'active' && !(db.videochat.bans || {})[GV] && !(db.chatAdmin._global.bans || {})[GV], { r, u: db.users[GV], vc: db.videochat });
 r = await panel({ initData: initData(100), action: 'disable', chatId: CHAT });
 t('/chat-admin disable', r.json.ok === true && db.chatAdmin[KEY].meta.enabled === false, r);
 r = await panel({ initData: initData(100), action: 'enable', chatId: '../../users' });

@@ -1170,6 +1170,20 @@ async function getChatAdmin(env, origin) {
       const res = await dbWrite(env, '/.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
       if (!res.ok) throw new Error('Firebase PATCH ' + res.status);
     },
+    // «бан везде»: игра и ВидеоЧат. Профиль, которого нет, не создаём (в игре на него смотрят как на настоящий аккаунт).
+    roleOf: (uid) => getRole(uid),
+    gameBan: async (uid) => {
+      if (!(await userExists(uid))) return 'none';
+      if ((await getUserField(uid, 'status')) === 'banned') return 'already';
+      await setStatus(env, uid, 'banned', null);
+      return 'banned';
+    },
+    gameUnban: async (uid) => { if ((await getUserField(uid, 'status')) === 'banned') await setStatus(env, uid, 'active', null); },
+    videochatBan: async (uid, reason, by) => {
+      const res = await dbWrite(env, `/videochat/bans/${encodeURIComponent(uid)}.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ until: 0, reason: chatCleanText(reason, 200) || 'Бан везде', at: Date.now(), by: chatCleanText(by, 60) || 'панель' }) });
+      if (!res.ok) throw new Error('Firebase PUT ' + res.status);
+    },
+    videochatUnban: async (uid) => { await dbWrite(env, `/videochat/bans/${encodeURIComponent(uid)}.json`, { method: 'DELETE' }); },
     owners: ownerIds(env),
     botId: info && info.id ? String(info.id) : null,
     botUsername: info && info.username ? info.username : null,
@@ -1875,6 +1889,14 @@ export default {
           }
           return jsonResponse(out);
         }
+        if (action === 'gban' || action === 'ungban') {
+          const uid = userKeyOf(body.userId);
+          if (!uid) return jsonResponse({ error: 'нужен userId (цифры)' }, 400);
+          const actor = { id: verified.userId, name: 'панель' };
+          return jsonResponse(action === 'gban'
+            ? await ca.globalBan({ id: uid, name: chatCleanText(body.name, 60), username: chatCleanText(body.username, 40) }, { reason: chatCleanText(body.reason, 200) }, actor)
+            : await ca.globalUnban({ id: uid }, actor));
+        }
         if (!chatKey) return jsonResponse({ error: 'нужен chatId' }, 400);
         if (action === 'enable') {
           const info = await tgApi(env, 'getChat', { chat_id: Number(chatKey) });
@@ -1884,9 +1906,8 @@ export default {
           return jsonResponse({ ok: true, botAdmin });
         }
         if (action === 'disable') {
-          const res = await dbWrite(env, '/.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [`chatAdmin/${chatKey}/meta/enabled`]: false }) });
-          ca.invalidate(chatKey);
-          return res.ok ? jsonResponse({ ok: true }) : jsonResponse({ error: 'Firebase отказал: HTTP ' + res.status }, 502);
+          await ca.disable(chatKey);
+          return jsonResponse({ ok: true });
         }
         if (action === 'set') {
           const key = String(body.key || '');

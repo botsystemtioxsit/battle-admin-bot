@@ -9,11 +9,15 @@
 //   daily/<день>          счётчики: joins, leaves, bans, messages, how_<способ>, hr/<час UTC>
 //   users/<id>            {name, username?, lang?, premium?, joinedAt?, how?, linkId?, status, lastSeen, messages, warns}
 //   links/<id>            {name, creator?, joins, lastJoin} — пригласительные ссылки (по хешу; сама ссылка НЕ хранится: по ней может войти кто угодно)
+//   _global/bans/<id>     «бан везде»: {at, by, byName, reason, name, username?, game, videochat, chats:{ok,fail}} — человек заблокирован во всех
+//                         включённых чатах (пре-бан: не может зайти), в игре (users/<id>/status) и в ВидеоЧате (videochat/bans/<id>)
+//   _global/chats/<id>    список включённых чатов (чтобы «бан везде» не перебирал всю базу)
 // Текст сообщений людей НЕ сохраняется — только счётчики.
 // «Где» человек зашёл Telegram боту не сообщает (адреса и места нет): известно только КАК — по пригласительной ссылке (какой),
 // его добавил участник, заявка, папка чатов или сам (поиск / публичная ссылка).
 
 export const DAY_MS = 86_400_000;
+const GLOBAL = 'chatAdmin/_global';
 const EVENTS_KEEP_DAYS = 120;
 const DAILY_KEEP_DAYS = 800;
 const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin' });
@@ -169,6 +173,7 @@ export function createChatAdmin(deps) {
   const metaCache = new Map(); // chatKey → { at, meta }
   const adminCache = new Map(); // chatKey:userId → { at, ok }
   const noticeAt = new Map(); // chatKey → мс последнего замечания про ссылки
+  let bannedCache = { at: 0, set: new Set() }; // id людей из «бана везде», раз в минуту перечитывается
   const META_TTL = 2 * 60 * 1000;
 
   const say = (chatId, text, extra) => deps.tg('sendMessage', { chat_id: chatId, text: String(text).slice(0, 4000), ...(extra || {}) });
@@ -197,6 +202,93 @@ export function createChatAdmin(deps) {
     const ok = st === 'creator' || st === 'administrator';
     adminCache.set(k, { at: now(), ok });
     return ok;
+  }
+
+  // ----- «бан везде» -----
+  async function bannedSet(fresh = false) {
+    if (!fresh && now() - bannedCache.at < 60_000) return bannedCache.set;
+    const keys = await deps.dbGet(`${GLOBAL}/bans`, { shallow: true }).catch(() => undefined);
+    if (keys === undefined) return bannedCache.set; // база не ответила — остаёмся при прежнем списке
+    bannedCache = { at: now(), set: new Set(Object.keys(keys || {}).filter((k) => userKeyOf(k))) };
+    return bannedCache.set;
+  }
+  async function listEnabledChats() {
+    const idx = await deps.dbGet(`${GLOBAL}/chats`).catch(() => null);
+    return Object.keys(idx && typeof idx === 'object' ? idx : {}).filter((k) => chatKeyOf(k)).slice(0, 40);
+  }
+  // по пять запросов к Telegram одновременно: у Worker'а лимит подзапросов на одно обращение
+  async function eachChat(chats, fn) {
+    const out = [];
+    for (let i = 0; i < chats.length; i += 5) await Promise.all(chats.slice(i, i + 5).map(async (c) => { out.push(await fn(c)); }));
+    return out;
+  }
+  function globalEvent(chatKey, at, action, actor, target, details) {
+    return [`chatAdmin/${chatKey}/events/${dayKey(at)}/${eventId(at)}`, { t: 'mod', at, action, id: actor.id ? String(actor.id) : null, name: cleanText(actor.name, 60), target: { id: target.id, name: cleanText(target.name, 60) }, ...(details ? { details: cleanText(details, 200) } : {}) }];
+  }
+  // Человек из списка «бан везде» появился в чате (вошёл или написал) — блокируем сразу
+  async function blockBanned(chatId, user) {
+    const chatKey = chatKeyOf(chatId);
+    const r = await deps.tg('banChatMember', { chat_id: chatId, user_id: Number(user.id) });
+    const at = now();
+    if (chatKey) { const [p, v] = globalEvent(chatKey, at, r.ok ? 'gban_block' : 'gban_block_failed', { id: null, name: 'Бан везде' }, { id: String(user.id), name: displayName(user) }, r.ok ? '' : explainTgError(r.description)); await deps.dbUpdate({ [p]: v }).catch(() => {}); }
+    return r.ok;
+  }
+
+  // Забанить человека везде: во всех включённых чатах (в том числе тех, где его ещё нет — он не сможет зайти), в игре и в ВидеоЧате.
+  // Возвращает { ok, text, chats:[{chat, ok, error}], game, videochat }.
+  async function globalBan(target, opts = {}, actor = { id: null, name: 'панель' }) {
+    const uid = userKeyOf(target && target.id);
+    if (!uid || uid.length < 5) return { ok: false, text: 'Нужен числовой Telegram-id человека (5–15 цифр).' };
+    if (owners.has(uid) || uid === String(deps.botId)) return { ok: false, text: 'Это владелец проекта или сам бот — нельзя.' };
+    const role = deps.roleOf ? await deps.roleOf(uid).catch(() => null) : null;
+    if (role === 'admin' || role === 'superadmin') return { ok: false, text: 'Это админ проекта — сначала снимите ему роль.' };
+    const reason = cleanText(opts.reason, 200);
+    const name = cleanText(target.name, 60) || uid;
+    const username = target.username ? cleanText(target.username, 40) : '';
+    const chats = await listEnabledChats();
+    const results = await eachChat(chats, async (c) => {
+      const r = await deps.tg('banChatMember', { chat_id: Number(c), user_id: Number(uid) });
+      return { chat: c, ok: !!r.ok, error: r.ok ? null : explainTgError(r.description) };
+    });
+    let game = 'none';
+    if (deps.gameBan) { try { game = await deps.gameBan(uid); } catch { game = 'error'; } }
+    let videochat = false;
+    if (deps.videochatBan) { try { await deps.videochatBan(uid, reason, actor.name); videochat = true; } catch { videochat = false; } }
+    const existing = await deps.dbGet(`${GLOBAL}/bans/${uid}`).catch(() => null);
+    const at = now();
+    const okN = results.filter((r) => r.ok).length;
+    const rec = { at: existing && existing.at ? existing.at : at, by: actor.id ? String(actor.id) : null, byName: cleanText(actor.name, 60), reason, name,
+      game: existing && existing.game === 'banned' ? 'banned' : game, videochat, chats: { ok: okN, fail: results.length - okN } };
+    if (username) rec.username = username;
+    const w = { [`${GLOBAL}/bans/${uid}`]: rec };
+    for (const r of results.filter((x) => x.ok)) { const [p, v] = globalEvent(r.chat, at, 'gban', actor, { id: uid, name }, reason); w[p] = v; }
+    await deps.dbUpdate(w);
+    bannedCache.set.add(uid);
+    const gameText = { banned: 'в игре заблокирован', already: 'в игре уже был заблокирован', none: 'в игре его нет (профиля не найдено)', error: 'в игре не получилось' }[rec.game] || '';
+    const failed = results.filter((r) => !r.ok);
+    return { ok: true, chats: results, game: rec.game, videochat,
+      text: `🚫 ${name} заблокирован везде: чатов ${okN} из ${results.length}, ${gameText}, ВидеоЧат ${videochat ? 'закрыт' : 'не получилось'}.` + (failed.length ? '\n⚠️ В ' + failed.length + ' чат(ах) не вышло: ' + [...new Set(failed.map((f) => f.error))].join('; ') : '') + (results.length === 0 ? '\nВключённых чатов пока нет — бан действует только в игре и ВидеоЧате.' : '') };
+  }
+  async function globalUnban(target, actor = { id: null, name: 'панель' }) {
+    const uid = userKeyOf(target && target.id);
+    if (!uid) return { ok: false, text: 'Нужен числовой Telegram-id.' };
+    const rec = await deps.dbGet(`${GLOBAL}/bans/${uid}`).catch(() => null);
+    if (!rec) return { ok: false, text: 'Этого человека нет в списке «бан везде».' };
+    const chats = await listEnabledChats();
+    const results = await eachChat(chats, async (c) => {
+      const r = await deps.tg('unbanChatMember', { chat_id: Number(c), user_id: Number(uid), only_if_banned: true });
+      return { chat: c, ok: !!r.ok };
+    });
+    // в игре снимаем бан, только если его ставили мы (а не он был забанен за другое до этого)
+    if (rec.game === 'banned' && deps.gameUnban) { try { await deps.gameUnban(uid); } catch { /* останется — снимут вручную */ } }
+    if (deps.videochatUnban) { try { await deps.videochatUnban(uid); } catch { /* то же */ } }
+    const at = now();
+    const name = cleanText(rec.name, 60) || uid;
+    const w = { [`${GLOBAL}/bans/${uid}`]: null };
+    for (const r of results.filter((x) => x.ok)) { const [p, v] = globalEvent(r.chat, at, 'ungban', actor, { id: uid, name }, ''); w[p] = v; }
+    await deps.dbUpdate(w);
+    bannedCache.set.delete(uid);
+    return { ok: true, text: `✅ ${name}: бан везде снят (чатов ${results.filter((r) => r.ok).length}${rec.game === 'banned' ? ', игра разблокирована' : ''}).` };
   }
 
   // ----- запись событий -----
@@ -232,8 +324,9 @@ export function createChatAdmin(deps) {
     const meta = await getMeta(chatKey);
     if (!meta || !meta.enabled) return;
     const ev = describeChatMember(update);
-    if (!ev || !userKeyOf(ev.user.id) || ev.user.is_bot && ev.kind !== 'join') return;
-    if (ev.user.is_bot && String(ev.user.id) === String(deps.botId)) return;
+    if (!ev || !userKeyOf(ev.user.id)) return;
+    if (ev.user.is_bot && (ev.kind !== 'join' || String(ev.user.id) === String(deps.botId))) return;
+    if (ev.kind === 'join' && (await bannedSet()).has(String(ev.user.id))) { await blockBanned(chat.id, ev.user); return; } // «бан везде»: не впускаем, статистику не пачкаем
     await recordEvent(chatKey, ev);
     if (ev.kind === 'join' && cfgOf(meta).welcome && !ev.user.is_bot) {
       const cfg = cfgOf(meta);
@@ -426,6 +519,7 @@ export function createChatAdmin(deps) {
     '/ban, /unban, /kick, /mute [мин|2h|1d], /unmute — ответом на сообщение (или по числовому id)',
     '/warn, /unwarn — предупреждения · /del — удалить сообщение · /pin, /unpin',
     '/settings, /set, /setwelcome, /setrules — настройки · /rules — правила',
+    'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
     'Видеозвонки: /call, /connect',
   ].join('\n');
 
@@ -452,13 +546,18 @@ export function createChatAdmin(deps) {
     return { ok: true, text: `Готово: ${key} = ${v === true ? 'включено' : v === false ? 'выключено' : v}.` };
   }
 
+  async function disable(chatKey) {
+    await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: false, [`${GLOBAL}/chats/${chatKey}`]: null });
+    metaCache.delete(chatKey);
+  }
   async function enable(chat, from) {
     const chatKey = chatKeyOf(chat.id);
     const botSt = await memberStatus(chat.id, deps.botId);
     const old = await getMeta(chatKey, true);
     const meta = { enabled: true, title: cleanText(chat.title, 80), type: chat.type, enabledAt: old && old.enabledAt ? old.enabledAt : now(), enabledBy: String(from.id), botStatus: botSt || 'unknown' };
     await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: true, [`chatAdmin/${chatKey}/meta/title`]: meta.title, [`chatAdmin/${chatKey}/meta/type`]: meta.type,
-      [`chatAdmin/${chatKey}/meta/enabledAt`]: meta.enabledAt, [`chatAdmin/${chatKey}/meta/enabledBy`]: meta.enabledBy, [`chatAdmin/${chatKey}/meta/botStatus`]: meta.botStatus });
+      [`chatAdmin/${chatKey}/meta/enabledAt`]: meta.enabledAt, [`chatAdmin/${chatKey}/meta/enabledBy`]: meta.enabledBy, [`chatAdmin/${chatKey}/meta/botStatus`]: meta.botStatus,
+      [`${GLOBAL}/chats/${chatKey}`]: { title: meta.title } });
     metaCache.delete(chatKey);
     return botSt === 'administrator' || botSt === 'creator';
   }
@@ -477,8 +576,7 @@ export function createChatAdmin(deps) {
     if (cmd && (cmd.name === 'admin_on' || cmd.name === 'admin_off')) {
       if (!fromId || !owners.has(fromId)) return true; // чужим не отвечаем
       if (cmd.name === 'admin_off') {
-        await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: false });
-        metaCache.delete(chatKey);
+        await disable(chatKey);
         await say(chat.id, '⏹ Админ-функции для этого чата выключены. Собранная статистика сохранена.');
         return true;
       }
@@ -492,6 +590,14 @@ export function createChatAdmin(deps) {
     const meta = await getMeta(chatKey);
     if (!meta || !meta.enabled) return false;
     const cfg = cfgOf(meta);
+
+    // «бан везде»: человек из списка вошёл (служебное сообщение) или написал — блокируем и убираем сообщение
+    const banned = await bannedSet();
+    if (banned.size) {
+      const bad = (msg.new_chat_members || []).filter((u) => banned.has(String(u.id)));
+      if (bad.length) { for (const u of bad) await blockBanned(chat.id, u); await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id }); return true; }
+      if (fromId && banned.has(fromId) && !msg.from.is_bot) { await blockBanned(chat.id, msg.from); await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id }); return true; }
+    }
 
     // служебные сообщения (вошёл/вышел) — убрать, если включено
     if (cfg.cleanup && (msg.new_chat_members || msg.left_chat_member)) { await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id }); return true; }
@@ -522,12 +628,21 @@ export function createChatAdmin(deps) {
 
     if (!cmd) return false;
     const publicCmds = ['rules', 'help'];
-    const adminCmds = ['stats', 'top', 'joins', 'ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'del', 'pin', 'unpin', 'settings', 'set', 'setwelcome', 'setrules'];
+    const adminCmds = ['gban', 'ungban', 'stats', 'top', 'joins', 'ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'del', 'pin', 'unpin', 'settings', 'set', 'setwelcome', 'setrules'];
     if (!publicCmds.includes(cmd.name) && !adminCmds.includes(cmd.name)) return false; // чужая команда (например /call) — дальше по цепочке
     if (cmd.name === 'rules') { await say(chat.id, cfg.rules ? '📜 Правила чата\n' + cfg.rules : 'Правила чата ещё не заданы (админ: /setrules текст).'); return true; }
     if (cmd.name === 'help') { await say(chat.id, HELP); return true; }
     if (!(await isChatAdmin(chat.id, fromId))) { await say(chat.id, 'Эта команда — для администраторов чата.'); return true; }
     const actor = { id: fromId, name: displayName(msg.from) };
+
+    if (cmd.name === 'gban' || cmd.name === 'ungban') {
+      if (!owners.has(fromId)) { await say(chat.id, 'Бан и разбан везде — только для владельца проекта.'); return true; }
+      const tg = await resolveTarget(msg, cmd.args);
+      if (!tg) { await say(chat.id, 'Ответьте этой командой на сообщение человека (или укажите его числовой id).'); return true; }
+      const r = cmd.name === 'gban' ? await globalBan({ id: tg.id, name: tg.name, username: tg.user && tg.user.username }, { reason: tg.rest }, actor) : await globalUnban({ id: tg.id }, actor);
+      await say(chat.id, r.text);
+      return true;
+    }
 
     if (cmd.name === 'stats') { await say(chat.id, await statsText(chat.id, chatKey, chat.title, cfg.tz)); return true; }
     if (cmd.name === 'top') { await say(chat.id, await topText(chatKey)); return true; }
@@ -567,5 +682,5 @@ export function createChatAdmin(deps) {
     return true;
   }
 
-  return { onMessage, onChatMember, onMyChatMember, act, applySetting, enable, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
+  return { onMessage, onChatMember, onMyChatMember, act, applySetting, enable, disable, globalBan, globalUnban, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
 }

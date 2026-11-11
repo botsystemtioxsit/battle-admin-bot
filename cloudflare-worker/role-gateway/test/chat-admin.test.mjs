@@ -32,9 +32,10 @@ const CHAT = -1001234567890;
 const KEY = String(CHAT);
 const NOW = Date.parse('2026-11-11T12:00:00Z');
 
-function makeEnv({ owners = [OWNER], statuses = {}, tgOverrides = {} } = {}) {
+function makeEnv({ owners = [OWNER], statuses = {}, tgOverrides = {}, roles = {}, gameState = 'banned' } = {}) {
   const db = makeDb();
   const calls = [];
+  const side = { gameBan: [], gameUnban: [], vcBan: [], vcUnban: [] };
   const sent = () => calls.filter((c) => c.method === 'sendMessage').map((c) => c.payload.text);
   const st = { [OWNER]: 'creator', [ADMIN]: 'administrator', [USER]: 'member', [VICTIM]: 'member', [BOT]: 'administrator', ...statuses };
   const deps = {
@@ -48,8 +49,11 @@ function makeEnv({ owners = [OWNER], statuses = {}, tgOverrides = {} } = {}) {
     },
     dbGet: (p, o) => db.dbGet(p, o), dbUpdate: (u) => db.dbUpdate(u),
     owners: new Set(owners), botId: BOT, botUsername: 'my_bot', now: () => NOW,
+    roleOf: async (uid) => roles[uid] || null,
+    gameBan: async (uid) => { side.gameBan.push(uid); return gameState; }, gameUnban: async (uid) => { side.gameUnban.push(uid); },
+    videochatBan: async (uid, reason, by) => { side.vcBan.push({ uid, reason, by }); }, videochatUnban: async (uid) => { side.vcUnban.push(uid); },
   };
-  return { db, calls, sent, deps, ca: createChatAdmin(deps) };
+  return { db, calls, sent, side, deps, ca: createChatAdmin(deps) };
 }
 const msg = (from, text, extra = {}) => ({ message_id: 1, chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' }, from: { id: Number(from), first_name: 'U' + from }, date: NOW / 1000, text, ...extra });
 const reply = (to) => ({ reply_to_message: { message_id: 77, from: { id: Number(to), first_name: 'V' + to }, text: 'секретный текст сообщения' } });
@@ -289,6 +293,100 @@ t('/stats: участники, сегодня, 7 дней, способы, сс�
   await e.ca.onChatMember(same({ invite_link: { invite_link: 'https://t.me/+AAAA', name: '../../users/1' } }));
   const paths = e.db.writes.flatMap((u) => Object.keys(u));
   t('все пути записи — только chatAdmin/<безопасные звенья>', paths.every((p) => KEY_RE.test(p)), paths.filter((p) => !KEY_RE.test(p)));
+}
+
+
+// ---------- «бан везде» ----------
+const GV = '4000000001';
+const CHAT2 = -1009876543210, KEY2 = String(CHAT2);
+async function withChats(envOpts) {
+  const e = await enabled({}, envOpts);
+  e.db.root.chatAdmin._global = { chats: { [KEY]: { title: 'Наш чат' }, [KEY2]: { title: 'Второй чат' } } };
+  return e;
+}
+{
+  const e = await withChats();
+  let r = await e.ca.globalBan({ id: GV, name: 'Вася <b>', username: 'vasya' }, { reason: 'спам и реклама' }, { id: OWNER, name: 'Владелец' });
+  const bans = e.calls.filter((c) => c.method === 'banChatMember');
+  t('бан везде: заблокирован в обоих включённых чатах', bans.length === 2 && bans.every((c) => c.payload.user_id === Number(GV)) && new Set(bans.map((c) => c.payload.chat_id)).size === 2, e.calls);
+  t('бан везде: игра и ВидеоЧат закрыты', e.side.gameBan[0] === GV && e.side.vcBan[0].uid === GV && e.side.vcBan[0].reason === 'спам и реклама', e.side);
+  const rec = e.db.root.chatAdmin._global.bans[GV];
+  t('бан везде: запись с причиной, кто поставил, итогами', rec && rec.reason === 'спам и реклама' && rec.by === OWNER && rec.game === 'banned' && rec.videochat === true && rec.chats.ok === 2 && rec.username === 'vasya', rec);
+  t('бан везде: событие записано в каждый чат', [KEY, KEY2].every((k) => Object.values(e.db.root.chatAdmin[k].events || {}).some((d) => Object.values(d).some((x) => x.action === 'gban'))), e.db.root.chatAdmin);
+  t('бан везде: ответ человеку — итоги', r.ok && r.text.includes('чатов 2 из 2') && r.text.includes('в игре заблокирован') && r.text.includes('ВидеоЧат закрыт'), r);
+  const first = rec.at;
+  const e2 = await withChats(); e2.db.root.chatAdmin._global.bans = { [GV]: { at: 111, game: 'banned', name: 'Вася' } };
+  await e2.ca.globalBan({ id: GV, name: 'Вася' }, {}, { id: OWNER, name: 'В' });
+  t('повторный бан: дата первого сохраняется, повторно блокирует чаты', e2.db.root.chatAdmin._global.bans[GV].at === 111 && e2.calls.filter((c) => c.method === 'banChatMember').length === 2 && first === NOW);
+
+  r = await e.ca.globalBan({ id: OWNER, name: 'Я' }, {}, { id: OWNER, name: 'Я' });
+  t('бан везде: владельца и бота нельзя', r.ok === false && (await e.ca.globalBan({ id: BOT, name: 'бот' })).ok === false);
+  const eRole = await withChats({ roles: { [GV]: 'admin' } });
+  r = await eRole.ca.globalBan({ id: GV, name: 'Админ' }, {}, { id: OWNER, name: 'В' });
+  t('бан везде: админа проекта нельзя (сначала снять роль)', r.ok === false && r.text.includes('админ') && !eRole.calls.some((c) => c.method === 'banChatMember'));
+  r = await e.ca.globalBan({ id: '12', name: 'Короткий' });
+  t('бан везде: id короче 5 цифр отклоняется', r.ok === false);
+  const eFail = await withChats({ tgOverrides: { banChatMember: (p) => (p.chat_id === CHAT2 ? { ok: false, description: 'Bad Request: not enough rights to restrict/unrestrict chat member' } : { ok: true, result: true }) } });
+  r = await eFail.ca.globalBan({ id: GV, name: 'Вася' }, {}, { id: OWNER, name: 'В' });
+  t('бан везде: в одном чате нет прав — остальное выполнено, причина названа', r.ok && r.chats.filter((c) => c.ok).length === 1 && r.text.includes('В 1 чат') && r.text.includes('нет нужного права') && eFail.db.root.chatAdmin._global.bans[GV].chats.fail === 1, r);
+  const eNone = await enabled({}, { }); eNone.db.root.chatAdmin._global = undefined; delete eNone.db.root.chatAdmin._global;
+  r = await eNone.ca.globalBan({ id: GV, name: 'Вася' }, {}, { id: OWNER, name: 'В' });
+  t('бан везде: включённых чатов нет — действует в игре и ВидеоЧате, текст честный', r.ok && r.text.includes('Включённых чатов пока нет') && eNone.side.vcBan.length === 1);
+
+  // разбан
+  r = await e.ca.globalUnban({ id: GV }, { id: OWNER, name: 'Владелец' });
+  t('разбан везде: чаты, игра (она была заблокирована нами) и ВидеоЧат', r.ok && e.calls.filter((c) => c.method === 'unbanChatMember').length === 2 && e.side.gameUnban[0] === GV && e.side.vcUnban[0] === GV && !(e.db.root.chatAdmin._global.bans || {})[GV], { r, side: e.side });
+  const eAlready = await withChats({ gameState: 'already' });
+  await eAlready.ca.globalBan({ id: GV, name: 'Вася' }, {}, { id: OWNER, name: 'В' });
+  await eAlready.ca.globalUnban({ id: GV }, { id: OWNER, name: 'В' });
+  t('разбан везде: если в игре его забанили раньше и не мы — игру не трогаем', eAlready.side.gameUnban.length === 0 && eAlready.side.vcUnban.length === 1);
+  r = await e.ca.globalUnban({ id: '555555555' }, {});
+  t('разбан везде: кого нет в списке — понятный ответ', r.ok === false && r.text.includes('нет в списке'));
+}
+
+// ---------- не впускаем ----------
+{
+  const e = await withChats();
+  e.db.root.chatAdmin._global.bans = { [GV]: { at: 1, name: 'Вася', game: 'banned' } };
+  e.db.root.chatAdmin[KEY].meta.cfg = { welcome: true };
+  await e.ca.onChatMember(same({ new_chat_member: { status: 'member', user: { id: Number(GV), first_name: 'Вася' } }, old_chat_member: { status: 'left', user: { id: Number(GV) } } }).chat_member ? { chat_member: { ...cm().chat_member, from: { id: Number(GV), first_name: 'Вася' }, new_chat_member: { status: 'member', user: { id: Number(GV), first_name: 'Вася' } }, old_chat_member: { status: 'left', user: { id: Number(GV) } } } } : null);
+  t('вход человека из «бана везде»: блокируется сразу', e.calls.some((c) => c.method === 'banChatMember' && c.payload.user_id === Number(GV)));
+  t('…приветствия нет, обычного входа в статистике нет', e.sent().length === 0 && !(e.db.root.chatAdmin[KEY].daily && e.db.root.chatAdmin[KEY].daily['2026-11-11'] && e.db.root.chatAdmin[KEY].daily['2026-11-11'].joins), e.db.root.chatAdmin[KEY]);
+  const ev = Object.values(Object.values(e.db.root.chatAdmin[KEY].events)[0]).find((x) => x.action === 'gban_block');
+  t('…в журнале чата — «не впустили»', !!ev && ev.target.id === GV, e.db.root.chatAdmin[KEY].events);
+  const e2 = await withChats();
+  e2.db.root.chatAdmin._global.bans = { [GV]: { at: 1, name: 'Вася' } };
+  const r2 = await e2.ca.onMessage({ ...msg(OWNER, ''), text: undefined, new_chat_members: [{ id: Number(GV), first_name: 'Вася' }] });
+  t('служебное «вошёл» человека из списка: блокировка и удаление сообщения', r2 === true && e2.calls.some((c) => c.method === 'banChatMember') && e2.calls.some((c) => c.method === 'deleteMessage'));
+  const r3 = await e2.ca.onMessage(msg(GV, 'я вернулся'));
+  t('сообщение человека из списка: блокировка, сообщение удалено, не считается', r3 === true && e2.calls.filter((c) => c.method === 'deleteMessage').length === 2 && !e2.db.root.chatAdmin[KEY].users);
+  const e3 = await withChats();
+  await e3.ca.onChatMember({ chat_member: { ...cm().chat_member, new_chat_member: { status: 'member', user: { id: 4000000002, first_name: 'Другой' } }, old_chat_member: { status: 'left', user: { id: 4000000002 } } } });
+  t('обычный человек входит как обычно', !e3.calls.some((c) => c.method === 'banChatMember') && e3.db.root.chatAdmin[KEY].daily['2026-11-11'].joins === 1);
+}
+
+// ---------- команды /gban и /ungban ----------
+{
+  const e = await withChats();
+  await e.ca.onMessage(msg(ADMIN, '/gban спам', reply(GV)));
+  t('/gban от обычного админа чата — отказ, ничего не выполнено', e.sent().at(-1).includes('только для владельца') && e.side.vcBan.length === 0 && !e.calls.some((c) => c.method === 'banChatMember'));
+  await e.ca.onMessage(msg(OWNER, '/gban реклама казино', reply(GV)));
+  t('/gban от владельца ответом: бан везде с причиной', e.side.vcBan[0].reason === 'реклама казино' && e.sent().at(-1).includes('заблокирован везде'), e.sent());
+  await e.ca.onMessage(msg(OWNER, '/ungban', reply(GV)));
+  t('/ungban от владельца: снят', e.sent().at(-1).includes('бан везде снят') && e.side.vcUnban.length === 1);
+  await e.ca.onMessage(msg(OWNER, '/gban 777777777 по id'));
+  t('/gban по числовому id', e.side.vcBan.some((b) => b.uid === '777777777'));
+  await e.ca.onMessage(msg(OWNER, '/gban'));
+  t('/gban без цели — подсказка', e.sent().at(-1).includes('Ответьте этой командой'));
+}
+
+// ---------- индекс включённых чатов ----------
+{
+  const e = makeEnv({ statuses: { [BOT]: 'administrator' } });
+  await e.ca.onMessage(msg(OWNER, '/admin_on'));
+  t('включение: чат попал в список включённых (для «бана везде»)', e.db.root.chatAdmin._global.chats[KEY].title === 'Наш чат', e.db.root.chatAdmin);
+  await e.ca.onMessage(msg(OWNER, '/admin_off'));
+  t('выключение: чат убран из списка', e.db.root.chatAdmin._global.chats[KEY] === undefined);
 }
 
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');

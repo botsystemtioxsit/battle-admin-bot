@@ -55,6 +55,7 @@ globalThis.fetch = async (input, init = {}) => {
     if (m[1] === 'getChatMember') { const s = memberStatus[payload.user_id]; return new Response(JSON.stringify(s ? { ok: true, result: { status: s, can_restrict_members: true, can_delete_messages: true, can_invite_users: true, can_pin_messages: false } } : { ok: false, description: 'user not found' })); }
     if (m[1] === 'getChatMemberCount') return new Response(JSON.stringify({ ok: true, result: 42 }));
     if (m[1] === 'getChat') return new Response(JSON.stringify({ ok: true, result: { id: payload.chat_id, title: 'Наш чат', type: 'supergroup', permissions: { can_send_messages: true } } }));
+    if (m[1] === 'sendMessage') return new Response(JSON.stringify({ ok: true, result: { message_id: 1000 + tg.length } }));
     return new Response(JSON.stringify({ ok: true, result: true }));
   }
   return new Response('not faked: ' + method + ' ' + url.href, { status: 599 });
@@ -162,6 +163,41 @@ r = await panel({ initData: initData(100), action: 'disable', chatId: CHAT });
 t('/chat-admin disable', r.json.ok === true && db.chatAdmin[KEY].meta.enabled === false, r);
 r = await panel({ initData: initData(100), action: 'enable', chatId: '../../users' });
 t('/chat-admin: плохой chatId — 400', r.status === 400, r);
+
+
+// ----- проверка «я не бот»: вебхук и cron -----
+{
+  await panel({ initData: initData(100), action: 'enable', chatId: CHAT });
+  db.chatAdmin[KEY].meta.cfg = { captcha: true, welcome: true };
+  db.chatAdmin[KEY].pending = undefined; delete db.chatAdmin[KEY].pending;
+  tg.length = 0;
+  const NEW = 800000001;
+  const joinUpd = (id, n) => ({ update_id: n, chat_member: { chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' }, from: { id, first_name: 'Новичок' }, date: Math.floor(Date.now() / 1000),
+    old_chat_member: { status: 'left', user: { id, first_name: 'Новичок' } }, new_chat_member: { status: 'member', user: { id, first_name: 'Новичок' } } } });
+  await hook(joinUpd(NEW, 20));
+  const btn = tg.find((c) => c.method === 'sendMessage' && c.payload.reply_markup);
+  t('вебхук: вход новичка → ограничение и кнопка «Я не бот»', tg.some((c) => c.method === 'restrictChatMember' && c.payload.user_id === NEW) && btn && btn.payload.reply_markup.inline_keyboard[0][0].callback_data === 'cap:' + NEW, tg.map((c) => c.method));
+  t('вебхук: запись «ждём» в базе', db.chatAdmin[KEY].pending[NEW] && db.chatAdmin[KEY].pending[NEW].until > Date.now(), db.chatAdmin[KEY].pending);
+  tg.length = 0;
+  const st = await hook({ update_id: 21, callback_query: { id: 'cb1', from: { id: NEW, first_name: 'Новичок' }, data: 'cap:' + NEW, message: { message_id: 55, chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' } } } });
+  t('вебхук: нажатие кнопки доходит до проверки (не до входа по заявке)', st === 200 && tg.some((c) => c.method === 'restrictChatMember' && c.payload.user_id === NEW && c.payload.permissions.can_send_messages === true) && !db.chatAdmin[KEY].pending?.[NEW] && db.chatAdmin[KEY].users[NEW].verifiedAt > 0, { tg: tg.map((c) => c.method), p: db.chatAdmin[KEY].pending });
+  t('вебхук: после проверки — приветствие и ответ на нажатие', sentTexts().length >= 1 && tg.some((c) => c.method === 'answerCallbackQuery' && c.payload.text.includes('Готово')), tg.map((c) => c.method));
+  // не нажал: cron
+  const SLOW = 800000002;
+  await hook(joinUpd(SLOW, 22));
+  db.chatAdmin[KEY].pending[SLOW].until = Date.now() - 1000;
+  tg.length = 0;
+  let waited = null;
+  await worker.scheduled({ cron: '* * * * *' }, env, { waitUntil: (p) => { waited = p; } });
+  await waited;
+  t('cron (scheduled): не нажавший выгнан — бан и сразу разбан', tg.some((c) => c.method === 'banChatMember' && c.payload.user_id === SLOW) && tg.some((c) => c.method === 'unbanChatMember' && c.payload.user_id === SLOW && c.payload.only_if_banned === true), tg.map((c) => c.method + ':' + (c.payload.user_id || '')));
+  t('cron: счётчик «не прошёл»', db.chatAdmin[KEY].daily[new Date().toISOString().slice(0, 10)].captcha_fail === 1, db.chatAdmin[KEY].daily);
+  t('cron: все записанные пути безопасны', dbWrites.every((u) => Object.keys(u).every((k) => /^chatAdmin(\/[A-Za-z0-9_-]{1,64}){0,8}$/.test(k))), dbWrites.flatMap((u) => Object.keys(u)).filter((k) => !/^chatAdmin(\/[A-Za-z0-9_-]{1,64}){0,8}$/.test(k)));
+  // чужая кнопка cap: из чата, где проверка не включена, ничего не ломает
+  tg.length = 0;
+  const st2 = await hook({ update_id: 23, callback_query: { id: 'cb2', from: { id: 1, first_name: 'X' }, data: 'cap:1', message: { message_id: 1, chat: { id: -100999, type: 'supergroup' } } } });
+  t('вебхук: кнопка из чужого чата — спокойный ответ, без записи', st2 === 200 && tg.some((c) => c.method === 'answerCallbackQuery'), tg.map((c) => c.method));
+}
 
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

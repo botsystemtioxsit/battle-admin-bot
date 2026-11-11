@@ -36,6 +36,7 @@ function makeEnv({ owners = [OWNER], statuses = {}, tgOverrides = {}, roles = {}
   const db = makeDb();
   const calls = [];
   const side = { gameBan: [], gameUnban: [], vcBan: [], vcUnban: [] };
+  const clock = { t: NOW };
   const sent = () => calls.filter((c) => c.method === 'sendMessage').map((c) => c.payload.text);
   const st = { [OWNER]: 'creator', [ADMIN]: 'administrator', [USER]: 'member', [VICTIM]: 'member', [BOT]: 'administrator', ...statuses };
   const deps = {
@@ -45,15 +46,16 @@ function makeEnv({ owners = [OWNER], statuses = {}, tgOverrides = {}, roles = {}
       if (method === 'getChatMember') { const s = st[String(payload.user_id)]; return s ? { ok: true, result: { status: s } } : { ok: false, description: 'Bad Request: user not found' }; }
       if (method === 'getChatMemberCount') return { ok: true, result: 42 };
       if (method === 'getChat') return { ok: true, result: { permissions: { can_send_messages: true, can_send_photos: true } } };
+      if (method === 'sendMessage') return { ok: true, result: { message_id: 900 + calls.length } };
       return { ok: true, result: true };
     },
     dbGet: (p, o) => db.dbGet(p, o), dbUpdate: (u) => db.dbUpdate(u),
-    owners: new Set(owners), botId: BOT, botUsername: 'my_bot', now: () => NOW,
+    owners: new Set(owners), botId: BOT, botUsername: 'my_bot', now: () => clock.t,
     roleOf: async (uid) => roles[uid] || null,
     gameBan: async (uid) => { side.gameBan.push(uid); return gameState; }, gameUnban: async (uid) => { side.gameUnban.push(uid); },
     videochatBan: async (uid, reason, by) => { side.vcBan.push({ uid, reason, by }); }, videochatUnban: async (uid) => { side.vcUnban.push(uid); },
   };
-  return { db, calls, sent, side, deps, ca: createChatAdmin(deps) };
+  return { db, calls, sent, side, deps, clock, ca: createChatAdmin(deps) };
 }
 const msg = (from, text, extra = {}) => ({ message_id: 1, chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' }, from: { id: Number(from), first_name: 'U' + from }, date: NOW / 1000, text, ...extra });
 const reply = (to) => ({ reply_to_message: { message_id: 77, from: { id: Number(to), first_name: 'V' + to }, text: 'секретный текст сообщения' } });
@@ -230,7 +232,7 @@ async function enabled(extraMeta = {}, envOpts) {
 
 // ---------- ссылки, служебные сообщения, приветствие ----------
 {
-  const e = await enabled({ cfg: { links: true, cleanup: true, welcome: true } });
+  const e = await enabled({ cfg: { links: true, cleanup: true, welcome: true, captcha: false } });
   const withLink = (from) => msg(from, 'смотри https://spam.example', { entities: [{ type: 'url', offset: 7, length: 20 }] });
   let r = await e.ca.onMessage(withLink(USER));
   t('ссылки: у обычного участника сообщение удалено, один раз предупреждение', r === true && e.calls.some((c) => c.method === 'deleteMessage') && e.sent().at(-1).includes('Ссылки'));
@@ -387,6 +389,142 @@ async function withChats(envOpts) {
   t('включение: чат попал в список включённых (для «бана везде»)', e.db.root.chatAdmin._global.chats[KEY].title === 'Наш чат', e.db.root.chatAdmin);
   await e.ca.onMessage(msg(OWNER, '/admin_off'));
   t('выключение: чат убран из списка', e.db.root.chatAdmin._global.chats[KEY] === undefined);
+}
+
+
+// ---------- проверка «я не бот» ----------
+const join = (id, name, over = {}) => ({ chat_member: { ...cm().chat_member, from: { id: Number(id), first_name: name }, old_chat_member: { status: 'left', user: { id: Number(id) } }, new_chat_member: { status: 'member', user: { id: Number(id), first_name: name } }, ...over } });
+const press = (from, data, msgId = 905) => ({ id: 'q1', from: { id: Number(from), first_name: 'Вася' }, data, message: { message_id: msgId, chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' } } });
+const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
+{
+  const e = await enabled({ cfg: { welcome: true } });
+  await e.ca.onChatMember(join(7, 'Вася <b>x</b>'));
+  const restr = e.calls.filter((c) => c.method === 'restrictChatMember');
+  t('капча: новичок сразу ограничен', restr.length === 1 && restr[0].payload.user_id === 7 && restr[0].payload.permissions.can_send_messages === false, restr);
+  const msgCall = e.calls.find((c) => c.method === 'sendMessage');
+  t('капча: сообщение с кнопкой «Я не бот» и упоминанием', !!msgCall && msgCall.payload.reply_markup.inline_keyboard[0][0].callback_data === 'cap:7' && msgCall.payload.text.includes('tg://user?id=7') && msgCall.payload.parse_mode === 'HTML', msgCall);
+  t('капча: чужая разметка в имени экранируется', msgCall.payload.text.includes('Вася &lt;b&gt;x&lt;/b&gt;') && !msgCall.payload.text.includes('<b>x</b>'), msgCall.payload.text);
+  t('капча: приветствия пока нет (оно после проверки)', e.sent().length === 1 && !e.sent()[0].includes('Привет'), e.sent());
+  const p = cap(e)['7'];
+  t('капча: запись «ждём» — срок 3 минуты, номер сообщения', p && p.until === NOW + 180000 && p.msgId === msgCall.payload ? true : (p && p.until === NOW + 180000 && typeof p.msgId === 'number'), p);
+  t('капча: вход всё равно записан в статистику', e.db.root.chatAdmin[KEY].daily['2026-11-11'].joins === 1);
+  // чужое нажатие
+  const before = e.calls.length;
+  await e.ca.onCallback(press(8, 'cap:7'));
+  const ans = e.calls.slice(before).find((c) => c.method === 'answerCallbackQuery');
+  t('капча: чужая кнопка — отказ, проверка не снята', ans.payload.text.includes('не ваша') && !!cap(e)['7'] && !e.calls.slice(before).some((c) => c.method === 'restrictChatMember'), ans);
+  // своё нажатие
+  const r = await e.ca.onCallback(press(7, 'cap:7', p.msgId));
+  const lift = e.calls.filter((c) => c.method === 'restrictChatMember').at(-1);
+  t('капча: своё нажатие возвращает права чата', r === true && lift.payload.permissions.can_send_messages === true && lift.payload.permissions.can_send_photos === true && lift.payload.permissions.can_change_info === false, lift);
+  t('капча: сообщение с кнопкой удалено, запись «ждём» снята', e.calls.some((c) => c.method === 'deleteMessage' && c.payload.message_id === p.msgId) && !cap(e)['7']);
+  t('капча: пройдено — отметка, счётчик, событие', e.db.root.chatAdmin[KEY].users['7'].verifiedAt === NOW && e.db.root.chatAdmin[KEY].daily['2026-11-11'].captcha_ok === 1 && Object.values(Object.values(e.db.root.chatAdmin[KEY].events)[0]).some((x) => x.action === 'captcha_pass'));
+  t('капча: приветствие — после проверки', e.sent().at(-1).includes('Привет') && e.sent().at(-1).includes('Вася'), e.sent());
+  const before2 = e.calls.length;
+  await e.ca.onCallback(press(7, 'cap:7'));
+  const ans2 = e.calls.slice(before2).find((c) => c.method === 'answerCallbackQuery');
+  t('капча: повторное нажатие — «время вышло», ничего не меняется', ans2.payload.text.includes('вышло') && ans2.payload.show_alert === true);
+  t('капча: не наша кнопка — не обрабатывается', (await e.ca.onCallback(press(7, 'login:approve:1'))) === false);
+  t('капча: все пути записи — безопасные', e.db.writes.every((w) => Object.keys(w).every((k) => KEY_RE.test(k))), e.db.writes.flatMap((w) => Object.keys(w)).filter((k) => !KEY_RE.test(k)));
+}
+{
+  // не нажал вовремя: выгоняем, в статистике «бана» нет
+  const e = await enabled({});
+  await e.ca.onChatMember(join(7, 'Вася'));
+  const p = cap(e)['7'];
+  e.clock.t = NOW + 60000;
+  t('таймер: рано — никого не выгоняем', (await e.ca.sweepCaptcha(KEY, true)) === 0 && !e.calls.some((c) => c.method === 'banChatMember'));
+  e.clock.t = NOW + 181000;
+  t('таймер: срок вышел — выгнан', (await e.ca.sweepCaptcha(KEY, true)) === 1);
+  const bans = e.calls.filter((c) => c.method === 'banChatMember');
+  const unb = e.calls.filter((c) => c.method === 'unbanChatMember');
+  t('таймер: бан и сразу разбан (может зайти снова)', bans.length === 1 && bans[0].payload.user_id === 7 && unb.length === 1 && unb[0].payload.only_if_banned === true, { bans, unb });
+  t('таймер: сообщение с кнопкой удалено', e.calls.some((c) => c.method === 'deleteMessage' && c.payload.message_id === p.msgId));
+  t('таймер: счётчик и событие «не прошёл»', e.db.root.chatAdmin[KEY].daily['2026-11-11'].captcha_fail === 1 && e.db.root.chatAdmin[KEY].users['7'].status === 'left' && Object.values(Object.values(e.db.root.chatAdmin[KEY].events)[0]).some((x) => x.action === 'captcha_fail'));
+  t('таймер: второй проход тех же не трогает', (await e.ca.sweepCaptcha(KEY, true)) === 0);
+  // события бана/разбана от этого выгоняния не попадают в статистику
+  const joinsBefore = e.db.root.chatAdmin[KEY].daily['2026-11-11'];
+  await e.ca.onChatMember(join(7, 'Вася', { from: { id: Number(BOT), first_name: 'Бот' }, old_chat_member: { status: 'restricted', is_member: true, user: { id: 7 } }, new_chat_member: { status: 'kicked', user: { id: 7, first_name: 'Вася' } } }));
+  t('таймер: «бан» от самого бота в статистику не идёт', !e.db.root.chatAdmin[KEY].daily['2026-11-11'].bans, e.db.root.chatAdmin[KEY].daily);
+  await e.ca.onChatMember(join(7, 'Вася', { from: { id: Number(BOT), first_name: 'Бот' }, old_chat_member: { status: 'kicked', user: { id: 7 } }, new_chat_member: { status: 'left', user: { id: 7, first_name: 'Вася' } } }));
+  t('таймер: после «разбана» запись «ждём» убрана', !cap(e)['7']);
+}
+{
+  // кого проверка не касается
+  const addedByAdmin = await enabled({ cfg: { welcome: true } });
+  await addedByAdmin.ca.onChatMember(join(7, 'Вася', { from: { id: Number(ADMIN), first_name: 'Админ' } }));
+  t('капча: добавил администратор — без проверки, приветствие сразу', !addedByAdmin.calls.some((c) => c.method === 'restrictChatMember') && addedByAdmin.sent().at(-1).includes('Привет'), addedByAdmin.calls.map((c) => c.method));
+  const addedByUser = await enabled({});
+  await addedByUser.ca.onChatMember(join(7, 'Вася', { from: { id: Number(USER), first_name: 'Обычный' } }));
+  t('капча: добавил обычный участник — проверка есть', addedByUser.calls.some((c) => c.method === 'restrictChatMember') && !!cap(addedByUser)['7']);
+  const byRequest = await enabled({});
+  await byRequest.ca.onChatMember(join(7, 'Вася', { via_join_request: true }));
+  t('капча: по заявке (одобрил админ) — без проверки', !byRequest.calls.some((c) => c.method === 'restrictChatMember'));
+  const owner = await enabled({});
+  await owner.ca.onChatMember(join(OWNER, 'Владелец'));
+  t('капча: владельцу проект проверка не нужна', !owner.calls.some((c) => c.method === 'restrictChatMember'));
+  const known = await enabled({});
+  known.db.root.chatAdmin[KEY].users = { 7: { verifiedAt: 5 } };
+  await known.ca.onChatMember(join(7, 'Вася'));
+  t('капча: уже проходил проверку — не мучаем снова', !known.calls.some((c) => c.method === 'restrictChatMember'));
+  const off = await enabled({ cfg: { captcha: false, welcome: true } });
+  await off.ca.onChatMember(join(7, 'Вася'));
+  t('капча: выключена — как раньше (приветствие сразу)', !off.calls.some((c) => c.method === 'restrictChatMember') && off.sent().at(-1).includes('Привет'));
+  const noRights = await enabled({ cfg: { welcome: true } }, { tgOverrides: { restrictChatMember: () => ({ ok: false, description: 'Bad Request: not enough rights to restrict/unrestrict chat member' }) } });
+  await noRights.ca.onChatMember(join(7, 'Вася'));
+  t('капча: нет права ограничивать — впускаем как раньше, записи «ждём» нет', !cap(noRights)['7'] && noRights.sent().at(-1).includes('Привет') && !noRights.calls.some((c) => c.method === 'sendMessage' && c.payload.reply_markup));
+  let sendFails = 0;
+  const noSend = await enabled({}, { tgOverrides: { sendMessage: () => { sendFails++; return { ok: false, description: 'Bad Request: chat not found' }; } } });
+  await noSend.ca.onChatMember(join(7, 'Вася'));
+  t('капча: кнопку отправить не вышло — права возвращены, человек не остаётся немым', noSend.calls.filter((c) => c.method === 'restrictChatMember').length === 2 && noSend.calls.filter((c) => c.method === 'restrictChatMember')[1].payload.permissions.can_send_messages === true && !cap(noSend)['7']);
+}
+{
+  // ушёл сам во время проверки
+  const e = await enabled({});
+  await e.ca.onChatMember(join(7, 'Вася'));
+  const p = cap(e)['7'];
+  await e.ca.onChatMember(join(7, 'Вася', { from: { id: 7, first_name: 'Вася' }, old_chat_member: { status: 'restricted', is_member: true, user: { id: 7 } }, new_chat_member: { status: 'left', user: { id: 7, first_name: 'Вася' } } }));
+  t('капча: ушёл сам — кнопка убрана, запись «ждём» снята, выход записан', e.calls.some((c) => c.method === 'deleteMessage' && c.payload.message_id === p.msgId) && !cap(e)['7'] && e.db.root.chatAdmin[KEY].daily['2026-11-11'].leaves === 1);
+}
+{
+  // не получилось выгнать: возвращаем права, чтобы не оставить человека немым
+  const e = await enabled({}, { tgOverrides: { banChatMember: () => ({ ok: false, description: 'Bad Request: not enough rights to restrict/unrestrict chat member' }) } });
+  await e.ca.onChatMember(join(7, 'Вася'));
+  e.clock.t = NOW + 200000;
+  await e.ca.sweepCaptcha(KEY, true);
+  const restr = e.calls.filter((c) => c.method === 'restrictChatMember');
+  t('таймер: выгнать не вышло — права возвращены, запись снята, «не прошёл» не пишем', restr.length === 2 && restr[1].payload.permissions.can_send_messages === true && !cap(e)['7'] && !e.db.root.chatAdmin[KEY].daily['2026-11-11'].captcha_fail, restr);
+}
+{
+  // много сразу + обход всех чатов (cron)
+  const e = await withChats();
+  e.db.root.chatAdmin[KEY].pending = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [String(500 + i), { at: NOW, until: NOW + 1, msgId: 10 + i, name: 'N' + i }]));
+  e.clock.t = NOW + 5000;
+  const n = await e.ca.sweepAll();
+  t('cron: за один проход не больше 8 человек (лимит подзапросов)', n === 8 && e.calls.filter((c) => c.method === 'banChatMember').length === 8, n);
+  const n2 = await e.ca.sweepAll();
+  t('cron: остальных — в следующий проход', n2 === 4);
+  const off = await withChats();
+  off.db.root.chatAdmin[KEY].meta.cfg = { captcha: false };
+  off.db.root.chatAdmin[KEY].pending = { 500: { at: NOW, until: NOW + 1, msgId: 1, name: 'N' } };
+  off.clock.t = NOW + 5000;
+  t('cron: чат с выключенной проверкой не трогаем', (await off.ca.sweepAll()) === 0);
+  const junk = await enabled({});
+  junk.db.root.chatAdmin[KEY].pending = { abc: { until: 1 }, 600: 'мусор', 601: null };
+  junk.clock.t = NOW + 5000;
+  t('таймер: мусор в базе не ломает проход', (await junk.ca.sweepCaptcha(KEY, true)) === 0);
+}
+{
+  // настройки
+  const e = await enabled({});
+  await e.ca.onMessage(msg(ADMIN, '/set captcha off'));
+  t('/set captcha off', e.db.root.chatAdmin[KEY].meta.cfg.captcha === false);
+  await e.ca.onMessage(msg(ADMIN, '/set captchaMin 5'));
+  t('/set captchaMin 5', e.db.root.chatAdmin[KEY].meta.cfg.captchaMin === 5);
+  await e.ca.onMessage(msg(ADMIN, '/set captchaMin 50'));
+  t('/set captchaMin 50 — отказ', e.db.root.chatAdmin[KEY].meta.cfg.captchaMin === 5 && e.sent().at(-1).includes('от 1 до 10'));
+  await e.ca.onMessage(msg(ADMIN, '/settings'));
+  t('/settings показывает проверку «я не бот»', e.sent().at(-1).includes('captcha') && e.sent().at(-1).includes('captchaMin'));
 }
 
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');

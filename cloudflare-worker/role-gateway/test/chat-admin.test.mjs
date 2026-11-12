@@ -119,7 +119,7 @@ t('запись входа: счётчики дня, способ, ссылки,
 // ---------- обычная работа в включённом чате ----------
 async function enabled(extraMeta = {}, envOpts) {
   const e = makeEnv(envOpts);
-  e.db.root.chatAdmin = { [KEY]: { meta: { enabled: true, title: 'Наш чат', ...extraMeta } } };
+  e.db.root.chatAdmin = { [KEY]: { meta: { enabled: true, title: 'Наш чат', enabledBy: OWNER, ...extraMeta } } };
   return e;
 }
 {
@@ -397,6 +397,33 @@ const join = (id, name, over = {}) => ({ chat_member: { ...cm().chat_member, fro
 const press = (from, data, msgId = 905) => ({ id: 'q1', from: { id: Number(from), first_name: 'Вася' }, data, message: { message_id: msgId, chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' } } });
 const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
 const enabledCap = (extra = {}, opts) => enabled({ ...extra, cfg: { captcha: true, ...(extra.cfg || {}) } }, opts);
+
+// ---------- чужие владельцы: создатель чата включает бота сам ----------
+{
+  const STRANGER = '900', STRANGER2 = '901';
+  const e = makeEnv({ statuses: { [STRANGER]: 'creator', [STRANGER2]: 'administrator' } });
+  let r = await e.ca.onMessage(msg(USER, '/admin_on'));
+  t('чужой чат: обычный участник включить не может — тишина', r === true && e.sent().length === 0 && e.db.writes.length === 0);
+  r = await e.ca.onMessage(msg(STRANGER2, '/admin_on'));
+  t('чужой чат: администратор (не создатель) — короткий отказ, ничего не пишем', r === true && e.sent().at(-1).includes('создатель') && e.db.writes.length === 0);
+  r = await e.ca.onMessage(msg(STRANGER, '/admin_on'));
+  const c = e.db.root.chatAdmin;
+  t('чужой чат: создатель включил — владелец записан', r === true && c[KEY].meta.enabled === true && c[KEY].meta.enabledBy === STRANGER && c._owners[STRANGER][KEY].title === 'Наш чат');
+  t('чужой чат: в список «бана везде» не попал, лежит отдельно', !(c._global && c._global.chats && c._global.chats[KEY]) && c._global.tenants[KEY]);
+  t('чужой чат: подсказка про панель', e.sent().at(-1).includes('/admin'));
+  // «бан везде» чужой чат не сторожит
+  c._global.bans = { 4000000001: { at: 1 } };
+  await e.ca.onChatMember(join(4000000001, 'Вася'));
+  t('чужой чат: «бан везде» владельца проекта здесь не действует', !e.calls.some((x) => x.method === 'banChatMember'));
+  // лимит чатов у одного человека
+  const lim = makeEnv({ statuses: { [STRANGER]: 'creator' } });
+  lim.db.root.chatAdmin = { _owners: { [STRANGER]: Object.fromEntries(Array.from({ length: 10 }, (_, i) => ['-100' + (5000 + i), { title: 'x' }])) } };
+  r = await lim.ca.onMessage(msg(STRANGER, '/admin_on'));
+  t('чужой чат: больше 10 чатов на человека не подключить', r === true && lim.sent().at(-1).includes('не больше 10') && !(lim.db.root.chatAdmin[KEY]));
+  r = await e.ca.onMessage(msg(STRANGER, '/admin_off'));
+  t('чужой чат: создатель может выключить', e.db.root.chatAdmin[KEY].meta.enabled === false && !(e.db.root.chatAdmin._global.tenants && e.db.root.chatAdmin._global.tenants[KEY]));
+}
+
 t('капча: по умолчанию ВКЛЮЧЕНА (настройка не задана)', (await (async () => { const e = await enabled({}); await e.ca.onChatMember(join(7, 'Вася')); return e.calls.some((c) => c.method === 'restrictChatMember') && e.calls.some((c) => c.method === 'sendMessage' && c.payload.reply_markup); })()));
 {
   const e = await enabledCap({ cfg: { welcome: true } });

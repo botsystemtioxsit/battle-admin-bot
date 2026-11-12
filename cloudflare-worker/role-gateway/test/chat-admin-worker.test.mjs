@@ -15,7 +15,7 @@ const DB_HOST = 'https://zolotaya-kletka-default-rtdb.firebaseio.com';
 const BOT_ID = 7000000001;
 const CHAT = -1001234567890, KEY = String(CHAT);
 
-const db = { users: { 100: { role: 'superadmin' }, 200: { role: 'admin' } } };
+const db = { users: { 100: { role: 'superadmin' }, 200: { role: 'admin' }, 600: { role: 'user' } } };
 const dbWrites = [];
 function setPath(path, value) {
   const parts = path.split('/');
@@ -30,7 +30,7 @@ const dbGet = (path) => path.split('/').filter(Boolean).reduce((n, k) => (n && t
 
 const tg = []; // вызовы Bot API
 let webhookInfo = { url: 'https://gw.test/telegram-webhook', allowed_updates: ['message', 'callback_query'], pending_update_count: 0 };
-const memberStatus = { 100: 'creator', 200: 'administrator', 300: 'member', 400: 'member', [BOT_ID]: 'administrator' };
+const memberStatus = { 100: 'creator', 200: 'administrator', 300: 'member', 400: 'member', 700: 'creator', [BOT_ID]: 'administrator' };
 globalThis.fetch = async (input, init = {}) => {
   const url = new URL(typeof input === 'string' ? input : input.url);
   const method = (init.method || 'GET').toUpperCase();
@@ -197,6 +197,81 @@ t('/chat-admin: плохой chatId — 400', r.status === 400, r);
   tg.length = 0;
   const st2 = await hook({ update_id: 23, callback_query: { id: 'cb2', from: { id: 1, first_name: 'X' }, data: 'cap:1', message: { message_id: 1, chat: { id: -100999, type: 'supergroup' } } } });
   t('вебхук: кнопка из чужого чата — спокойный ответ, без записи', st2 === 200 && tg.some((c) => c.method === 'answerCallbackQuery'), tg.map((c) => c.method));
+}
+
+
+// ----- чужие владельцы и права по приложениям (v5.43) -----
+{
+  const CHAT2 = -1009998887776, KEY2 = String(CHAT2);
+  const post = async (path, body) => { const res = await worker.fetch(new Request('https://gw.test' + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), env); return { status: res.status, json: await res.json().catch(() => null) }; };
+  const grp2 = (from, text) => ({ update_id: 900, message: { message_id: 7, chat: { id: CHAT2, type: 'supergroup', title: 'Чужой чат' }, from: { id: from, first_name: 'U' + from }, date: Math.floor(Date.now() / 1000), text, entities: text.startsWith('/') ? [{ type: 'bot_command', offset: 0, length: text.split(' ')[0].length }] : undefined } });
+  await hook(grp2(700, '/admin_on'));
+  t('чужой владелец: создатель чата включил бота сам', db.chatAdmin?.[KEY2]?.meta?.enabled === true && db.chatAdmin._owners?.['700']?.[KEY2] && db.chatAdmin._global?.tenants?.[KEY2] && !db.chatAdmin._global?.chats?.[KEY2], db.chatAdmin?._global);
+  let r = await post('/my-access', { initData: initData(700) });
+  t('/my-access: у создателя чата — только свой чат, приложений нет', r.json.ok && r.json.chats.length === 1 && r.json.chats[0].id === KEY2 && !r.json.apps.chats && !r.json.superadmin, r);
+  r = await post('/my-access', { initData: initData(100) });
+  t('/my-access: владелец проекта — все приложения', r.json.superadmin === true && r.json.apps.chats && r.json.apps.gateway && r.json.apps.launcher, r);
+  r = await panel({ initData: initData(700), action: 'set', chatId: CHAT2, key: 'links', value: 'on' });
+  t('/chat-admin: создатель меняет настройки своего чата', r.json?.ok === true && db.chatAdmin[KEY2].meta.cfg.links === true, r);
+  r = await panel({ initData: initData(700), action: 'set', chatId: CHAT, key: 'links', value: 'off' });
+  t('/chat-admin: чужой чат (владельца проекта) — 403', r.status === 403, r);
+  r = await panel({ initData: initData(700), action: 'gban', userId: '400' });
+  t('/chat-admin: «бан везде» — только владелец проекта', r.status === 403, r);
+  r = await panel({ initData: initData(700), action: 'enable', chatId: CHAT });
+  t('/chat-admin: подключение по номеру — только владелец проекта', r.status === 403, r);
+  r = await panel({ initData: initData(700), action: 'status', chatId: CHAT2 });
+  t('/chat-admin: status своего чата доступен', r.status === 200 && r.json.chat, r);
+
+  r = await post('/admin-read', { initData: initData(700), path: 'chatAdmin', shallow: true });
+  t('/admin-read: создателю виден только его чат в списке', r.status === 200 && Object.keys(r.json.data).join() === KEY2, r);
+  r = await post('/admin-read', { initData: initData(700), path: 'chatAdmin/' + KEY2 + '/daily' });
+  t('/admin-read: статистика своего чата читается', r.status === 200, r);
+  for (const bad of ['chatAdmin/' + KEY + '/users', 'chatAdmin/_global/bans', 'chatAdmin/_owners', 'accessTokens', 'users', 'mailer', 'gatewayAccounts', 'launcherFeedback']) {
+    r = await post('/admin-read', { initData: initData(700), path: bad });
+    t('/admin-read: «' + bad + '» создателю чата закрыто', r.status === 403, r);
+  }
+  r = await post('/admin-read', { initData: initData(700), path: 'chatAdmin', shallow: false });
+  t('/admin-read: весь узел chatAdmin целиком не отдаётся', r.status === 403, r);
+
+  // админ без права
+  r = await post('/admin-read', { initData: initData(200), path: 'chatAdmin', shallow: true });
+  t('админ без выданного права: чаты не видны', r.status === 200 && Object.keys(r.json.data).length === 0, r);
+  r = await post('/admin-read', { initData: initData(200), path: 'gatewayAccounts' });
+  t('админ без права «VPN»: аккаунты шлюза закрыты', r.status === 403, r);
+  r = await post('/gateway-block', { initData: initData(200), id: 'a'.repeat(24), blocked: true });
+  t('админ без права «VPN»: блокировка — 403', r.status === 403, r);
+
+  // выдача права
+  r = await post('/app-grants', { initData: initData(200), action: 'set', userId: '200', app: 'chats', value: true });
+  t('/app-grants: админ сам себе выдать не может', r.status === 403, r);
+  r = await post('/app-grants', { initData: initData(100), action: 'set', userId: '600', app: 'chats', value: true });
+  t('/app-grants: обычному игроку (не админ) выдать нельзя', r.status === 400, r);
+  r = await post('/app-grants', { initData: initData(100), action: 'set', userId: '200', app: 'nope', value: true });
+  t('/app-grants: неизвестное приложение — 400', r.status === 400, r);
+  r = await post('/app-grants', { initData: initData(100), action: 'set', userId: '200', app: 'chats', value: true });
+  t('/app-grants: Супердоступ выдал админу «Чаты»', r.json?.ok === true && db.appGrants?.['200']?.chats === true, r);
+  r = await post('/admin-read', { initData: initData(200), path: 'chatAdmin', shallow: true });
+  t('админ с «Чаты»: видит все чаты, но не служебные узлы', r.status === 200 && Object.keys(r.json.data).sort().join() === [KEY, KEY2].sort().join(), r);
+  r = await post('/admin-read', { initData: initData(200), path: 'chatAdmin/_global/bans' });
+  t('админ с «Чаты»: «бан везде» не читает', r.status === 403, r);
+  r = await panel({ initData: initData(200), action: 'set', chatId: CHAT2, key: 'links', value: 'off' });
+  t('админ с «Чаты»: настройки любого чата', r.json?.ok === true && db.chatAdmin[KEY2].meta.cfg.links === false, r);
+  r = await panel({ initData: initData(200), action: 'gban', userId: '400' });
+  t('админ с «Чаты»: «бан везде» всё равно только владельцу', r.status === 403, r);
+  r = await post('/app-grants', { initData: initData(100), action: 'list' });
+  t('/app-grants list', r.json?.data?.['200']?.chats === true, r);
+  r = await post('/app-grants', { initData: initData(100), action: 'set', userId: '200', app: 'chats', value: false });
+  r = await post('/admin-read', { initData: initData(200), path: 'chatAdmin/' + KEY + '/users' });
+  t('право забрали — доступ пропал сразу', db.appGrants?.['200']?.chats === undefined && r.status === 403, r);
+  // право на «VPN» — маршрут блокировки пропускает дальше проверки прав
+  await post('/app-grants', { initData: initData(100), action: 'set', userId: '200', app: 'gateway', value: true });
+  r = await post('/gateway-block', { initData: initData(200), id: 'a'.repeat(24), blocked: true });
+  t('админ с «VPN»: блокировка не отвечает 403', r.status !== 403 && r.status !== 401, r);
+  // понизили роль — выданное молчит
+  db.users[200].role = 'user';
+  r = await post('/admin-read', { initData: initData(200), path: 'gatewayAccounts' });
+  t('понизили роль — выданные приложения не действуют', r.status === 403, r);
+  db.users[200].role = 'admin';
 }
 
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');

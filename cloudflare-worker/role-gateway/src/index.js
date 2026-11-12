@@ -327,6 +327,49 @@ function hasBackupsAccess(env, userId, role) {
   return isSuperadmin(env, userId, role);
 }
 
+// ===== Права по приложениям для админов (v5.43) и свои чаты у чужих владельцев =====
+// Что админу открыл Супердоступ — appGrants/<uid> = {chats, gateway, launcher}: узел закрыт правилами базы (читать и писать
+// может только Worker токеном сервисного аккаунта), поэтому подделать это в браузере нельзя. Право действует, только пока
+// у человека в базе роль admin (клиенты роль admin/superadmin записать не могут — правила), понизили — право молчит.
+// Чаты, которые человек подключил сам (создатель чата: /admin_on), — chatAdmin/_owners/<uid>/<чат>.
+const APP_GRANT_IDS = ['chats', 'gateway', 'launcher'];
+const GATEWAY_TOPS = new Set(['gatewayAccounts', 'gatewayBlocks', 'gatewayBlockedDevices']);
+const LAUNCHER_TOPS = new Set(['launcherFeedback', 'launcherFeedbackShots', 'launcherFeedbackNew']);
+async function readAdminJson(env, path, shallow) {
+  const res = await dbReadAdmin(env, path, !!shallow);
+  if (!res.ok) throw new Error('Firebase GET ' + res.status);
+  return res.json();
+}
+async function getAppGrants(env, userId) {
+  const uid = String(userId);
+  if (!SAFE_ID_RE.test(uid)) return {};
+  try {
+    const v = await readAdminJson(env, `/appGrants/${encodeURIComponent(uid)}.json`, false);
+    const out = {};
+    if (v && typeof v === 'object') for (const id of APP_GRANT_IDS) if (v[id] === true) out[id] = true;
+    return out;
+  } catch { return {}; }
+}
+async function getOwnedChats(env, userId) {
+  const uid = String(userId);
+  if (!/^\d{1,15}$/.test(uid)) return {};
+  try {
+    const v = await readAdminJson(env, `/chatAdmin/_owners/${encodeURIComponent(uid)}.json`, false);
+    const out = {};
+    if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) if (chatKeyOf(k)) out[k] = { title: chatCleanText(x && x.title, 80) };
+    return out;
+  } catch { return {}; }
+}
+// Что можно этому человеку: superadmin — всё; админ — выданные приложения; любой — свои чаты.
+async function accessOf(env, userId, role) {
+  const superadmin = isSuperadmin(env, userId, role);
+  const grants = {};
+  if (superadmin) for (const id of APP_GRANT_IDS) grants[id] = true;
+  else if (role === 'admin') Object.assign(grants, await getAppGrants(env, userId));
+  const owned = superadmin ? {} : await getOwnedChats(env, userId);
+  return { superadmin, grants, owned };
+}
+
 // playerId (вида "PLR-XXXXXX") — внутренний игровой id, отдельный от
 // telegramId/ключа в users/ — вся логика боя (battles/matches, судейство)
 // оперирует именно им, поэтому нужен обратный поиск по нему.
@@ -1127,7 +1170,7 @@ async function handleBotMessage(env, message) {
   } else if (command === '/admin') {
     await tgApi(env, 'sendMessage', {
       chat_id: chatId,
-      text: 'Открой Ghost Shell Terminal. Команде проекта открываются инструменты управления (по выданным правам); остальные видят своё окно аккаунта: где вы подключены, как работает бот и наши продукты.',
+      text: 'Открой Ghost Shell Terminal. Команде проекта открываются инструменты управления (по выданным правам); создатели чатов видят статистику и настройки своих чатов; остальные — окно аккаунта: где вы подключены, как работает бот и наши продукты.',
       reply_markup: { inline_keyboard: [[{ text: '🛠 Открыть админ-панель', web_app: { url: `${ADMIN_PANEL_URL}?v=${Date.now()}` } }]] },
     });
   } else if (command === '/help') {
@@ -1886,8 +1929,8 @@ export default {
         return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       }
       const requesterRole = await getRole(verified.userId);
-      if (!isSuperadmin(env, verified.userId, requesterRole)) {
-        return jsonResponse({ error: 'Блокировать аккаунты шлюза может только superadmin' }, 403);
+      if (!(await accessOf(env, verified.userId, requesterRole)).grants.gateway) {
+        return jsonResponse({ error: 'Блокировать аккаунты шлюза может только superadmin или админ с правом на «VPN»' }, 403);
       }
 
       try {
@@ -1898,6 +1941,52 @@ export default {
         return jsonResponse({ ok: true, ...out });
       } catch (err) {
         return jsonResponse({ error: 'Firebase отказал: ' + err.message }, 502);
+      }
+    }
+
+    // Что человеку доступно в панели сверх обычного (приложения, выданные Супердоступом, и свои чаты). Читает только про себя.
+    if (url.pathname === '/my-access' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return jsonResponse({ error: 'битый JSON' }, 400); }
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      const role = await getRole(verified.userId);
+      const access = await accessOf(env, verified.userId, role);
+      return jsonResponse({ ok: true, superadmin: access.superadmin, apps: { chats: !!access.grants.chats, gateway: !!access.grants.gateway, launcher: !!access.grants.launcher },
+        chats: Object.entries(access.owned).map(([id, v]) => ({ id, title: v.title })) });
+    }
+
+    // Выдать/забрать у админа приложение «Чаты», «VPN» или «Лаунчер» — только Супердоступ. Хранится в закрытом узле appGrants.
+    if (url.pathname === '/app-grants' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return jsonResponse({ error: 'битый JSON' }, 400); }
+      const verified = await verifyIdentity(body, env);
+      if (!verified.ok) return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
+      const requesterRole = await getRole(verified.userId);
+      if (!isSuperadmin(env, verified.userId, requesterRole)) return jsonResponse({ error: 'Только superadmin' }, 403);
+      try {
+        if (body.action === 'list') {
+          const v = await readAdminJson(env, '/appGrants.json', false);
+          const out = {};
+          if (v && typeof v === 'object') for (const [uid, g] of Object.entries(v)) if (/^\d{1,15}$/.test(uid) && g && typeof g === 'object') out[uid] = Object.fromEntries(APP_GRANT_IDS.filter((id) => g[id] === true).map((id) => [id, true]));
+          return jsonResponse({ ok: true, data: out });
+        }
+        if (body.action === 'set') {
+          const uid = String(body.userId || '');
+          const app = String(body.app || '');
+          if (!/^\d{1,15}$/.test(uid)) return jsonResponse({ error: 'нужен userId (цифры)' }, 400);
+          if (!APP_GRANT_IDS.includes(app)) return jsonResponse({ error: 'неизвестное приложение' }, 400);
+          if (typeof body.value !== 'boolean') return jsonResponse({ error: 'value должен быть true или false' }, 400);
+          if (body.value && (await getRole(uid)) !== 'admin') return jsonResponse({ error: 'Приложение можно выдать только админу — сначала назначьте человека админом' }, 400);
+          const res = await dbWrite(env, `/appGrants/${uid}/${app}.json`, body.value
+            ? { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'true' }
+            : { method: 'DELETE' });
+          if (!res.ok) return jsonResponse({ error: 'Firebase отказал: HTTP ' + res.status }, 502);
+          return jsonResponse({ ok: true });
+        }
+        return jsonResponse({ error: 'неизвестное действие' }, 400);
+      } catch (err) {
+        return jsonResponse({ error: 'Не вышло: ' + String((err && err.message) || err).slice(0, 120) }, 502);
       }
     }
 
@@ -1917,19 +2006,37 @@ export default {
       }
 
       const requesterRole = await getRole(verified.userId);
-      if (!isSuperadmin(env, verified.userId, requesterRole)) {
-        return jsonResponse({ error: 'Читать базу целиком может только superadmin' }, 403);
-      }
+      const access = await accessOf(env, verified.userId, requesterRole);
 
       const segments = String(body.path ?? '').split('/').filter((s) => s !== '');
       if (segments.length > 8 || !segments.every((s) => ADMIN_READ_SEGMENT_RE.test(s))) {
         return jsonResponse({ error: 'недопустимый путь' }, 400);
       }
 
+      // Не Супердоступ — только то, что ему выдано: приложения «VPN» и «Лаунчер» (если выданы), чаты (все — если выдано
+      // приложение «Чаты», иначе только свои; служебные _global/_owners — никогда). Остальное — только владелец проекта.
+      let onlyChats = null; // для списка чатов: какие ключи оставить
+      if (!access.superadmin) {
+        const top = segments[0];
+        const second = segments[1];
+        if (GATEWAY_TOPS.has(top) && access.grants.gateway) { /* можно */ }
+        else if (LAUNCHER_TOPS.has(top) && access.grants.launcher) { /* можно */ }
+        else if (top === 'chatAdmin' && segments.length === 1 && body.shallow === true) { onlyChats = access.grants.chats ? 'all' : Object.keys(access.owned); }
+        else if (top === 'chatAdmin' && segments.length > 1 && chatKeyOf(second) && (access.grants.chats || access.owned[second])) { /* можно */ }
+        else return jsonResponse({ error: 'Это читать может только superadmin' }, 403);
+      }
+
       try {
         const res = await dbReadAdmin(env, '/' + segments.map(encodeURIComponent).join('/') + '.json', body.shallow === true);
         if (!res.ok) return jsonResponse({ error: 'Firebase отказал: HTTP ' + res.status }, 502);
-        return jsonResponse({ data: await res.json() });
+        const data = await res.json();
+        if (onlyChats) {
+          const keep = onlyChats === 'all' ? null : new Set(onlyChats);
+          const out = {};
+          for (const k of Object.keys(data && typeof data === 'object' ? data : {})) if (chatKeyOf(k) && (!keep || keep.has(k))) out[k] = true;
+          return jsonResponse({ data: out });
+        }
+        return jsonResponse({ data });
       } catch (err) {
         return jsonResponse({ error: 'Firebase недоступен: ' + err.message }, 502);
       }
@@ -1947,11 +2054,16 @@ export default {
       const verified = await verifyIdentity(body, env);
       if (!verified.ok) return jsonResponse({ error: 'Проверка личности не прошла: ' + verified.reason }, 401);
       const requesterRole = await getRole(verified.userId);
-      if (!isSuperadmin(env, verified.userId, requesterRole)) return jsonResponse({ error: 'Только superadmin' }, 403);
+      const access = await accessOf(env, verified.userId, requesterRole);
 
       const action = String(body.action || '');
       const ca = await getChatAdmin(env, url.origin);
       const chatKey = body.chatId === undefined ? null : chatKeyOf(body.chatId);
+      if (!access.superadmin) {
+        // Не владелец проекта: админ с приложением «Чаты» — любые чаты, создатель чата — только свои; бан везде и подключение по номеру — только владелец
+        if (!['status', 'set', 'disable', 'mod'].includes(action)) return jsonResponse({ error: 'Это может только superadmin' }, 403);
+        if (!chatKey || !(access.grants.chats || access.owned[chatKey])) return jsonResponse({ error: 'Это не ваш чат' }, 403);
+      }
       try {
         if (action === 'status') {
           const webhook = await getWebhookSummary(env, url.origin);

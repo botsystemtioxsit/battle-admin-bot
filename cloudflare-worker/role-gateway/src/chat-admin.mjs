@@ -177,6 +177,8 @@ export function createChatAdmin(deps) {
   const sweepAt = new Map(); // chatKey → мс последней проверки «кого пора выгнать» (не чаще раза в 30 с на чат)
   let bannedCache = { at: 0, set: new Set() }; // id людей из «бана везде», раз в минуту перечитывается
   const META_TTL = 2 * 60 * 1000;
+  const MAX_TENANT_CHATS = 10;
+  const globalBanOn = (meta) => !!(meta && owners.has(String(meta.enabledBy))); // «бан везде» сторожит только чаты владельца проекта, чужие чаты — нет
 
   const say = (chatId, text, extra) => deps.tg('sendMessage', { chat_id: chatId, text: String(text).slice(0, 4000), ...(extra || {}) });
 
@@ -217,6 +219,11 @@ export function createChatAdmin(deps) {
   async function listEnabledChats() {
     const idx = await deps.dbGet(`${GLOBAL}/chats`).catch(() => null);
     return Object.keys(idx && typeof idx === 'object' ? idx : {}).filter((k) => chatKeyOf(k)).slice(0, 40);
+  }
+  // чаты чужих владельцев (их включили сами создатели чатов): «бан везде» их не трогает, но проверку «я не бот» по cron проходят
+  async function listTenantChats() {
+    const idx = await deps.dbGet(`${GLOBAL}/tenants`).catch(() => null);
+    return Object.keys(idx && typeof idx === 'object' ? idx : {}).filter((k) => chatKeyOf(k));
   }
   // по пять запросов к Telegram одновременно: у Worker'а лимит подзапросов на одно обращение
   async function eachChat(chats, fn) {
@@ -401,7 +408,11 @@ export function createChatAdmin(deps) {
   // Раз в минуту (cron Worker'а): пройтись по включённым чатам. Возвращает, сколько человек выгнано.
   async function sweepAll() {
     let total = 0;
-    for (const c of (await listEnabledChats()).slice(0, 20)) {
+    const all = [...(await listEnabledChats()), ...(await listTenantChats())];
+    const PER_RUN = 20; // лимит подзапросов на одно обращение: чатов больше — каждую минуту берём следующую порцию
+    const start = all.length > PER_RUN ? (Math.floor(now() / 60000) * PER_RUN) % all.length : 0;
+    const part = all.length > PER_RUN ? Array.from({ length: PER_RUN }, (_, i) => all[(start + i) % all.length]) : all;
+    for (const c of part) {
       const meta = await getMeta(c);
       if (!meta || !meta.enabled || !cfgOf(meta).captcha) continue;
       total += await sweepCaptcha(c, true).catch(() => 0);
@@ -444,7 +455,7 @@ export function createChatAdmin(deps) {
     const ev = describeChatMember(update);
     if (!ev || !userKeyOf(ev.user.id)) return;
     if (ev.user.is_bot && (ev.kind !== 'join' || String(ev.user.id) === String(deps.botId))) return;
-    if (ev.kind === 'join' && (await bannedSet()).has(String(ev.user.id))) { await blockBanned(chat.id, ev.user); return; } // «бан везде»: не впускаем, статистику не пачкаем
+    if (ev.kind === 'join' && globalBanOn(meta) && (await bannedSet()).has(String(ev.user.id))) { await blockBanned(chat.id, ev.user); return; } // «бан везде»: не впускаем, статистику не пачкаем
     const cfg = cfgOf(meta);
     if (cfg.captcha) await sweepCaptcha(chatKey).catch(() => 0); // заодно выгоняем тех, кто не нажал кнопку вовремя
     if (ev.kind !== 'join') {
@@ -477,8 +488,8 @@ export function createChatAdmin(deps) {
     if (meta && meta.enabled) {
       await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/botStatus`]: status, [`chatAdmin/${chatKey}/meta/title`]: cleanText(chat.title, 80) });
       metaCache.delete(chatKey);
-    } else if ((status === 'administrator') && u.from && owners.has(String(u.from.id))) {
-      await say(chat.id, '✅ Теперь я администратор этого чата. Чтобы включить статистику входов и модерацию, отправьте /admin_on (это может сделать только владелец проекта).');
+    } else if (status === 'administrator' && u.from) {
+      await say(chat.id, '✅ Теперь я администратор этого чата. Чтобы включить статистику входов и модерацию, отправьте /admin_on (это может сделать создатель чата).');
     }
   }
 
@@ -679,7 +690,7 @@ export function createChatAdmin(deps) {
   }
 
   async function disable(chatKey) {
-    await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: false, [`${GLOBAL}/chats/${chatKey}`]: null });
+    await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: false, [`${GLOBAL}/chats/${chatKey}`]: null, [`${GLOBAL}/tenants/${chatKey}`]: null });
     metaCache.delete(chatKey);
   }
   async function enable(chat, from) {
@@ -689,7 +700,8 @@ export function createChatAdmin(deps) {
     const meta = { enabled: true, title: cleanText(chat.title, 80), type: chat.type, enabledAt: old && old.enabledAt ? old.enabledAt : now(), enabledBy: String(from.id), botStatus: botSt || 'unknown' };
     await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: true, [`chatAdmin/${chatKey}/meta/title`]: meta.title, [`chatAdmin/${chatKey}/meta/type`]: meta.type,
       [`chatAdmin/${chatKey}/meta/enabledAt`]: meta.enabledAt, [`chatAdmin/${chatKey}/meta/enabledBy`]: meta.enabledBy, [`chatAdmin/${chatKey}/meta/botStatus`]: meta.botStatus,
-      [`${GLOBAL}/chats/${chatKey}`]: { title: meta.title } });
+      [`${owners.has(String(from.id)) ? `${GLOBAL}/chats` : `${GLOBAL}/tenants`}/${chatKey}`]: { title: meta.title },
+      [`chatAdmin/_owners/${from.id}/${chatKey}`]: { title: meta.title } });
     metaCache.delete(chatKey);
     return botSt === 'administrator' || botSt === 'creator';
   }
@@ -706,15 +718,29 @@ export function createChatAdmin(deps) {
 
     // включение и выключение — только владелец проекта (иначе любой чат мог бы заставить бота писать в базу)
     if (cmd && (cmd.name === 'admin_on' || cmd.name === 'admin_off')) {
-      if (!fromId || !owners.has(fromId)) return true; // чужим не отвечаем
+      if (!fromId) return true;
+      const isOwner = owners.has(fromId);
+      const st = isOwner ? 'creator' : await memberStatus(chat.id, fromId);
+      if (!isOwner && st !== 'creator') {
+        // включить бота в чате может владелец проекта или создатель самого чата; остальным — короткий ответ, ничего не пишем
+        if (st === 'administrator') await say(chat.id, 'Включить и выключить админ-функции может только создатель чата.');
+        return true;
+      }
       if (cmd.name === 'admin_off') {
         await disable(chatKey);
         await say(chat.id, '⏹ Админ-функции для этого чата выключены. Собранная статистика сохранена.');
         return true;
       }
+      if (!isOwner) {
+        // у чужих владельцев — не больше MAX_TENANT_CHATS чатов, чтобы один человек не заставил бота работать на сотню чатов
+        const mine = await deps.dbGet(`chatAdmin/_owners/${fromId}`, { shallow: true }).catch(() => null);
+        const keys = Object.keys(mine && typeof mine === 'object' ? mine : {}).filter((k) => k !== chatKey);
+        if (keys.length >= MAX_TENANT_CHATS) { await say(chat.id, `Можно подключить не больше ${MAX_TENANT_CHATS} чатов.`); return true; }
+      }
       const botAdmin = await enable(chat, msg.from);
       if (deps.onEnabled) { try { await deps.onEnabled(); } catch { /* вебхук проверит /health */ } }
       await say(chat.id, '✅ Админ-функции включены: статистика входов и сообщений, модерация. /help — список команд.'
+        + (isOwner ? '' : '\n\n📊 Статистика и настройки — в панели: откройте личный чат со мной и отправьте /admin.')
         + (botAdmin ? '' : '\n\n⚠️ Сделайте меня администратором чата (права: удаление сообщений, блокировка участников, приглашение по ссылкам) — иначе я не увижу, кто и как заходит, и не смогу модерировать.'));
       return true;
     }
@@ -725,7 +751,7 @@ export function createChatAdmin(deps) {
     if (cfg.captcha) await sweepCaptcha(chatKey).catch(() => 0);
 
     // «бан везде»: человек из списка вошёл (служебное сообщение) или написал — блокируем и убираем сообщение
-    const banned = await bannedSet();
+    const banned = globalBanOn(meta) ? await bannedSet() : new Set();
     if (banned.size) {
       const bad = (msg.new_chat_members || []).filter((u) => banned.has(String(u.id)));
       if (bad.length) { for (const u of bad) await blockBanned(chat.id, u); await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id }); return true; }

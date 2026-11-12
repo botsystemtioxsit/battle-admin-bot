@@ -257,63 +257,6 @@
 
   .admin-empty{ text-align:center; color:var(--muted); font-size:13px; padding:20px 0; }
 
-  /* ===== "База" — дерево Firebase RTDB =====
-     Оформлено как дерево файлов в редакторе кода: шеврон разворота
-     вращается на 90° через data-open (см. renderDbLevel в JS), у веток —
-     иконка папки (открыта/закрыта), у листьев — иконка файла, вложенность
-     подчёркивается пунктирной направляющей линией на всю высоту уровня. */
-  /* скрыта по умолчанию — на мобильных нет места на третью колонку, и до
-     первого updateDbPeekVisibility() её вообще не должно быть видно, даже
-     мельком; .show ставится только внутри @media(min-width:900px) выше */
-  /* просмотр базы — выезжающая справа панель по кнопке «База данных» в
-     заголовке раздела (только Супердоступ, см. updateDbPeekVisibility) */
-  .db-peek-panel{ position:fixed; z-index:45; top:0; right:0; bottom:0; width:min(460px, 94vw); padding:16px 18px 24px; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); box-shadow:-14px 0 34px rgba(0,0,0,0.4); transform:translateX(100%); visibility:hidden; transition:transform .2s ease, visibility 0s linear .2s; }
-  .db-peek-panel.open{ transform:none; visibility:visible; transition:transform .2s ease; }
-  .db-peek-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
-  .db-peek-head .section-label{ margin:0; }
-  .head-btn{ display:none; flex:none; height:36px; padding:0 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel-2); color:var(--text); font-size:13px; font-weight:600; cursor:pointer; }
-  body.db-peek-allowed .head-btn{ display:inline-block; }
-  .head-btn[aria-expanded="true"]{ border-color:var(--gold); color:var(--gold); }
-  .db-tree{ font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size:12.5px; line-height:1.9; overflow-x:auto; }
-  .db-node{ display:flex; align-items:center; gap:6px; padding:2px 6px; border-radius:5px; white-space:nowrap; }
-  .db-node.container{ cursor:pointer; }
-  .db-node:hover{ background:var(--panel-2); }
-  .db-node .db-toggle{
-    width:14px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
-    color:var(--muted); font-size:10px; transition:transform 150ms ease;
-  }
-  .db-node.container[data-open="true"] > .db-toggle{ transform:rotate(90deg); }
-  .db-node .db-icon{ flex-shrink:0; font-size:12px; line-height:1; opacity:0.9; }
-  .db-node .db-key{ color:var(--gold); flex-shrink:0; font-weight:600; }
-  .db-node .db-count{ color:var(--muted); flex-shrink:0; font-size:10.5px; }
-  .db-node .db-val{ color:var(--text); white-space:pre-wrap; word-break:break-all; }
-  .db-node .db-val.str{ color:#CE9178; }
-  .db-node .db-val.num{ color:#B5CEA8; }
-  .db-node .db-val.bool{ color:#569CD6; }
-  .db-node .db-val.null{ color:var(--muted); font-style:italic; }
-  .db-children{ margin-left:10px; padding-left:13px; border-left:1px dashed var(--line); }
-  /* редактирование листов/добавление полей прямо в дереве — см.
-     parseDbEditValue/renderDbAddForm в JS */
-  .db-node .db-edit-btn, .db-node .db-del-btn, .db-node .db-add-btn,
-  .db-node .db-save-btn, .db-node .db-cancel-btn,
-  .db-node .db-add-save-btn, .db-node .db-add-cancel-btn {
-    flex-shrink:0; background:none; border:1px solid var(--line); border-radius:4px;
-    color:var(--muted); font-size:11px; line-height:1.4; padding:1px 5px; cursor:pointer; font-family:inherit;
-  }
-  .db-node .db-edit-btn:hover, .db-node .db-save-btn:hover,
-  .db-node .db-add-btn:hover, .db-node .db-add-save-btn:hover { color:var(--gold); border-color:var(--gold); }
-  .db-node .db-del-btn:hover, .db-node .db-cancel-btn:hover,
-  .db-node .db-add-cancel-btn:hover { color:var(--live); border-color:var(--live); }
-  .db-node.editing .db-edit-input, .db-add-form .db-add-key-input, .db-add-form .db-add-val-input {
-    background:var(--panel-2); border:1px solid var(--gold); border-radius:4px; padding:1px 6px;
-    color:var(--text); font:inherit;
-  }
-  .db-add-form .db-add-key-input{ width:100px; flex-shrink:0; }
-  @keyframes dbFlash{
-    0%{ background:rgba(62,213,152,0.4); }
-    100%{ background:transparent; }
-  }
-  .db-node.flash{ animation:dbFlash 1000ms ease-out; }
 
   .user-row{ display:flex; align-items:center; gap:12px; padding:9px 11px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); cursor:pointer; margin-bottom:6px; }
   .user-row .u-avatar{ width:32px; height:32px; border-radius:50%; background:var(--panel-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; position:relative; background-size:cover; background-position:center; }
@@ -457,7 +400,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.42: время на кнопку «Я не бот» теперь в секундах (по умолчанию 10, от 10 до 600), выгон ровно по сроку. v5.41: проверка «я не бот» для новичков чата теперь включена по умолчанию (выключить — /set captcha off или переключатель в «Чаты → Обзор»). v5.40: вкладка «Чаты → Рассылки» — регулярные сообщения в чаты от ваших ботов: несколько вариантов текста, расписание, тихие часы, несколько ботов по очереди, проверка и пробная отправка. v5.39: проверка «я не бот» для новичков чата — кнопка, выгон по таймеру, переключатель и время в «Чаты → Обзор», счётчики. v5.38: «Бан везде» — один бан сразу во всех чатах бота, в игре и в ВидеоЧате (вкладка «Баны везде», кнопка в карточках игрока и участника, команды Терминала gban и ungban). v5.37: приложение «Чаты» — админ-бот Telegram-чатов (статистика входов: кто, когда и как зашёл, по какой ссылке; модерация; настройки), команды Терминала chats и chatstats. v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.42</span></div>
+    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.43: «База данных» убрана совсем; админу Супердоступ выдаёт приложения «Чаты», «VPN», «Лаунчер» (Администрация); создатель чата, подключивший бота сам (/admin_on), видит в панели только свои чаты («Мои чаты»). v5.42: время на кнопку «Я не бот» теперь в секундах (по умолчанию 10, от 10 до 600), выгон ровно по сроку. v5.41: проверка «я не бот» для новичков чата теперь включена по умолчанию (выключить — /set captcha off или переключатель в «Чаты → Обзор»). v5.40: вкладка «Чаты → Рассылки» — регулярные сообщения в чаты от ваших ботов: несколько вариантов текста, расписание, тихие часы, несколько ботов по очереди, проверка и пробная отправка. v5.39: проверка «я не бот» для новичков чата — кнопка, выгон по таймеру, переключатель и время в «Чаты → Обзор», счётчики. v5.38: «Бан везде» — один бан сразу во всех чатах бота, в игре и в ВидеоЧате (вкладка «Баны везде», кнопка в карточках игрока и участника, команды Терминала gban и ungban). v5.37: приложение «Чаты» — админ-бот Telegram-чатов (статистика входов: кто, когда и как зашёл, по какой ссылке; модерация; настройки), команды Терминала chats и chatstats. v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.43</span></div>
     <div class="me" id="me-box" style="display:none;">
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
@@ -664,7 +607,7 @@
       <div class="tab-grp">Супердоступ</div>
       <div class="tab" data-tab="super-admins" data-view="super" data-title="Администрация" data-sub="Права админов, запросы на устройства и токены доступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Администрация</div>
       <div class="tab" data-tab="super-backups" data-view="super" data-title="Бэкапы" data-sub="Снимки кода и базы, восстановление"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18v4H3zM5 11v8h14v-8M10 15h4"></path></svg>Бэкапы</div>
-      <div class="tab" data-tab="super-danger" data-view="super" data-title="Система" data-sub="Обслуживание, аварийные режимы, база данных"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2"></path><circle cx="14" cy="6" r="2"></circle><circle cx="8" cy="12" r="2"></circle><circle cx="16" cy="18" r="2"></circle></svg>Система</div>
+      <div class="tab" data-tab="super-danger" data-view="super" data-title="Система" data-sub="Обслуживание и аварийные режимы"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2"></path><circle cx="14" cy="6" r="2"></circle><circle cx="8" cy="12" r="2"></circle><circle cx="16" cy="18" r="2"></circle></svg>Система</div>
     </div>
 
     <!-- заголовок раздела: текст берётся из data-title/data-sub активной
@@ -674,25 +617,6 @@
         <h1 id="page-title">Панель</h1>
         <div class="page-sub" id="page-sub">Найдите игрока и управляйте его доступом</div>
       </div>
-      <button type="button" class="head-btn" id="db-peek-btn" aria-expanded="false" aria-controls="db-peek-panel">База данных</button>
-    </div>
-
-    <!-- ===== Просмотр базы данных — выезжающая справа панель, только
-         Супердоступ. Открывается кнопкой «База данных» в заголовке любого
-         раздела (раньше это была постоянная третья колонка, которая съедала
-         место и на узких окнах вылезала за край); пока закрыта — ничего не
-         читает из базы и слушателей не держит. Прячется целиком, пока открыто
-         само редактируемое дерево («Система» → «База данных») — незачем
-         показывать одно и то же дважды (см. updateDbPeekVisibility).
-         Рендерится тем же renderDbTree()/renderDbLevel(), что и редактируемое
-         дерево, просто с editable=false (см. JS) — поэтому тут нет ни ✎, ни +,
-         ни ✕, только просмотр и разворачивание веток. -->
-    <div class="db-peek-panel" id="db-peek-panel" role="dialog" aria-label="Просмотр базы данных">
-      <div class="db-peek-head">
-        <div class="section-label">База данных — просмотр</div>
-        <button type="button" class="btn btn-line" id="db-peek-close" aria-label="Закрыть" style="padding:6px 12px;">✕</button>
-      </div>
-      <div id="db-peek-tree" class="db-tree"><div class="admin-empty">Загрузка…</div></div>
     </div>
 
     <!-- ===== панель управления игроками ===== -->
@@ -1662,11 +1586,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       </div>
 
       <div id="super-section-danger" style="display:none;">
-      <div class="subnav">
-        <button class="btn btn-gold" id="danger-sub-zone">Опасная зона</button>
-        <button class="btn btn-line" id="danger-sub-db" style="display:none;">База данных</button>
-      </div>
-
       <div id="danger-section-zone">
 
       <div class="center-msg" id="danger-checking" style="min-height:calc(30vh / var(--ui-zoom, 1));">
@@ -1851,13 +1770,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         </div>
       </div>
 
-      </div>
-
-      <div id="danger-section-db" style="display:none;">
-        <div class="section-label">Firebase RTDB — дерево, живое обновление</div>
-        <div class="admin-card" style="padding:10px 12px;">
-          <div id="db-tree-root" class="db-tree"><div class="admin-empty">Загрузка…</div></div>
-        </div>
       </div>
 
       </div>
@@ -2388,6 +2300,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // раньше, делается позже и создаёт deviceId лениво, см. getDeviceKey.
     const userRead = db.ref('users/' + myTelegramId).once('value');
     const lockdownRead = db.ref('config/emergencyLockdown').once('value');
+    const accessRead = Promise.resolve().then(loadMyAccess); // (микрозадача: к этому моменту весь скрипт уже выполнен, константы объявлены) не блокирует чтение профиля; ждём его только перед показом панели
     lockdownRead.catch(() => {}); // ошибку обработает основная цепочка ниже; здесь — только чтобы не было "unhandled rejection", пока ждём профиль
     const prefetchedDeviceId = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
     const trustRead = prefetchedDeviceId
@@ -2432,6 +2345,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         }
 
         function proceedToApp() {
+          accessRead.then(applyMyAccess).catch(() => {}).then(proceedToAppNow);
+        }
+        function proceedToAppNow() {
           document.getElementById('me-box').style.display = 'block';
           document.getElementById('me-name').textContent = user.firstName || 'Игрок';
           document.getElementById('me-role').textContent = (role === 'user' && myPermissions.app_community)
@@ -3075,7 +2991,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // делают, если слушатель и так не был подключён).
       const isSuperTab = tab.dataset.view === 'super';
       if (!isSuperTab) {
-        detachAllDbLiveBranches(dbTreeState);
         detachAdminsLiveListener();
         detachAccessTokensListener();
       }
@@ -3102,7 +3017,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (isSuperTab) showSuperSection(tab.dataset.tab);
       // нужен только привязанный email — целиком профиль (с аватаркой) не читаем
       if (tab.dataset.tab === 'account' && myTelegramId) { db.ref('users/' + myTelegramId + '/attachedEmail').once('value').then((s) => renderAccountTab({ attachedEmail: s.val() })); refreshAccountUser(); }
-      updateDbPeekVisibility();
     });
   });
 
@@ -3153,7 +3067,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     'super-danger': ['danger'],
   };
   function showSuperSection(tabKey) {
-    detachAllDbLiveBranches(dbTreeState);
     detachAdminsLiveListener();
     detachAccessTokensListener();
     const shown = SUPER_TAB_SECTIONS[tabKey] || [];
@@ -3164,7 +3077,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (shown.includes('tokens')) { loadAccessTokensList(); }
     if (shown.includes('backups')) { showBackupsSection('list'); loadAllBackupLists(); }
     if (shown.includes('danger')) { showDangerSection('zone'); openDangerZone(); }
-    updateDbPeekVisibility();
   }
 
   // ===== суб-навы объединённых вкладок (см. CLAUDE.md/PR-описание задачи
@@ -3202,28 +3114,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   document.getElementById('backups-sub-list').addEventListener('click', () => showBackupsSection('list'));
   document.getElementById('backups-sub-restore').addEventListener('click', () => showBackupsSection('restore'));
 
-  // "База данных" — только superadmin (canManageRoles), её кнопка суб-нава
-  // и так скрыта не-superadmin (см. applyRoleUI), но loadDatabaseTree()
-  // всё равно сам себя перепроверяет на случай подделки клика. Уходя с этой
-  // секции (внутри той же вкладки "Система") снимаем живые слушатели веток
-  // — тот же принцип "не тянуть трафик за скрытым экраном", что и раньше у
-  // отдельной вкладки "База"; при возврате loadDatabaseTree() переподключит
-  // то, что было развёрнуто (см. openPaths там же).
-  function showDangerSection(section) {
-    const isZone = section === 'zone';
-    document.getElementById('danger-sub-zone').className = 'btn ' + (isZone ? 'btn-gold' : 'btn-line');
-    document.getElementById('danger-sub-db').className = 'btn ' + (!isZone ? 'btn-gold' : 'btn-line');
-    document.getElementById('danger-section-zone').style.display = isZone ? 'block' : 'none';
-    document.getElementById('danger-section-db').style.display = isZone ? 'none' : 'block';
-    if (isZone) { detachAllDbLiveBranches(dbTreeState); }
-    else if (canManageRoles()) { loadDatabaseTree(); }
-    // переключение секции внутри "Системы" тоже может открыть/закрыть
-    // редактируемое дерево — обновляем видимость пик-панели тем же путём,
-    // что и при переключении вкладок верхнего уровня
-    updateDbPeekVisibility();
+  // v5.43: «База данных» убрана совсем (ни просмотра, ни правки) — в «Системе» осталась только опасная зона.
+  function showDangerSection() {
+    document.getElementById('danger-section-zone').style.display = 'block';
   }
-  document.getElementById('danger-sub-zone').addEventListener('click', () => showDangerSection('zone'));
-  document.getElementById('danger-sub-db').addEventListener('click', () => showDangerSection('db'));
 
   // ===== список пользователей =====
   const userListWrap = document.getElementById('user-list-wrap');
@@ -3741,19 +3635,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // "Терминал" (командная строка) — только Супердоступ; "Эфир" (чтение) видят все
     const terminalTab = document.querySelector('.tab[data-tab="terminal"]');
     if (terminalTab) terminalTab.style.display = canManageRoles() ? '' : 'none';
-    // "База данных" внутри секции "Система" (см. #panel-super) — сырой
-    // доступ буквально ко всей базе, включая emailLogins с почтами игроков,
-    // только superadmin, без промежуточных прав.
-    const dangerSubDbBtn = document.getElementById('danger-sub-db');
-    if (dangerSubDbBtn) dangerSubDbBtn.style.display = canManageRoles() ? '' : 'none';
     // "Статистика"/"Приложения" — видны всем, у кого вообще есть доступ к
     // панели (moderator/admin/superadmin), без отдельного переключаемого
     // права — намеренно не трогаем их display здесь.
     document.querySelectorAll('#app-tabs .tab[data-app]').forEach((t) => {
       if (!tabInApp(t, currentApp)) t.style.display = 'none';
     });
+    // v5.43: «Баны везде» и «Рассылки» — только владелец проекта; создателю чата и админу с «Чаты» их не показываем
+    ['ch-bans', 'ch-mail'].forEach((k) => { const el = document.querySelector('.tab[data-tab="' + k + '"]'); if (el && !canManageRoles()) el.style.display = 'none'; });
     syncTabGroups();
-    updateDbPeekVisibility();
   }
 
   // ===== «Сообщения в лаунчере» (v5.34) — ошибки и предложения из Ghost Shell Launcher =====
@@ -3774,7 +3664,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   let lfFilter = 'new';
   const lfShotsCache = {};
   const lfOpenShots = new Set();
-  function canManageLauncher() { return !!myPermissions.app_launcher && canManageRoles(); }
+  function canManageLauncher() { return !!myPermissions.app_launcher; } // v5.43: приложение может выдать админу Супердоступ (Worker проверяет это сам)
   function lfWhen(ms) { return ms ? new Date(ms).toLocaleString('ru-RU') : '—'; }
   function lfSet(el, text) { el.textContent = String(text ?? ''); return el; }
   function lfEl(tag, cls, text) {
@@ -4007,7 +3897,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // gatewayBlockedDevices/<dev>; их пишет ТОЛЬКО Worker (POST /gateway-block, Супердоступ), клиенты правилами не пускаются.
   // Всё из базы выводится через textContent. Известное ограничение (см. CLAUDE.md): удалить свою запись блокировки в открытой базе
   // технически можно — блокировка отключает плагин, а не защищает от умелого человека.
-  function canManageGateway() { return !!myPermissions.app_gateway && canManageRoles(); }
+  function canManageGateway() { return !!myPermissions.app_gateway; }
   const GW_ID_RE = /^[0-9a-f]{24}$/;
   const GW_DEV_RE = /^[0-9a-f]{32}$/;
   const GW_FILTERS = [['all', 'Все'], ['active', 'Активные'], ['blocked', 'Заблокированные']];
@@ -4232,7 +4122,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   let chPeopleFilter = 'all';
   let chPeopleLimit = 100;
   let chLoadedFor = null;
-  function canManageChats() { return !!myPermissions.app_chats && canManageRoles(); }
+  function canManageChats() { return !!myPermissions.app_chats; }
+  // «Чаты» целиком (все чаты, как у владельца проекта) — Супердоступ или админ с выданным приложением; у создателя чата — только свои
+  function canChatsAll() { return canManageRoles() || !!(myAccess && myAccess.apps && myAccess.apps.chats); }
   function chDayKey(ms) { return new Date(ms).toISOString().slice(0, 10); }
   function chCfg(meta) { return { welcome: false, links: false, cleanup: false, count: true, captcha: true, captchaSec: 10, maxWarns: 3, tz: 'Europe/Berlin', welcomeText: '', rules: '', ...((meta && meta.cfg) || {}) }; }
   function chTitle(id) { const m = chMetas[id]; return (m && m.title ? String(m.title) : 'Чат ' + id) + (m && m.enabled ? '' : ' — выключен'); }
@@ -4454,6 +4346,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const box = document.getElementById('ch-connect');
     if (!box) return;
     box.replaceChildren();
+    if (!canManageRoles()) {
+      ['1. Добавьте бота @troll_battle_Terminal_bot в свой чат.', '2. Сделайте его администратором (права: удаление сообщений, блокировка участников, приглашение по ссылкам) — без этого он не видит, кто и как заходит.', '3. Создатель чата отправляет в чате команду /admin_on — чат сразу появится здесь (обновите страницу). Выключить: /admin_off.'].forEach((x) => { const p = lfSet(lfEl('div', 'l-time'), x); p.style.cssText = 'margin:4px 0; font-size:12.5px;'; box.appendChild(p); });
+      return;
+    }
     ['1. Добавьте бота @troll_battle_Terminal_bot в чат.', '2. Сделайте его администратором (права: удаление сообщений, блокировка участников, приглашение по ссылкам) — без этого он не видит, кто и как заходит.', '3. В чате отправьте /admin_on (это может только владелец проекта). Чат появится в списке выше.',
       'Либо введите номер чата здесь (бот уже должен быть в нём):'].forEach((t) => { const p = lfSet(lfEl('div', 'l-time'), t); p.style.cssText = 'margin:4px 0; font-size:12.5px;'; box.appendChild(p); });
     const input = document.createElement('input'); input.type = 'text'; input.className = 'field-input'; input.placeholder = '-1001234567890'; input.maxLength = 22; input.style.cssText = 'width:100%; box-sizing:border-box; margin-top:6px;';
@@ -4564,7 +4460,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       mk('Заблокировать', 'btn-live', () => mod('ban', 'Заблокировать навсегда'));
     }
     const gmount = lfEl('div');
-    mk('Забанить везде…', 'btn-live', async () => { chGbanForm(gmount, { id, name: u.name || '', username: u.username || '' }, () => { chRefresh(true); }); });
+    if (canManageRoles()) mk('Забанить везде…', 'btn-live', async () => { chGbanForm(gmount, { id, name: u.name || '', username: u.username || '' }, () => { chRefresh(true); }); });
     row.append(actions, gmount);
     return row;
   }
@@ -4890,8 +4786,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const el = document.createElement(tag);
     const ic = document.createElement('span'); ic.className = 'app-ic'; ic.textContent = def.icon || '•';
     const nm = document.createElement('span'); nm.className = 'app-nm';
-    const b = document.createElement('b'); b.textContent = def.label;
-    const sub = document.createElement('span'); sub.className = 'app-sub'; sub.textContent = def.sub || '';
+    const mine = def.id === 'chats' && !canChatsAll(); // создатель чата видит не «Чаты», а свои
+    const b = document.createElement('b'); b.textContent = mine ? 'Мои чаты' : def.label;
+    const sub = document.createElement('span'); sub.className = 'app-sub'; sub.textContent = mine ? 'Статистика вашего чата' : (def.sub || '');
     nm.append(b, sub);
     el.append(ic, nm);
     return el;
@@ -6391,438 +6288,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }).catch((err) => alert('Не удалось отклонить заявку: ' + (err.message || err)));
   }
 
-  // ===== "База" — дерево всей Firebase RTDB с живым обновлением =====
-  // Идея: верхний уровень (список корневых веток — users/battles/clans/...)
-  // получаем ОДНИМ дешёвым REST-запросом с ?shallow=true — он возвращает
-  // только имена ключей (true для веток, реальное значение для листьев),
-  // а не выкачивает разом всю базу целиком. Открыть живьём (db.ref(path)
-  // .on('value')) можно только конкретную корневую ветку — её потомки
-  // дальше разворачиваются бесплатно из уже загруженного снимка, без
-  // повторных запросов. Закрыл ветку — слушатель снимается (off), больше
-  // не тратим трафик на то, что админ уже не смотрит.
-  // Состояние дерева вынесено в отдельный объект-фабрику, а не завязано на
-  // единственный набор переменных, потому что дерево теперь рисуется в
-  // ДВУХ независимых местах: редактируемое в "Система" → "База данных"
-  // (dbTreeState, containerId 'db-tree-root', editable=true) и постоянная
-  // пик-панель на десктопе (dbPeekState, 'db-peek-tree', editable=false,
-  // см. #db-peek-panel/updateDbPeekVisibility). У каждого свой набор
-  // открытых веток и живых слушателей — сворачивание одного не трогает
-  // другое.
-  function createDbTreeState() {
-    return {
-      rootKeys: null, // null = ещё не загружено; иначе { key: true|<leaf value> }
-      openPaths: new Set(), // UI-состояние "развёрнуто" для ЛЮБОЙ глубины
-      liveBranches: new Map(), // topKey -> { ref, cb, data, ready }
-      editingPath: null, // путь листа, который сейчас редактируется инлайн (только editable=true)
-      addingPath: null, // путь ветки, где сейчас открыта форма "добавить поле" (только editable=true)
-    };
-  }
-  const dbTreeState = createDbTreeState();
-  const dbPeekState = createDbTreeState();
-
-  // Значение сохраняется в том виде, как его понимает JSON: "текст" (в
-  // кавычках) станет строкой, 123 — числом, true/false — булевым, null —
-  // null. Если ввод не парсится как JSON (просто текст без кавычек) —
-  // сохраняем как обычную строку "как есть", так проще для большинства правок.
-  function parseDbEditValue(text) {
-    try { return JSON.parse(text); } catch { return text; }
-  }
-
-  function dbValueClass(v) {
-    if (v === null) return 'null';
-    if (typeof v === 'string') return 'str';
-    if (typeof v === 'number') return 'num';
-    if (typeof v === 'boolean') return 'bool';
-    return '';
-  }
-  function dbValuePreview(v) {
-    if (v === null) return 'null';
-    if (typeof v === 'string') return '"' + v + '"';
-    return String(v);
-  }
-  function dbDeepEqual(a, b) {
-    if (a === b) return true;
-    const aObj = a !== null && typeof a === 'object';
-    const bObj = b !== null && typeof b === 'object';
-    if (aObj !== bObj || !aObj) return false;
-    const aKeys = Object.keys(a), bKeys = Object.keys(b);
-    if (aKeys.length !== bKeys.length) return false;
-    return aKeys.every((k) => dbDeepEqual(a[k], b[k]));
-  }
-  // рекурсивно находит пути, где значение реально изменилось (не просто
-  // "новый объект от Firebase" — сравнение по содержимому), и помечает
-  // ими же всех предков по дороге вниз, чтобы подсветилась и свёрнутая
-  // папка, внутри которой что-то обновилось, а не только сам листик
-  function dbCollectChanges(oldVal, newVal, path, changed) {
-    if (dbDeepEqual(oldVal, newVal)) return;
-    changed.add(path);
-    const oldObj = (oldVal !== null && typeof oldVal === 'object') ? oldVal : null;
-    const newObj = (newVal !== null && typeof newVal === 'object') ? newVal : null;
-    if (!oldObj || !newObj) return;
-    const keys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
-    keys.forEach((k) => dbCollectChanges(oldObj[k], newObj[k], path + '/' + k, changed));
-  }
-
-  const DB_TREE_CHILD_LIMIT = 200;
-
-  // рендер одного уровня детей (используется и для корня — shallowMap с
-  // true/значениями, — и для живых веток — обычный объект с данными).
-  // editable=false убирает ✎/+/✕ и режимы редактирования целиком — именно
-  // так рисуется пик-панель (dbPeekState), только просмотр.
-  function renderDbLevel(entriesObj, basePath, isShallowRoot, changed, state, editable) {
-    const keys = Object.keys(entriesObj);
-    const shown = keys.slice(0, DB_TREE_CHILD_LIMIT);
-    let html = shown.map((key) => {
-      const path = basePath ? basePath + '/' + key : key;
-      const raw = entriesObj[key];
-      const isContainer = isShallowRoot ? (raw === true) : (raw !== null && typeof raw === 'object');
-      const flash = changed && changed.has(path) ? ' flash' : '';
-      if (!isContainer) {
-        if (editable && state.editingPath === path) {
-          return `<div class="db-node editing${flash}" data-db-path="${escapeHtml(path)}">
-            <span class="db-toggle"></span>
-            <span class="db-icon">📄</span>
-            <span class="db-key">${escapeHtml(key)}</span>:
-            <input type="text" class="db-edit-input" value="${escapeHtml(JSON.stringify(raw))}" style="flex:1; min-width:80px;">
-            <button class="db-save-btn" title="Сохранить">✓</button>
-            <button class="db-cancel-btn" title="Отмена">✕</button>
-          </div>`;
-        }
-        return `<div class="db-node${flash}" data-db-path="${escapeHtml(path)}">
-          <span class="db-toggle"></span>
-          <span class="db-icon">📄</span>
-          <span class="db-key">${escapeHtml(key)}</span>:
-          <span class="db-val ${dbValueClass(raw)}">${escapeHtml(dbValuePreview(raw))}</span>
-          ${editable ? `<button class="db-edit-btn" title="Изменить">✎</button><button class="db-del-btn" title="Удалить">✕</button>` : ''}
-        </div>`;
-      }
-      const isOpen = state.openPaths.has(path);
-      let childCount = isShallowRoot ? null : Object.keys(raw).length;
-      let childrenHtml = '';
-      if (isOpen) {
-        if (isShallowRoot) {
-          // разворачиваем корневую ветку — если для неё уже есть живой
-          // слушатель, потомки берём из его данных, иначе покажем "грузим"
-          const live = state.liveBranches.get(key);
-          if (live && live.ready) {
-            childCount = Object.keys(live.data || {}).length;
-            childrenHtml = renderDbLevel(live.data || {}, path, false, changed, state, editable);
-          } else {
-            childrenHtml = '<div class="admin-empty" style="padding:6px 0;">Загрузка…</div>';
-          }
-        } else {
-          childrenHtml = renderDbLevel(raw, path, false, changed, state, editable);
-        }
-      }
-      return `<div class="db-node container${flash}" data-db-path="${escapeHtml(path)}" data-open="${isOpen}">
-          <span class="db-toggle">›</span>
-          <span class="db-icon">${isOpen ? '📂' : '📁'}</span>
-          <span class="db-key">${escapeHtml(key)}</span>
-          ${childCount === null ? '' : `<span class="db-count">{${childCount}}</span>`}
-          ${editable ? `<button class="db-add-btn" title="Добавить поле">+</button><button class="db-del-btn" title="Удалить всю ветку">✕</button>` : ''}
-        </div>
-        ${isOpen ? `<div class="db-children">${childrenHtml}${editable ? renderDbAddForm(path, state) : ''}</div>` : ''}`;
-    }).join('');
-    if (keys.length > shown.length) {
-      html += `<div class="admin-empty" style="padding:4px 0; text-align:left;">… ещё ${keys.length - shown.length}</div>`;
-    }
-    return html;
-  }
-
-  // Форма "добавить поле" внутри открытой ветки path — видна, только пока
-  // state.addingPath === path (открывается кнопкой +, см. renderDbTree).
-  function renderDbAddForm(path, state) {
-    if (state.addingPath !== path) return '';
-    return `<div class="db-node db-add-form" data-db-add-form="${escapeHtml(path)}">
-      <span class="db-toggle"></span>
-      <span class="db-icon">＋</span>
-      <input type="text" class="db-add-key-input" placeholder="ключ">:
-      <input type="text" class="db-add-val-input" placeholder='значение: "текст", 123, true, null' style="flex:1; min-width:120px;">
-      <button class="db-add-save-btn" title="Добавить">✓</button>
-      <button class="db-add-cancel-btn" title="Отмена">✕</button>
-    </div>`;
-  }
-
-  // Изменяющие клики (✎/✓/✕ редактирования, +/✕ у веток) должны НЕ
-  // схлопывать/разворачивать саму ветку — она тоже кликабельна на всю
-  // строку (см. .db-node.container ниже), поэтому каждый обработчик кнопки
-  // сначала помечает событие как обработанное (e.target.closest('button')
-  // в обработчике самой ветки это учитывает). editable=false (пик-панель)
-  // рисует то же дерево вообще без кнопок редактирования — соответствующие
-  // querySelectorAll ниже просто ничего не находят и не вешают лишних
-  // обработчиков.
-  function renderDbTree(state, containerId, editable, changed) {
-    const rootEl = document.getElementById(containerId);
-    if (!rootEl || !state.rootKeys) return;
-    rootEl.innerHTML = renderDbLevel(state.rootKeys, '', true, changed || null, state, editable);
-
-    rootEl.querySelectorAll('.db-node.container').forEach((node) => {
-      node.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
-        e.stopPropagation();
-        toggleDbPath(node.dataset.dbPath, state, containerId, editable);
-      });
-    });
-
-    if (!editable) return;
-
-    rootEl.querySelectorAll('.db-edit-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.editingPath = btn.closest('.db-node').dataset.dbPath;
-        state.addingPath = null;
-        renderDbTree(state, containerId, editable);
-      });
-    });
-    rootEl.querySelectorAll('.db-cancel-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.editingPath = null;
-        renderDbTree(state, containerId, editable);
-      });
-    });
-    rootEl.querySelectorAll('.db-save-btn').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
-        const node = btn.closest('.db-node');
-        const path = node.dataset.dbPath;
-        const value = parseDbEditValue(node.querySelector('.db-edit-input').value);
-        try {
-          await db.ref(path).set(value);
-          logAction('db_tree_edit', path, path, '—', 'новое значение: ' + JSON.stringify(value));
-          state.editingPath = null;
-          renderDbTree(state, containerId, editable);
-        } catch (err) {
-          alert('Не удалось сохранить: ' + (err.message || err));
-        }
-      });
-    });
-    rootEl.querySelectorAll('.db-del-btn').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
-        const path = btn.closest('.db-node').dataset.dbPath;
-        const isTopLevel = !path.includes('/');
-        const msg = isTopLevel
-          ? `Удалить ЦЕЛИКОМ весь раздел "${path}" со всем содержимым? Это не одна запись — там может быть очень много данных. Отменить нельзя.`
-          : `Удалить "${path}" из базы? Отменить нельзя.`;
-        if (!confirm(msg)) return;
-        try {
-          await db.ref(path).remove();
-          logAction('db_tree_delete', path, path, '—', '');
-          if (isTopLevel) {
-            detachDbLiveBranch(path, state);
-            state.openPaths.delete(path);
-            delete state.rootKeys[path];
-          }
-          renderDbTree(state, containerId, editable);
-        } catch (err) {
-          alert('Не удалось удалить: ' + (err.message || err));
-        }
-      });
-    });
-    rootEl.querySelectorAll('.db-add-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const path = btn.closest('.db-node').dataset.dbPath;
-        state.addingPath = path;
-        state.editingPath = null;
-        if (!state.openPaths.has(path)) toggleDbPath(path, state, containerId, editable);
-        else renderDbTree(state, containerId, editable);
-      });
-    });
-    rootEl.querySelectorAll('.db-add-cancel-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.addingPath = null;
-        renderDbTree(state, containerId, editable);
-      });
-    });
-    rootEl.querySelectorAll('.db-add-save-btn').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
-        const form = btn.closest('.db-add-form');
-        const path = form.dataset.dbAddForm;
-        const key = form.querySelector('.db-add-key-input').value.trim();
-        if (!key) { alert('Впиши ключ'); return; }
-        if (/[.#$\[\]/]/.test(key)) { alert('Ключ не может содержать . # $ [ ] /'); return; }
-        const value = parseDbEditValue(form.querySelector('.db-add-val-input').value);
-        try {
-          await db.ref(path + '/' + key).set(value);
-          logAction('db_tree_add', path + '/' + key, path + '/' + key, '—', 'значение: ' + JSON.stringify(value));
-          state.addingPath = null;
-          renderDbTree(state, containerId, editable);
-        } catch (err) {
-          alert('Не удалось добавить: ' + (err.message || err));
-        }
-      });
-    });
-  }
-
-  function toggleDbPath(path, state, containerId, editable) {
-    const isTopLevel = !path.includes('/');
-    if (state.openPaths.has(path)) {
-      state.openPaths.delete(path);
-      if (isTopLevel) detachDbLiveBranch(path, state);
-      renderDbTree(state, containerId, editable);
-      return;
-    }
-    state.openPaths.add(path);
-    if (isTopLevel && !state.liveBranches.has(path)) {
-      attachDbLiveBranch(path, state, containerId, editable);
-    }
-    renderDbTree(state, containerId, editable);
-  }
-
-  // Разделы, которые правила базы не отдают клиенту (чтение только по точному ключу или совсем закрыто):
-  // их «живая» ветка — это опрос Worker'ом раз в 15 секунд, а не слушатель базы.
-  const DB_PROTECTED_TOP = new Set(['accessTokens', 'emailLogins', 'usernames', 'devicePairings', 'owners', 'googleLinks', 'resetConfirmations', 'assistantRequests', 'launcherFeedback', 'launcherFeedbackShots', 'launcherFeedbackNew']);
-
-  function attachDbLiveBranch(topKey, state, containerId, editable) {
-    if (DB_PROTECTED_TOP.has(topKey)) {
-      const pbranch = { ref: null, cb: null, data: null, ready: false, timer: null };
-      const poll = () => adminDbRead(topKey, false).then((val) => {
-        const newData = val || {};
-        if (!pbranch.ready) {
-          pbranch.data = newData;
-          pbranch.ready = true;
-          renderDbTree(state, containerId, editable);
-          return;
-        }
-        const changed = new Set();
-        dbCollectChanges(pbranch.data, newData, topKey, changed);
-        pbranch.data = newData;
-        if (changed.size) renderDbTree(state, containerId, editable, changed);
-      }).catch((err) => console.error('База: ветка ' + topKey, err));
-      poll();
-      pbranch.timer = setInterval(poll, 15000);
-      state.liveBranches.set(topKey, pbranch);
-      return;
-    }
-    const branch = { ref: db.ref(topKey), cb: null, data: null, ready: false };
-    branch.cb = branch.ref.on('value', (snap) => {
-      const newData = snap.val() || {};
-      if (!branch.ready) {
-        branch.data = newData;
-        branch.ready = true;
-        renderDbTree(state, containerId, editable);
-        return;
-      }
-      const changed = new Set();
-      dbCollectChanges(branch.data, newData, topKey, changed);
-      branch.data = newData;
-      if (changed.size) renderDbTree(state, containerId, editable, changed);
-    }, (err) => console.error('База: ветка ' + topKey, err));
-    state.liveBranches.set(topKey, branch);
-  }
-
-  function detachDbLiveBranch(topKey, state) {
-    const branch = state.liveBranches.get(topKey);
-    if (!branch) return;
-    if (branch.timer) clearInterval(branch.timer);
-    if (branch.ref) branch.ref.off('value', branch.cb);
-    state.liveBranches.delete(topKey);
-  }
-
-  function detachAllDbLiveBranches(state) {
-    state.liveBranches.forEach((_, topKey) => detachDbLiveBranch(topKey, state));
-  }
-
-  function loadDatabaseTree() {
-    if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
-    const rootEl = document.getElementById('db-tree-root');
-    adminDbRead('', true) // корень базы правилами закрыт — список разделов отдаёт Worker
-      .then((data) => {
-        dbTreeState.rootKeys = data || {};
-        // возврат на вкладку после ухода: detachAllDbLiveBranches() снял
-        // слушателей, но openPaths (что было развёрнуто) не трогали —
-        // переподключаем живые ветки для того, что уже было открыто
-        dbTreeState.openPaths.forEach((path) => {
-          if (!path.includes('/') && !dbTreeState.liveBranches.has(path)) attachDbLiveBranch(path, dbTreeState, 'db-tree-root', true);
-        });
-        renderDbTree(dbTreeState, 'db-tree-root', true);
-      })
-      .catch((err) => {
-        rootEl.innerHTML = '<div class="admin-empty">Не удалось загрузить список веток базы</div>';
-        console.error('База: корневой список', err);
-      });
-  }
-
-  // ===== Пик-панель базы данных (десктоп, вне вкладок) — см. #db-peek-panel
-  // и комментарий там. Тот же движок дерева, что и в "Система" → "База
-  // данных" (renderDbTree/renderDbLevel), просто editable=false и свой
-  // независимый dbPeekState — сворачивание одного дерева не трогает другое.
-  function loadDbPeekTree() {
-    if (!canManageRoles()) return;
-    const rootEl = document.getElementById('db-peek-tree');
-    adminDbRead('', true)
-      .then((data) => {
-        dbPeekState.rootKeys = data || {};
-        dbPeekState.openPaths.forEach((path) => {
-          if (!path.includes('/') && !dbPeekState.liveBranches.has(path)) attachDbLiveBranch(path, dbPeekState, 'db-peek-tree', false);
-        });
-        renderDbTree(dbPeekState, 'db-peek-tree', false);
-      })
-      .catch((err) => {
-        if (rootEl) rootEl.innerHTML = '<div class="admin-empty">Не удалось загрузить</div>';
-        console.error('Пик-панель базы: корневой список', err);
-      });
-  }
-
-  // Один переключатель допустимости пик-панели, вызывается после каждого
-  // события, способного изменить, нужна ли она прямо сейчас: вход в
-  // приложение (applyRoleUI), переключение вкладок, переключение «Опасная
-  // зона»/«База данных» внутри «Системы» (showDangerSection). Условие простое:
-  // только superadmin и не прямо сейчас смотрим редактируемое дерево — иначе
-  // получится одно и то же дерево дважды. Кнопка «База данных» в заголовке
-  // раздела видна, пока это допустимо (body.db-peek-allowed); сама панель
-  // открывается по кнопке и, пока закрыта, ничего не читает и слушателей не
-  // держит.
-  function isViewingDbEditor() {
-    const superTab = document.querySelector('.tab[data-tab="super-danger"]');
-    if (!superTab || !superTab.classList.contains('active')) return false;
-    const dangerSection = document.getElementById('super-section-danger');
-    if (!dangerSection || dangerSection.style.display === 'none') return false;
-    const dbBtn = document.getElementById('danger-sub-db');
-    return !!dbBtn && dbBtn.classList.contains('btn-gold');
-  }
-  function dbPeekAllowed() {
-    return canManageRoles() && !isViewingDbEditor();
-  }
-  function setDbPeekOpen(open) {
-    const panel = document.getElementById('db-peek-panel');
-    const btn = document.getElementById('db-peek-btn');
-    if (!panel) return;
-    open = !!open && dbPeekAllowed();
-    panel.classList.toggle('open', open);
-    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) {
-      if (!dbPeekState.rootKeys) {
-        loadDbPeekTree();
-      } else {
-        dbPeekState.openPaths.forEach((path) => {
-          if (!path.includes('/') && !dbPeekState.liveBranches.has(path)) attachDbLiveBranch(path, dbPeekState, 'db-peek-tree', false);
-        });
-        renderDbTree(dbPeekState, 'db-peek-tree', false);
-      }
-    } else {
-      detachAllDbLiveBranches(dbPeekState);
-    }
-  }
-  function updateDbPeekVisibility() {
-    const panel = document.getElementById('db-peek-panel');
-    if (!panel) return;
-    const allowed = dbPeekAllowed();
-    document.body.classList.toggle('db-peek-allowed', allowed);
-    // допустимость пропала (вышли из Супердоступа / открыли редактируемое
-    // дерево) — закрываем; иначе оставляем как есть
-    if (!allowed) setDbPeekOpen(false);
-  }
-  document.getElementById('db-peek-btn').addEventListener('click', () => setDbPeekOpen(!document.getElementById('db-peek-panel').classList.contains('open')));
-  document.getElementById('db-peek-close').addEventListener('click', () => setDbPeekOpen(false));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setDbPeekOpen(false); });
 
   // ===== "Администрация" — сводная таблица прав всех модераторов/админов
   // одним экраном (вместо захода в карточку каждого через поиск в
@@ -6964,6 +6429,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   function loadAdminsTab() {
     if (!canManageRoles()) return; // на случай подделки клика мимо скрытой вкладки
     detachAdminsLiveListener();
+    loadAdminGrants();
     const myToken = adminsLoadToken;
     usersRoleIndexExists().then((indexed) => {
       if (myToken !== adminsLoadToken) return; // вкладку уже покинули или открыли заново
@@ -6983,7 +6449,32 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
   }
 
+  // v5.43: приложения «Чаты», «VPN», «Лаунчер» админу выдаёт Супердоступ. Хранит и проверяет Worker (узел appGrants закрыт
+  // правилами базы — в браузере подделать нельзя); действует, пока у человека роль admin.
+  const GRANT_DEFS = [
+    { id: 'chats', label: 'Администрирует приложение «Чаты» (все чаты бота: статистика, модерация, настройки)' },
+    { id: 'gateway', label: 'Администрирует приложение «VPN» (аккаунты и блокировка Gateway Plus)' },
+    { id: 'launcher', label: 'Администрирует приложение «Лаунчер» (сообщения людей из лаунчера)' },
+  ];
+  let adminGrants = {};        // uid → {chats, gateway, launcher}
+  let adminGrantsOk = false;   // удалось ли прочитать у Worker'а
+  let lastStaffRows = [];
+  async function grantsWorker(payload) {
+    if (!canManageRoles()) throw new Error('нет прав');
+    const identity = panelIdentityPayload();
+    if (!identity) throw new Error('не удалось определить личность — перезайди в панель');
+    const res = await fetch(`${ROLE_GATEWAY_BASE}/app-grants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...identity, ...payload }) });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
+  }
+  function loadAdminGrants() {
+    grantsWorker({ action: 'list' }).then((out) => { adminGrants = out.data || {}; adminGrantsOk = true; if (lastStaffRows.length) renderAdminsTable(lastStaffRows); })
+      .catch((err) => { adminGrantsOk = false; console.error('Администрация: приложения админов', err); if (lastStaffRows.length) renderAdminsTable(lastStaffRows); });
+  }
+
   function renderAdminsTable(staff) {
+    lastStaffRows = staff;
     const listEl = document.getElementById('admins-table-list');
     const emptyEl = document.getElementById('admins-table-empty');
     document.getElementById('admins-title').textContent = `Модераторы и админы (${staff.length})`;
@@ -7004,6 +6495,13 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
           <div class="toggle-label">${escapeHtml(p.label)}</div>
         </div>
       `).join('');
+      const g = adminGrants[uid] || {};
+      const grantsHtml = (isSuper || role !== 'admin') ? '' : GRANT_DEFS.map((p) => `
+        <div class="toggle-row${g[p.id] ? ' on' : ''}${adminGrantsOk ? ' admins-grant-toggle' : ''}" data-uid="${uid}" data-grant="${p.id}" style="padding:9px 0;${adminGrantsOk ? '' : ' opacity:0.55; cursor:default;'}">
+          <div class="toggle-check"></div>
+          <div class="toggle-label">${escapeHtml(p.label)}</div>
+        </div>
+      `).join('');
       return `
         <div class="admin-card">
           <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
@@ -7016,10 +6514,25 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
           </div>
           ${isSuper ? '<div class="admin-empty" style="text-align:left; padding:4px 0 6px;">Супердоступ — есть всё по умолчанию</div>' : ''}
           <div>${togglesHtml}</div>
+          ${grantsHtml ? `<div class="section-label" style="margin-top:10px;">Дополнительные приложения (выдаёт только Супердоступ)</div><div>${grantsHtml}</div>${adminGrantsOk ? '' : '<div class="admin-empty" style="text-align:left;">Не удалось прочитать выданное — обновите вкладку.</div>'}` : (role === 'moderator' ? '<div class="admin-empty" style="text-align:left; padding:6px 0 0;">Модератору приложения «Чаты», «VPN» и «Лаунчер» не выдаются — сначала сделайте его админом.</div>' : '')}
         </div>
       `;
     }).join('');
 
+    listEl.querySelectorAll('.admins-grant-toggle').forEach((row) => {
+      row.addEventListener('click', () => {
+        const uid = row.dataset.uid;
+        const app = row.dataset.grant;
+        const want = !row.classList.contains('on');
+        const u = (staff.find(([k]) => k === uid) || [])[1] || {};
+        row.style.opacity = '0.5';
+        grantsWorker({ action: 'set', userId: uid, app, value: want }).then(() => {
+          adminGrants[uid] = { ...(adminGrants[uid] || {}), [app]: want || undefined };
+          logAction('app_grant', uid, u.firstName || 'Без имени', u.playerId || uid, (want ? 'Выдано приложение: ' : 'Забрано приложение: ') + app);
+          renderAdminsTable(staff);
+        }).catch((err) => { row.style.opacity = ''; alert('Не удалось изменить: ' + (err.message || err)); });
+      });
+    });
     listEl.querySelectorAll('.admins-perm-toggle').forEach((row) => {
       row.addEventListener('click', () => {
         const uid = row.dataset.uid;
@@ -7879,6 +7392,30 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // прошедшие этот вход, ничего заново одобрять не должны. null, если ни
   // то ни другое не набралось (например, вход всё ещё идёт) — тогда сам
   // Worker откажет.
+  // v5.43: что человеку открыто сверх обычного — приложения, выданные Супердоступом, и свои чаты (создатель чата).
+  // Проверяет и хранит это Worker (узлы appGrants и chatAdmin/_owners закрыты правилами базы); панель только показывает.
+  let myAccess = null; // { superadmin, apps:{chats,gateway,launcher}, chats:[{id,title}] }
+  async function loadMyAccess() {
+    try {
+      const identity = panelIdentityPayload();
+      if (!identity) return null;
+      const ctl = new AbortController();
+      const tm = setTimeout(() => ctl.abort(), 5000);
+      const res = await fetch(`${ROLE_GATEWAY_BASE}/my-access`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(identity), signal: ctl.signal });
+      clearTimeout(tm);
+      if (!res.ok) return null;
+      const out = await res.json();
+      return out && out.ok ? out : null;
+    } catch { return null; }
+  }
+  function applyMyAccess(acc) {
+    myAccess = acc;
+    if (!acc || !acc.apps) return;
+    if (acc.apps.chats || (Array.isArray(acc.chats) && acc.chats.length)) myPermissions.app_chats = true;
+    if (acc.apps.gateway) myPermissions.app_gateway = true;
+    if (acc.apps.launcher) myPermissions.app_launcher = true;
+    myPermissions.app_me = !(myPermissions.app_troll || myPermissions.app_videochat || myPermissions.app_community || myPermissions.app_chats || myPermissions.app_gateway || myPermissions.app_launcher);
+  }
   function panelIdentityPayload() {
     const initData = tg?.initData;
     // Worker принимает initData только ~5 минут с момента открытия

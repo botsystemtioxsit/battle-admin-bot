@@ -1249,9 +1249,16 @@ function getMailer(env) {
   return inst;
 }
 
-async function handleTelegramUpdate(env, update, origin) {
+async function handleTelegramUpdate(env, update, origin, ctx) {
   if (update && update.chat_member) {
-    try { await (await getChatAdmin(env, origin)).onChatMember(update); } catch (err) { console.error('chat_member:', err && err.message); }
+    try {
+      const ca = await getChatAdmin(env, origin);
+      const r = await ca.onChatMember(update);
+      // проверка «я не бот» на короткий срок (секунды): cron раз в минуту слишком грубый — ждём срок и выгоняем сразу (до 25 с, лимит waitUntil)
+      if (r && r.sweepChat && r.sweepInMs <= 25_000 && ctx && ctx.waitUntil) {
+        ctx.waitUntil((async () => { await new Promise((res) => setTimeout(res, r.sweepInMs)); await ca.sweepCaptcha(r.sweepChat, true); })().catch((err) => console.error('captcha timer:', err && err.message)));
+      }
+    } catch (err) { console.error('chat_member:', err && err.message); }
   } else if (update && update.my_chat_member) {
     try { await (await getChatAdmin(env, origin)).onMyChatMember(update); } catch (err) { console.error('my_chat_member:', err && err.message); }
   } else if (update && update.callback_query && /^cap:\d{1,15}$/.test(String(update.callback_query.data || ''))) {
@@ -1552,7 +1559,7 @@ export default {
       try { await getMailer(env).tick(); } catch (err) { console.error('mailer tick:', err && err.message); }
     })());
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
     }
@@ -1750,7 +1757,7 @@ export default {
       }
       if (Number(request.headers.get('Content-Length') || 0) > 64 * 1024) return new Response('too large', { status: 413 });
       try {
-        await handleTelegramUpdate(env, await request.json(), url.origin);
+        await handleTelegramUpdate(env, await request.json(), url.origin, ctx);
       } catch (err) {
         console.error('telegram-webhook:', err && err.message);
       }

@@ -21,8 +21,8 @@ export const DAY_MS = 86_400_000;
 const GLOBAL = 'chatAdmin/_global';
 const EVENTS_KEEP_DAYS = 120;
 const DAILY_KEEP_DAYS = 800;
-const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', captcha: true, captchaMin: 3 });
-export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', captcha: 'bool', maxWarns: 'num', captchaMin: 'num', tz: 'tz', welcomeText: 'text', rules: 'text' });
+const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', captcha: true, captchaSec: 10 });
+export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', captcha: 'bool', maxWarns: 'num', captchaSec: 'num', tz: 'tz', welcomeText: 'text', rules: 'text' });
 const MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
 const HOW_LABELS = { invite: 'по пригласительной ссылке', added: 'добавил участник', request: 'по заявке', folder: 'по папке чатов', direct: 'сам (поиск или публичная ссылка)' };
 
@@ -294,7 +294,7 @@ export function createChatAdmin(deps) {
   }
 
   // ----- проверка «я не бот» -----
-  // Новичок сразу ограничен (не может писать), ему приходит кнопка. Нажал — права возвращаются; не нажал за captchaMin минут — выгоняем
+  // Новичок сразу ограничен (не может писать), ему приходит кнопка. Нажал — права возвращаются; не нажал за captchaSec секунд — выгоняем
   // (может зайти снова). Ограничить не получилось (нет права / это админ) — впускаем как раньше, без проверки.
   const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   async function defaultPerms(chatId) {
@@ -305,6 +305,7 @@ export function createChatAdmin(deps) {
     return out;
   }
   const captchaEvent = (chatKey, at, action, target) => globalEvent(chatKey, at, action, { id: null, name: 'Проверка «я не бот»' }, target, '');
+  const captchaSecOf = (cfg) => { const n = Number(cfg.captchaSec); return Number.isFinite(n) ? Math.min(600, Math.max(10, Math.round(n))) : 10; };
   async function startCaptcha(chat, user, ev, cfg) {
     const chatKey = chatKeyOf(chat.id);
     const uid = userKeyOf(user.id);
@@ -314,17 +315,17 @@ export function createChatAdmin(deps) {
     if (await deps.dbGet(`chatAdmin/${chatKey}/users/${uid}/verifiedAt`).catch(() => null)) return false; // уже проходил проверку
     const r = await deps.tg('restrictChatMember', { chat_id: chat.id, user_id: Number(user.id), permissions: ALL_FALSE, use_independent_chat_permissions: true });
     if (!r.ok) return false;
-    const mins = Math.min(10, Math.max(1, Number(cfg.captchaMin) || 3));
+    const secs = captchaSecOf(cfg);
     const name = displayName(user);
     const sent = await deps.tg('sendMessage', {
       chat_id: chat.id, parse_mode: 'HTML',
-      text: `👋 <a href="tg://user?id=${uid}">${escHtml(name)}</a>, добро пожаловать в «${escHtml(cleanText(chat.title, 60) || 'чат')}»!\n\nНажмите кнопку ниже — так мы убедимся, что вы человек, а не бот. На это ${mins} мин., иначе придётся зайти заново.`,
+      text: `👋 <a href="tg://user?id=${uid}">${escHtml(name)}</a>, добро пожаловать в «${escHtml(cleanText(chat.title, 60) || 'чат')}»!\n\nНажмите кнопку ниже — так мы убедимся, что вы человек, а не бот. На это ${secs} сек., иначе придётся зайти заново.`,
       reply_markup: { inline_keyboard: [[{ text: '✅ Я не бот', callback_data: 'cap:' + uid }]] },
     });
     const msgId = sent && sent.ok && sent.result ? sent.result.message_id : null;
     const lift = async () => { const perms = await defaultPerms(chat.id); await deps.tg('restrictChatMember', { chat_id: chat.id, user_id: Number(user.id), permissions: perms, use_independent_chat_permissions: true }); };
     if (!msgId) { await lift().catch(() => {}); return false; } // без кнопки человек остался бы немым навсегда
-    try { await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${uid}`]: { at: now(), until: now() + mins * 60_000, msgId, name } }); }
+    try { await deps.dbUpdate({ [`chatAdmin/${chatKey}/pending/${uid}`]: { at: now(), until: now() + secs * 1000, msgId, name } }); }
     catch { await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msgId }); await lift().catch(() => {}); return false; }
     return true;
   }
@@ -460,6 +461,7 @@ export function createChatAdmin(deps) {
       let challenged = false;
       if (cfg.captcha) { try { challenged = await startCaptcha(chat, ev.user, ev, cfg); } catch { challenged = false; } }
       if (!challenged) await sendWelcome(chat, ev.user, cfg); // с проверкой приветствие будет после неё
+      else return { sweepChat: chatKey, sweepInMs: captchaSecOf(cfg) * 1000 + 500 }; // Worker подождёт и выгонит ровно по сроку (cron — раз в минуту)
     }
   }
 
@@ -637,7 +639,7 @@ export function createChatAdmin(deps) {
     const c = cfgOf(meta);
     const on = (v) => (v ? 'включено' : 'выключено');
     return ['⚙️ Настройки чата', `welcome — приветствие новичков: ${on(c.welcome)}`, `links — удалять ссылки у обычных участников: ${on(c.links)}`, `cleanup — удалять служебные «вошёл/вышел»: ${on(c.cleanup)}`,
-      `captcha — проверка «я не бот» для новичков: ${on(c.captcha)} (captchaMin — минут на ответ: ${c.captchaMin})`, `count — считать сообщения (только счётчик): ${on(c.count)}`, `maxWarns — предупреждений до мута: ${c.maxWarns}`, `tz — часовой пояс: ${c.tz}`, '', 'Менять: /set <ключ> on|off (или число). Приветствие: /setwelcome текст ({name}, {chat}). Правила: /setrules текст.'].join('\n');
+      `captcha — проверка «я не бот» для новичков: ${on(c.captcha)} (captchaSec — секунд на ответ: ${c.captchaSec})`, `count — считать сообщения (только счётчик): ${on(c.count)}`, `maxWarns — предупреждений до мута: ${c.maxWarns}`, `tz — часовой пояс: ${c.tz}`, '', 'Менять: /set <ключ> on|off (или число). Приветствие: /setwelcome текст ({name}, {chat}). Правила: /setrules текст.'].join('\n');
   }
 
   const HELP = [
@@ -646,7 +648,7 @@ export function createChatAdmin(deps) {
     '/ban, /unban, /kick, /mute [мин|2h|1d], /unmute — ответом на сообщение (или по числовому id)',
     '/warn, /unwarn — предупреждения · /del — удалить сообщение · /pin, /unpin',
     '/settings, /set, /setwelcome, /setrules — настройки · /rules — правила',
-    'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaMin 1–10 (минут на нажатие кнопки)',
+    'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 10–600 (секунд на нажатие кнопки)',
     'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
     'Видеозвонки: /call, /connect',
   ].join('\n');
@@ -666,7 +668,9 @@ export function createChatAdmin(deps) {
     } else if (kind === 'text') {
       v = cleanText(raw, key === 'rules' ? 1500 : 500);
     } else if (kind === 'num') {
-      v = Number(raw); if (!Number.isInteger(v) || v < 1 || v > 10) return { ok: false, text: 'Нужно число от 1 до 10.' };
+      v = Number(raw);
+      if (key === 'captchaSec') { if (!Number.isInteger(v) || v < 10 || v > 600) return { ok: false, text: 'Нужно число секунд от 10 до 600.' }; }
+      else if (!Number.isInteger(v) || v < 1 || v > 10) return { ok: false, text: 'Нужно число от 1 до 10.' };
     } else {
       v = String(raw).trim(); try { new Date().toLocaleString('ru-RU', { timeZone: v }); } catch { return { ok: false, text: 'Не знаю такой часовой пояс (пример: Europe/Berlin).' }; }
     }

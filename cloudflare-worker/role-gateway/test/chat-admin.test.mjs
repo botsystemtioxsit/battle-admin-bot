@@ -408,7 +408,7 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   t('капча: чужая разметка в имени экранируется', msgCall.payload.text.includes('Вася &lt;b&gt;x&lt;/b&gt;') && !msgCall.payload.text.includes('<b>x</b>'), msgCall.payload.text);
   t('капча: приветствия пока нет (оно после проверки)', e.sent().length === 1 && !e.sent()[0].includes('Привет'), e.sent());
   const p = cap(e)['7'];
-  t('капча: запись «ждём» — срок 3 минуты, номер сообщения', p && p.until === NOW + 180000 && p.msgId === msgCall.payload ? true : (p && p.until === NOW + 180000 && typeof p.msgId === 'number'), p);
+  t('капча: запись «ждём» — срок 10 секунд, номер сообщения', p && p.until === NOW + 10000 && p.msgId === msgCall.payload ? true : (p && p.until === NOW + 10000 && typeof p.msgId === 'number'), p);
   t('капча: вход всё равно записан в статистику', e.db.root.chatAdmin[KEY].daily['2026-11-11'].joins === 1);
   // чужое нажатие
   const before = e.calls.length;
@@ -434,9 +434,9 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   const e = await enabledCap({});
   await e.ca.onChatMember(join(7, 'Вася'));
   const p = cap(e)['7'];
-  e.clock.t = NOW + 60000;
+  e.clock.t = NOW + 5000;
   t('таймер: рано — никого не выгоняем', (await e.ca.sweepCaptcha(KEY, true)) === 0 && !e.calls.some((c) => c.method === 'banChatMember'));
-  e.clock.t = NOW + 181000;
+  e.clock.t = NOW + 11000;
   t('таймер: срок вышел — выгнан', (await e.ca.sweepCaptcha(KEY, true)) === 1);
   const bans = e.calls.filter((c) => c.method === 'banChatMember');
   const unb = e.calls.filter((c) => c.method === 'unbanChatMember');
@@ -526,12 +526,12 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   const e = await enabledCap({});
   await e.ca.onMessage(msg(ADMIN, '/set captcha off'));
   t('/set captcha off', e.db.root.chatAdmin[KEY].meta.cfg.captcha === false);
-  await e.ca.onMessage(msg(ADMIN, '/set captchaMin 5'));
-  t('/set captchaMin 5', e.db.root.chatAdmin[KEY].meta.cfg.captchaMin === 5);
-  await e.ca.onMessage(msg(ADMIN, '/set captchaMin 50'));
-  t('/set captchaMin 50 — отказ', e.db.root.chatAdmin[KEY].meta.cfg.captchaMin === 5 && e.sent().at(-1).includes('от 1 до 10'));
+  await e.ca.onMessage(msg(ADMIN, '/set captchaSec 30'));
+  t('/set captchaSec 30', e.db.root.chatAdmin[KEY].meta.cfg.captchaSec === 30);
+  await e.ca.onMessage(msg(ADMIN, '/set captchaSec 5'));
+  t('/set captchaSec 50 — отказ', e.db.root.chatAdmin[KEY].meta.cfg.captchaSec === 30 && e.sent().at(-1).includes('от 10 до 600'));
   await e.ca.onMessage(msg(ADMIN, '/settings'));
-  t('/settings показывает проверку «я не бот»', e.sent().at(-1).includes('captcha') && e.sent().at(-1).includes('captchaMin'));
+  t('/settings показывает проверку «я не бот»', e.sent().at(-1).includes('captcha') && e.sent().at(-1).includes('captchaSec'));
 }
 
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');

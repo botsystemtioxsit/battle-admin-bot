@@ -469,6 +469,10 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   known.db.root.chatAdmin[KEY].users = { 7: { verifiedAt: 5 } };
   await known.ca.onChatMember(join(7, 'Вася'));
   t('капча: уже проходил проверку — не мучаем снова', !known.calls.some((c) => c.method === 'restrictChatMember'));
+  const old = await enabledCap({});
+  await old.ca.onMessage(msg(7, 'привет, я давно тут'));
+  await old.ca.onChatMember({ chat_member: { ...cm().chat_member, from: { id: 7, first_name: 'Вася' }, old_chat_member: { status: 'member', user: { id: 7 } }, new_chat_member: { status: 'member', user: { id: 7, first_name: 'Вася' } } } });
+  t('капча: кто уже в группе — не трогаем (ни сообщение, ни смена статуса)', !old.calls.some((c) => c.method === 'restrictChatMember') && !cap(old)['7']);
   const off = await enabledCap({ cfg: { captcha: false, welcome: true } });
   await off.ca.onChatMember(join(7, 'Вася'));
   t('капча: выключена — как раньше (приветствие сразу)', !off.calls.some((c) => c.method === 'restrictChatMember') && off.sent().at(-1).includes('Привет'));

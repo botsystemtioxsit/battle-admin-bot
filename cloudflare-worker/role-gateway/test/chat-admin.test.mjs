@@ -397,7 +397,7 @@ const join = (id, name, over = {}) => ({ chat_member: { ...cm().chat_member, fro
 const press = (from, data, msgId = 905) => ({ id: 'q1', from: { id: Number(from), first_name: 'Вася' }, data, message: { message_id: msgId, chat: { id: CHAT, type: 'supergroup', title: 'Наш чат' } } });
 const cap = (e) => e.db.root.chatAdmin[KEY].pending || {};
 const enabledCap = (extra = {}, opts) => enabled({ ...extra, cfg: { captcha: true, ...(extra.cfg || {}) } }, opts);
-t('капча: по умолчанию ВЫКЛЮЧЕНА (владелец: пока не добавлять)', (await (async () => { const e = await enabled({}); await e.ca.onChatMember(join(7, 'Вася')); return !e.calls.some((c) => c.method === 'restrictChatMember') && !e.calls.some((c) => c.method === 'sendMessage' && c.payload.reply_markup); })()));
+t('капча: по умолчанию ВКЛЮЧЕНА (настройка не задана)', (await (async () => { const e = await enabled({}); await e.ca.onChatMember(join(7, 'Вася')); return e.calls.some((c) => c.method === 'restrictChatMember') && e.calls.some((c) => c.method === 'sendMessage' && c.payload.reply_markup); })()));
 {
   const e = await enabledCap({ cfg: { welcome: true } });
   await e.ca.onChatMember(join(7, 'Вася <b>x</b>'));

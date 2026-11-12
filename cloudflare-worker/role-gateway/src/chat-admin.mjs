@@ -312,7 +312,7 @@ export function createChatAdmin(deps) {
     return out;
   }
   const captchaEvent = (chatKey, at, action, target) => globalEvent(chatKey, at, action, { id: null, name: 'Проверка «я не бот»' }, target, '');
-  const captchaSecOf = (cfg) => { const n = Number(cfg.captchaSec); return Number.isFinite(n) ? Math.min(600, Math.max(10, Math.round(n))) : 10; };
+  const captchaSecOf = (cfg) => { const n = Number(cfg.captchaSec); return Number.isFinite(n) ? Math.min(600, Math.max(3, Math.round(n))) : 10; };
   async function startCaptcha(chat, user, ev, cfg) {
     const chatKey = chatKeyOf(chat.id);
     const uid = userKeyOf(user.id);
@@ -659,7 +659,7 @@ export function createChatAdmin(deps) {
     '/ban, /unban, /kick, /mute [мин|2h|1d], /unmute — ответом на сообщение (или по числовому id)',
     '/warn, /unwarn — предупреждения · /del — удалить сообщение · /pin, /unpin',
     '/settings, /set, /setwelcome, /setrules — настройки · /rules — правила',
-    'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 10–600 (секунд на нажатие кнопки)',
+    'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 3–600 (секунд на нажатие кнопки)',
     'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
     'Видеозвонки: /call, /connect',
   ].join('\n');
@@ -680,7 +680,7 @@ export function createChatAdmin(deps) {
       v = cleanText(raw, key === 'rules' ? 1500 : 500);
     } else if (kind === 'num') {
       v = Number(raw);
-      if (key === 'captchaSec') { if (!Number.isInteger(v) || v < 10 || v > 600) return { ok: false, text: 'Нужно число секунд от 10 до 600.' }; }
+      if (key === 'captchaSec') { if (!Number.isInteger(v) || v < 3 || v > 600) return { ok: false, text: 'Нужно число секунд от 3 до 600.' }; }
       else if (!Number.isInteger(v) || v < 1 || v > 10) return { ok: false, text: 'Нужно число от 1 до 10.' };
     } else {
       v = String(raw).trim(); try { new Date().toLocaleString('ru-RU', { timeZone: v }); } catch { return { ok: false, text: 'Не знаю такой часовой пояс (пример: Europe/Berlin).' }; }

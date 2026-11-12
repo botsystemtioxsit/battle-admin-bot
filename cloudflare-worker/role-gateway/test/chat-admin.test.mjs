@@ -556,7 +556,10 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   await e.ca.onMessage(msg(ADMIN, '/set captchaSec 30'));
   t('/set captchaSec 30', e.db.root.chatAdmin[KEY].meta.cfg.captchaSec === 30);
   await e.ca.onMessage(msg(ADMIN, '/set captchaSec 5'));
-  t('/set captchaSec 50 — отказ', e.db.root.chatAdmin[KEY].meta.cfg.captchaSec === 30 && e.sent().at(-1).includes('от 10 до 600'));
+  t('/set captchaSec 5 — можно (меньше 10 тоже)', e.db.root.chatAdmin[KEY].meta.cfg.captchaSec === 5);
+  await e.ca.onMessage(msg(ADMIN, '/set captchaSec 30'));
+  await e.ca.onMessage(msg(ADMIN, '/set captchaSec 2'));
+  t('/set captchaSec 50 — отказ', e.db.root.chatAdmin[KEY].meta.cfg.captchaSec === 30 && e.sent().at(-1).includes('от 3 до 600'));
   await e.ca.onMessage(msg(ADMIN, '/settings'));
   t('/settings показывает проверку «я не бот»', e.sent().at(-1).includes('captcha') && e.sent().at(-1).includes('captchaSec'));
 }

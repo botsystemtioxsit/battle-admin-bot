@@ -356,7 +356,7 @@ async function getOwnedChats(env, userId) {
   try {
     const v = await readAdminJson(env, `/chatAdmin/_owners/${encodeURIComponent(uid)}.json`, false);
     const out = {};
-    if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) if (chatKeyOf(k)) out[k] = { title: chatCleanText(x && x.title, 80) };
+    if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) if (chatKeyOf(k)) out[k] = { title: chatCleanText(x && x.title, 80), mgr: !!(x && x.mgr === true) };
     return out;
   } catch { return {}; }
 }
@@ -1971,7 +1971,7 @@ export default {
       const role = await getRole(verified.userId);
       const access = await accessOf(env, verified.userId, role);
       return jsonResponse({ ok: true, superadmin: access.superadmin, apps: { chats: !!access.grants.chats, gateway: !!access.grants.gateway, launcher: !!access.grants.launcher },
-        chats: Object.entries(access.owned).map(([id, v]) => ({ id, title: v.title })) });
+        chats: Object.entries(access.owned).map(([id, v]) => ({ id, title: v.title, mgr: !!v.mgr })) });
     }
 
     // Выдать/забрать у админа приложение «Чаты», «VPN» или «Лаунчер» — только Супердоступ. Хранится в закрытом узле appGrants.
@@ -2079,8 +2079,10 @@ export default {
       const chatKey = body.chatId === undefined ? null : chatKeyOf(body.chatId);
       if (!access.superadmin) {
         // Не владелец проекта: админ с приложением «Чаты» — любые чаты, создатель чата — только свои; бан везде и подключение по номеру — только владелец
-        if (!['status', 'set', 'disable', 'mod'].includes(action)) return jsonResponse({ error: 'Это может только superadmin' }, 403);
+        if (!['status', 'set', 'disable', 'mod', 'managers', 'grant', 'revoke'].includes(action)) return jsonResponse({ error: 'Это может только superadmin' }, 403);
         if (!chatKey || !(access.grants.chats || access.owned[chatKey])) return jsonResponse({ error: 'Это не ваш чат' }, 403);
+        // Управляющий (ему дали доступ к панели этого чата) — не создатель: выключать чат и раздавать доступ дальше не может
+        if (['disable', 'grant', 'revoke', 'managers'].includes(action) && access.owned[chatKey] && access.owned[chatKey].mgr && !access.grants.chats) return jsonResponse({ error: 'Это может только создатель чата' }, 403);
       }
       try {
         if (action === 'status') {
@@ -2114,6 +2116,43 @@ export default {
         }
         if (action === 'disable') {
           await ca.disable(chatKey);
+          return jsonResponse({ ok: true });
+        }
+        // Доступ к панели одного чата для другого человека («управляющий»): запись в закрытый индекс chatAdmin/_owners/<id>/<чат> с mgr:true.
+        // Раздать может владелец проекта или создатель чата; управляющий видит и настраивает только этот чат (как создатель, кроме выключения и раздачи).
+        if (action === 'managers') {
+          const all = await readAdminJson(env, '/chatAdmin/_owners.json', false).catch(() => null);
+          const list = [];
+          for (const [uid, chats] of Object.entries(all && typeof all === 'object' ? all : {})) {
+            const x = chats && typeof chats === 'object' ? chats[chatKey] : null;
+            if (x && /^\d{1,15}$/.test(uid)) list.push({ id: uid, mgr: x.mgr === true });
+          }
+          for (const m of list.slice(0, 30)) { const nm = await readAdminJson(env, `/chatAdmin/${chatKey}/users/${m.id}/name.json`, false).catch(() => null); m.name = chatCleanText(nm, 60); }
+          return jsonResponse({ ok: true, managers: list.slice(0, 30) });
+        }
+        if (action === 'grant' || action === 'revoke') {
+          const uid = userKeyOf(body.userId);
+          if (!uid) return jsonResponse({ error: 'нужен userId (цифры)' }, 400);
+          const path = `/chatAdmin/_owners/${uid}/${chatKey}.json`;
+          const cur = await readAdminJson(env, path, false).catch(() => null);
+          if (action === 'revoke') {
+            if (!cur) return jsonResponse({ ok: true, text: 'У этого человека и не было доступа.' });
+            if (cur.mgr !== true) return jsonResponse({ ok: false, text: 'Это создатель чата — доступ у него не забрать.' });
+            const res = await dbWrite(env, path, { method: 'DELETE' });
+            if (!res.ok) return jsonResponse({ error: 'Firebase отказал: HTTP ' + res.status }, 502);
+            return jsonResponse({ ok: true });
+          }
+          if (ownerIds(env).has(uid)) return jsonResponse({ ok: false, text: 'Владельцу проекта доступ и так открыт.' });
+          if (cur) return jsonResponse({ ok: true, text: 'Доступ уже есть.' });
+          const all = await readAdminJson(env, '/chatAdmin/_owners.json', false).catch(() => null);
+          let count = 0;
+          for (const chats of Object.values(all && typeof all === 'object' ? all : {})) if (chats && typeof chats === 'object' && chats[chatKey]) count++;
+          if (count >= 10) return jsonResponse({ ok: false, text: 'Больше 10 человек с доступом к одному чату нельзя.' });
+          const mineKeys = Object.keys((all && all[uid]) || {});
+          if (mineKeys.length >= 10) return jsonResponse({ ok: false, text: 'У этого человека уже 10 чатов.' });
+          const meta = await readAdminJson(env, `/chatAdmin/${chatKey}/meta.json`, false).catch(() => null);
+          const res = await dbWrite(env, path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: chatCleanText(meta && meta.title, 80), mgr: true, by: String(verified.userId), at: Date.now() }) });
+          if (!res.ok) return jsonResponse({ error: 'Firebase отказал: HTTP ' + res.status }, 502);
           return jsonResponse({ ok: true });
         }
         if (action === 'set') {

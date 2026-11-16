@@ -233,6 +233,35 @@ t('/chat-admin: плохой chatId — 400', r.status === 400, r);
   r = await post('/admin-read', { initData: initData(700), path: 'chatAdmin', shallow: false });
   t('/admin-read: весь узел chatAdmin целиком не отдаётся', r.status === 403, r);
 
+  // управляющий: доступ к панели одного чата для другого человека
+  r = await panel({ initData: initData(700), action: 'grant', chatId: CHAT2, userId: '800' });
+  t('grant: создатель чата дал человеку доступ к панели своего чата', r.json?.ok === true && db.chatAdmin._owners?.['800']?.[KEY2]?.mgr === true, r);
+  r = await post('/my-access', { initData: initData(800) });
+  t('grant: у управляющего в /my-access появился этот чат', r.json.chats.length === 1 && r.json.chats[0].id === KEY2 && r.json.chats[0].mgr === true, r);
+  r = await panel({ initData: initData(800), action: 'set', chatId: CHAT2, key: 'links', value: 'on' });
+  t('управляющий: настройки своего чата меняет', r.json?.ok === true, r);
+  for (const a of ['disable', 'grant', 'revoke', 'managers']) {
+    r = await panel({ initData: initData(800), action: a, chatId: CHAT2, userId: '900' });
+    t('управляющий: «' + a + '» — только создателю чата', r.status === 403, r);
+  }
+  r = await panel({ initData: initData(800), action: 'set', chatId: CHAT, key: 'links', value: 'on' });
+  t('управляющий: чужие чаты закрыты', r.status === 403, r);
+  r = await panel({ initData: initData(700), action: 'managers', chatId: CHAT2 });
+  t('managers: создатель видит, кто управляет чатом', r.json?.managers?.some((m) => m.id === '800' && m.mgr === true) && r.json.managers.some((m) => m.id === '700' && m.mgr === false), r);
+  r = await panel({ initData: initData(700), action: 'grant', chatId: CHAT, userId: '800' });
+  t('grant: в чужом чате (не своём) создатель раздавать не может', r.status === 403, r);
+  r = await panel({ initData: initData(100), action: 'revoke', chatId: CHAT2, userId: '700' });
+  t('revoke: у создателя чата доступ не забрать', r.json?.ok === false && db.chatAdmin._owners['700'][KEY2], r);
+  r = await panel({ initData: initData(700), action: 'revoke', chatId: CHAT2, userId: '800' });
+  t('revoke: доступ управляющего снят', r.json?.ok === true && !db.chatAdmin._owners?.['800']?.[KEY2], r);
+  r = await panel({ initData: initData(800), action: 'set', chatId: CHAT2, key: 'links', value: 'off' });
+  t('после снятия доступа чат опять закрыт', r.status === 403, r);
+  r = await panel({ initData: initData(100), action: 'grant', chatId: CHAT, userId: '800' });
+  t('grant: владелец проекта может выдать доступ к любому чату', r.json?.ok === true && db.chatAdmin._owners['800'][KEY].mgr === true, r);
+  r = await panel({ initData: initData(100), action: 'grant', chatId: CHAT, userId: '100' });
+  t('grant: владельцу проекта выдавать не нужно', r.json?.ok === false, r);
+  await panel({ initData: initData(100), action: 'revoke', chatId: CHAT, userId: '800' });
+
   // админ без права
   r = await post('/admin-read', { initData: initData(200), path: 'chatAdmin', shallow: true });
   t('админ без выданного права: чаты не видны', r.status === 200 && Object.keys(r.json.data).length === 0, r);

@@ -567,7 +567,7 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
 // ---------- пауза, возобновление и перезагрузка ----------
 {
   const e = await enabled({}, {});
-  let hook = 0; e.deps.onEnabled = async () => { hook++; };
+  let hook = 0; e.deps.onEnabled = async () => { hook++; }; e.deps.pace = false;
   let r = await e.ca.onMessage(msg(USER, '/pause 30'));
   t('/pause: обычному участнику отказ, паузы нет', e.sent().at(-1).includes('для администраторов') && !(e.db.root.chatAdmin[KEY].meta.pausedUntil));
   r = await e.ca.onMessage(msg(ADMIN, '/pause 30'));
@@ -590,7 +590,9 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   await e.ca.onMessage(msg(ADMIN, '/pause 999d'));
   t('/pause: больше недели не бывает', e.db.root.chatAdmin[KEY].meta.pausedUntil === e.clock.t + 7 * 86400000);
   await e.ca.onMessage(msg(ADMIN, '/reload'));
-  t('/reload во время паузы работает, вебхук перепроверен, права бота прочитаны', hook === 1 && e.sent().at(-1).includes('Перезагружено') && e.sent().at(-1).includes('на паузе') && e.db.root.chatAdmin[KEY].meta.botStatus === 'administrator');
+  const edits = e.calls.filter((c) => c.method === 'editMessageText').map((c) => c.payload.text);
+  t('/reload: одно сообщение редактируется по шагам (анимация), в конце итог', e.sent().at(-1).includes('Перезагрузка бота') && edits.length >= 5 && edits.some((x) => x.includes('[█████')) && edits.at(-1).includes('Перезагружено'), edits);
+  t('/reload во время паузы работает, вебхук перепроверен, права бота прочитаны', hook === 1 && edits.at(-1).includes('на паузе') && e.db.root.chatAdmin[KEY].meta.botStatus === 'administrator');
   await e.ca.onMessage(msg(ADMIN, '/resume'));
   await e.ca.onMessage(msg(USER, '/reload'));
   t('/reload обычному участнику — отказ', e.sent().at(-1).includes('для администраторов'));

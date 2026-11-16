@@ -709,13 +709,17 @@ export function createChatAdmin(deps) {
     metaCache.delete(chatKey);
   }
   // Перезагрузка: сбрасываем все запомненные ответы по этому чату и перечитываем настройки, права бота и вебхук
-  async function reloadChat(chat, chatKey) {
+  async function reloadChat(chat, chatKey, step = async () => {}) {
+    await step(10, 'сбрасываю запомненное');
     metaCache.delete(chatKey); noticeAt.delete(chatKey); sweepAt.delete(chatKey); bannedCache = { at: 0, set: new Set() };
     for (const k of [...adminCache.keys()]) if (k.startsWith(chat.id + ':')) adminCache.delete(k);
+    await step(35, 'читаю настройки чата');
     const meta = await getMeta(chatKey, true);
+    await step(60, 'проверяю права бота');
     const botSt = await memberStatus(chat.id, deps.botId);
     if (botSt) { await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/botStatus`]: botSt, [`chatAdmin/${chatKey}/meta/title`]: cleanText(chat.title, 80) }).catch(() => {}); metaCache.delete(chatKey); }
     let hook = '';
+    await step(85, 'проверяю приём сообщений');
     if (deps.onEnabled) { try { await deps.onEnabled(); hook = ' Приём сообщений проверен.'; } catch { hook = ' Приём сообщений проверить не удалось, повторите позже.'; } }
     const isAdm = botSt === 'administrator' || botSt === 'creator';
     return `Перезагружено: настройки перечитаны. Бот ${isAdm ? 'администратор чата — всё в порядке' : 'НЕ администратор: сделайте меня администратором (удаление сообщений, блокировка участников)'}. `
@@ -799,8 +803,25 @@ export function createChatAdmin(deps) {
         await say(chat.id, wasPaused ? 'Пауза снята, бот снова работает.' : 'Бот и так не на паузе.');
         return true;
       }
-      const r = await reloadChat(chat, chatKey);
-      await say(chat.id, r);
+      // анимация: одно сообщение, которое бот сам редактирует по шагам настоящей перезагрузки
+      const bar = (pct, label) => `Перезагрузка бота\n[${'█'.repeat(Math.round(pct / 10))}${'░'.repeat(10 - Math.round(pct / 10))}] ${pct}%  ${label}…`;
+      const first = await say(chat.id, bar(0, 'начинаю'));
+      const mid = first && first.ok && first.result && first.result.message_id;
+      let lastShown = 0;
+      const step = async (pct, label) => {
+        if (!mid) return;
+        const wait = Math.max(0, 450 - (now() - lastShown));
+        if (wait && deps.pace !== false) await new Promise((res) => setTimeout(res, wait));
+        await deps.tg('editMessageText', { chat_id: chat.id, message_id: mid, text: bar(pct, label) }).catch(() => {});
+        lastShown = now();
+      };
+      lastShown = now();
+      const r = await reloadChat(chat, chatKey, step);
+      if (mid) {
+        await step(100, 'готово');
+        const ed = await deps.tg('editMessageText', { chat_id: chat.id, message_id: mid, text: r }).catch(() => null);
+        if (!ed || ed.ok === false) await say(chat.id, r);
+      } else await say(chat.id, r);
       return true;
     }
     if (isPaused(meta)) return false;

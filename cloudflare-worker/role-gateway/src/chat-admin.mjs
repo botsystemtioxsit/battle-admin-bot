@@ -758,33 +758,38 @@ export function createChatAdmin(deps) {
     return `Перезагружено: настройки перечитаны. Бот ${isAdm ? 'администратор чата — всё в порядке' : 'НЕ администратор: сделайте меня администратором (удаление сообщений, блокировка участников)'}. `
       + (meta && meta.enabled ? 'Админ-функции включены' : 'Админ-функции выключены') + (isPaused(meta) ? ', бот на паузе.' : '.') + hook;
   }
-  // «Позвать всех»: сообщение, где у каждого человека скрыто упоминание за значком — Telegram присылает им уведомление, даже если чат
-  // отключён (так делают многие боты). Бот не умеет получить список всех участников чата (Bot API такого не даёт), поэтому зовёт тех, кого знает:
-  // администраторов и всех, кто писал или заходил в чат после включения бота. До 100 упоминаний в сообщении (предел Telegram), до 8 сообщений.
+  // «Позвать всех»: сообщения со списком упоминаний — так делают другие боты. У кого есть @имя, пишем «@имя» (Telegram сам делает это
+  // упоминанием и присылает уведомление); у кого @имени нет — имя человека, к которому привязано упоминание (text_mention).
+  // Прятать упоминания за значками не получилось: так Telegram никого не уведомлял. Бот не умеет получить список ВСЕХ участников чата
+  // (Bot API такого не даёт), поэтому зовёт тех, кого знает: администраторов и всех, кто писал или заходил после включения бота.
   const CALL_COOLDOWN_MS = 5 * 60_000;
-  const CALL_PER_MESSAGE = 100;
-  const CALL_MAX_MESSAGES = 8;
+  const CALL_PER_MESSAGE = 30;
+  const CALL_MAX_MESSAGES = 15;
+  const USERNAME_RE = /^[A-Za-z][A-Za-z0-9_]{3,31}$/;
   async function callEveryone(chat, chatKey, meta, msg, cmd, fromId, tmp) {
     const wait = CALL_COOLDOWN_MS - (now() - (Number(meta.lastAllAt) || 0));
     if (wait > 0) { await tmp(`Звать всех можно раз в 5 минут. Подождите ещё ${Math.ceil(wait / 60000)} мин.`); return true; }
     const known = await deps.dbGet(`chatAdmin/${chatKey}/users`).catch(() => null);
-    const people = new Map(); // id → lastSeen
+    const people = new Map(); // id → { seen, username, name }
     for (const [id, u] of Object.entries(known && typeof known === 'object' ? known : {})) {
       if (!/^\d{5,15}$/.test(id) || !u || typeof u !== 'object') continue;
       if (u.status === 'left' || u.status === 'banned' || u.status === 'kicked' || u.status === 'removed') continue;
-      people.set(id, Number(u.lastSeen || u.joinedAt) || 0);
+      people.set(id, { seen: Number(u.lastSeen || u.joinedAt) || 0, username: USERNAME_RE.test(String(u.username || '')) ? String(u.username) : '', name: cleanText(u.name, 40) });
     }
     const adm = await deps.tg('getChatAdministrators', { chat_id: chat.id }).catch(() => null);
     if (adm && adm.ok && Array.isArray(adm.result)) for (const a of adm.result) {
       const u = a && a.user; if (!u || u.is_bot || !/^\d{5,15}$/.test(String(u.id))) continue;
-      if (!people.has(String(u.id))) people.set(String(u.id), 0);
+      const cur = people.get(String(u.id)) || { seen: 0, username: '', name: '' };
+      if (!cur.username && USERNAME_RE.test(String(u.username || ''))) cur.username = String(u.username);
+      if (!cur.name) cur.name = cleanText(displayName(u), 40);
+      people.set(String(u.id), cur);
     }
     people.delete(String(fromId)); people.delete(String(deps.botId));
-    const ids = [...people.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
-    if (!ids.length) { await tmp('Пока некого звать: я знаю только администраторов и тех, кто писал в чате или заходил после включения бота.'); return true; }
+    const list = [...people.entries()].sort((a, b) => b[1].seen - a[1].seen).map(([id, p]) => ({ id, ...p }));
+    if (!list.length) { await tmp('Пока некого звать: я знаю только администраторов и тех, кто писал в чате или заходил после включения бота.'); return true; }
     await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/lastAllAt`]: now() }).catch(() => {});
     metaCache.delete(chatKey);
-    const shown = ids.slice(0, CALL_PER_MESSAGE * CALL_MAX_MESSAGES);
+    const shown = list.slice(0, CALL_PER_MESSAGE * CALL_MAX_MESSAGES);
     const header = cleanText(cmd.args, 200) || 'Зовём всех в видеочат!';
     let room = null;
     if (deps.videoRoom) { try { room = await deps.videoRoom(chatKey); } catch { room = null; } }
@@ -794,15 +799,20 @@ export function createChatAdmin(deps) {
     let sent = 0;
     for (let i = 0; i < shown.length; i += CALL_PER_MESSAGE) {
       const batch = shown.slice(i, i + CALL_PER_MESSAGE);
-      const prefix = i === 0 ? header + '\n' : '';
-      const text = prefix + '🔔'.repeat(batch.length);
-      const entities = batch.map((id, k) => ({ type: 'text_mention', offset: prefix.length + k * 2, length: 2, user: { id: Number(id) } }));
-      const extra = { entities };
+      let text = i === 0 ? header + '\n' : '';
+      const entities = [];
+      batch.forEach((p, k) => {
+        if (k) text += ', ';
+        if (p.username) text += '@' + p.username;
+        else { const nm = p.name || 'участник'; entities.push({ type: 'text_mention', offset: text.length, length: nm.length, user: { id: Number(p.id) } }); text += nm; }
+      });
+      const extra = {};
+      if (entities.length) extra.entities = entities;
       if (i === 0 && buttons.length) extra.reply_markup = { inline_keyboard: [buttons] };
       const r = await deps.tg('sendMessage', { chat_id: chat.id, text, ...extra });
       if (r && r.ok) sent += batch.length;
     }
-    await tmp(`Позвал: ${sent}${ids.length > sent ? ' из ' + ids.length + ' известных' : ''}.`);
+    await tmp(`Позвал: ${sent}${list.length > sent ? ' из ' + list.length + ' известных' : ''}.`);
     return true;
   }
   async function disable(chatKey) {

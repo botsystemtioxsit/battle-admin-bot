@@ -648,38 +648,41 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
 {
   const e = await enabled({}, {});
   const users = {};
-  for (let i = 0; i < 230; i++) users[String(5000000 + i)] = { name: 'Ч' + i, messages: 1, lastSeen: NOW - i * 1000 };
-  users['9000001'] = { name: 'Ушёл', status: 'left', lastSeen: NOW };
-  users['9000002'] = { name: 'Забанен', status: 'banned', lastSeen: NOW };
+  for (let i = 0; i < 70; i++) users[String(5000000 + i)] = { name: 'Ч' + i, username: i % 2 === 0 ? 'user_' + i + 'abc' : undefined, messages: 1, lastSeen: NOW - i * 1000 };
+  users['9000001'] = { name: 'Ушёл', status: 'left', lastSeen: NOW, username: 'gone_user' };
+  users['9000002'] = { name: 'Забанен', status: 'banned', lastSeen: NOW, username: 'banned_user' };
   e.db.root.chatAdmin[KEY].users = users;
   e.deps.videoRoom = async () => 'https://t.me/x/y?startapp=' + KEY;
   const orig = e.deps.tg;
-  e.deps.tg = async (m, p) => (m === 'getChatAdministrators' ? (e.calls.push({ method: m, payload: p }), { ok: true, result: [{ user: { id: 200 } }, { user: { id: 7000000001, is_bot: true } }, { user: { id: 5000001 } }, { user: { id: 6000000 } }] }) : orig(m, p));
-  let r = await e.ca.onMessage(msg(USER, '/all'));
-  t('/all: обычному участнику отказ, ничего не отправлено', e.calls.filter((c) => c.method === 'sendMessage' && c.payload.entities).length === 0);
-  r = await e.ca.onMessage(msg(ADMIN, '/all Идём в видеочат'));
-  const sends = e.calls.filter((c) => c.method === 'sendMessage' && c.payload.entities);
-  const ments = sends.flatMap((c) => c.payload.entities);
-  t('/all: 230 известных + админ = 231, три сообщения по 100/100/31', sends.length === 3 && sends[0].payload.entities.length === 100 && sends[2].payload.entities.length === 31, sends.map((c) => c.payload.entities.length));
-  t('/all: упоминания скрыты за значками, смещения верные, у людей без @ — text_mention', ments.every((en) => en.type === 'text_mention' && en.length === 2) && sends[0].payload.text.startsWith('Идём в видеочат\n🔔') && sends[0].payload.entities[0].offset === 'Идём в видеочат\n'.length && sends[1].payload.entities[0].offset === 0);
-  const idsAll = ments.map((en) => en.user.id);
-  t('/all: нет ушедших, забаненных, самого бота и отправителя; админ из списка Telegram добавлен; повторов нет', !idsAll.includes(9000001) && !idsAll.includes(9000002) && !idsAll.includes(7000000001) && !idsAll.includes(200) && idsAll.includes(6000000) && new Set(idsAll).size === idsAll.length && idsAll.length === 231, idsAll.length);
-  t('/all: самые активные идут первыми', idsAll[0] === 5000000);
+  e.deps.tg = async (m, p) => (m === 'getChatAdministrators' ? (e.calls.push({ method: m, payload: p }), { ok: true, result: [{ user: { id: 200, username: 'adminboss' } }, { user: { id: 7000000001, is_bot: true } }, { user: { id: 5000001 } }, { user: { id: 6000000, first_name: 'Новый', username: 'new_admin' } }] }) : orig(m, p));
+  await e.ca.onMessage(msg(USER, '/all'));
+  t('/all: обычному участнику отказ, ничего не отправлено', !e.calls.some((c) => c.method === 'sendMessage' && c.payload.text.includes('@user_')));
+  await e.ca.onMessage(msg(ADMIN, '/all Идём в видеочат'));
+  const sends = e.calls.filter((c) => c.method === 'sendMessage' && /@user_|Ч\d/.test(c.payload.text));
+  t('/all: 70 известных + админ из списка Telegram = 71 человек, сообщения по 30/30/11', sends.length === 3 && sends[0].payload.text.split(', ').length === 30 && sends[2].payload.text.split(', ').length === 11, sends.map((c) => c.payload.text.split(', ').length));
+  t('/all: у кого есть @имя — пишется «@имя» (Telegram сам уведомляет), заголовок в первом сообщении', sends[0].payload.text.startsWith('Идём в видеочат\n@user_0abc, ') && !sends[1].payload.text.startsWith('Идём'));
+  const withEnt = sends.flatMap((c) => c.payload.entities || []);
+  const full = sends.map((c) => c.payload.text).join('\n');
+  t('/all: у кого @имени нет — видимое имя и привязка text_mention по смещению', withEnt.length === 35 && withEnt.every((en) => en.type === 'text_mention') && (() => { const c = sends[0]; const en = c.payload.entities[0]; return c.payload.text.slice(en.offset, en.offset + en.length) === 'Ч1' && en.user.id === 5000001; })(), withEnt.length);
+  t('/all: нет ушедших, забаненных, бота и отправителя; админ добавлен; повторов нет', !full.includes('gone_user') && !full.includes('banned_user') && !full.includes('adminboss') && full.includes('@new_admin') && !full.includes('7000000001'));
+  t('/all: самые активные первыми', sends[0].payload.text.split('\n')[1].startsWith('@user_0abc'));
   t('/all: кнопка комнаты ВидеоЧата на первом сообщении', sends[0].payload.reply_markup.inline_keyboard[0][0].url.includes(KEY) && !sends[1].payload.reply_markup);
-  r = await e.ca.onMessage(msg(ADMIN, '/all'));
-  t('/all: чаще раза в 5 минут нельзя', e.calls.filter((c) => c.method === 'sendMessage' && c.payload.entities).length === 3 && e.sent().at(-1).includes('раз в 5 минут'));
+  const n0 = e.calls.filter((c) => c.method === 'sendMessage').length;
+  await e.ca.onMessage(msg(ADMIN, '/all'));
+  t('/all: чаще раза в 5 минут нельзя', e.calls.filter((c) => c.method === 'sendMessage').length === n0 + 1 && e.sent().at(-1).includes('раз в 5 минут'));
   e.clock.t += 6 * 60000;
   await e.ca.onMessage(msg(ADMIN, '/all'));
-  t('/all: через 5 минут можно снова; текст по умолчанию', e.calls.filter((c) => c.method === 'sendMessage' && c.payload.entities).at(-3).payload.text.startsWith('Зовём всех в видеочат!'));
+  t('/all: через 5 минут можно снова; текст по умолчанию', e.calls.filter((c) => c.method === 'sendMessage' && c.payload.text.startsWith('Зовём всех в видеочат!')).length === 1);
 }
 {
-  // публичный чат — кнопка видеочата Telegram; пустой чат — подсказка
+  // публичный чат — кнопка видеочата Telegram; пустой чат — подсказка; странные имена
   const e = await enabled({}, {});
-  e.db.root.chatAdmin[KEY].users = { 5000000: { name: 'А', lastSeen: NOW } };
+  e.db.root.chatAdmin[KEY].users = { 5000000: { name: 'А', lastSeen: NOW, username: 'x' }, 5000001: { name: 'Б 😀', lastSeen: NOW - 1 } };
   const m = msg(ADMIN, '/all'); m.chat.username = 'my_public_chat';
   await e.ca.onMessage(m);
-  const s = e.calls.find((c) => c.method === 'sendMessage' && c.payload.entities);
+  const s = e.calls.find((c) => c.method === 'sendMessage' && c.payload.reply_markup);
   t('/all в публичном чате: кнопка видеочата Telegram', s.payload.reply_markup.inline_keyboard[0].some((b) => b.url === 'https://t.me/my_public_chat?videochat'));
+  t('/all: слишком короткое «@имя» не считается именем, смайлик в имени не ломает смещение', s.payload.text.includes('А, ') || s.payload.text.includes('Б 😀') && s.payload.entities.every((en) => s.payload.text.slice(en.offset, en.offset + en.length).length === en.length));
   const e2 = await enabled({}, {});
   await e2.ca.onMessage(msg(ADMIN, '/all'));
   t('/all: некого звать — подсказка, кулдаун не включается', e2.sent().at(-1).includes('Пока некого звать') && !e2.db.root.chatAdmin[KEY].meta.lastAllAt);

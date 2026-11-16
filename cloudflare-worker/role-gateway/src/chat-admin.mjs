@@ -178,6 +178,7 @@ export function createChatAdmin(deps) {
   let bannedCache = { at: 0, set: new Set() }; // id людей из «бана везде», раз в минуту перечитывается
   const META_TTL = 2 * 60 * 1000;
   const MAX_TENANT_CHATS = 10;
+  const isPaused = (meta) => !!(meta && Number(meta.pausedUntil) > now()); // «пауза»: бот в этом чате молчит и ничего не делает до этого времени
   const globalBanOn = (meta) => !!(meta && owners.has(String(meta.enabledBy))); // «бан везде» сторожит только чаты владельца проекта, чужие чаты — нет
 
   const say = (chatId, text, extra) => deps.tg('sendMessage', { chat_id: chatId, text: String(text).slice(0, 4000), ...(extra || {}) });
@@ -352,6 +353,7 @@ export function createChatAdmin(deps) {
     const chatKey = chat ? chatKeyOf(chat.id) : null;
     const meta = chatKey ? await getMeta(chatKey) : null;
     if (!meta || !meta.enabled) { await answer('Проверка уже не нужна.'); return true; }
+    if (isPaused(meta)) { await answer('Бот на паузе.'); return true; }
     if (String(query.from && query.from.id) !== uid) { await answer('Эта кнопка для новичка — она не ваша.'); return true; }
     const p = await deps.dbGet(`chatAdmin/${chatKey}/pending/${uid}`).catch(() => undefined);
     if (p === undefined) { await answer('Не получилось проверить. Нажмите ещё раз.'); return true; }
@@ -414,7 +416,7 @@ export function createChatAdmin(deps) {
     const part = all.length > PER_RUN ? Array.from({ length: PER_RUN }, (_, i) => all[(start + i) % all.length]) : all;
     for (const c of part) {
       const meta = await getMeta(c);
-      if (!meta || !meta.enabled || !cfgOf(meta).captcha) continue;
+      if (!meta || !meta.enabled || isPaused(meta) || !cfgOf(meta).captcha) continue;
       total += await sweepCaptcha(c, true).catch(() => 0);
     }
     return total;
@@ -451,7 +453,7 @@ export function createChatAdmin(deps) {
     const chatKey = chat ? chatKeyOf(chat.id) : null;
     if (!chatKey) return;
     const meta = await getMeta(chatKey);
-    if (!meta || !meta.enabled) return;
+    if (!meta || !meta.enabled || isPaused(meta)) return;
     const ev = describeChatMember(update);
     if (!ev || !userKeyOf(ev.user.id)) return;
     if (ev.user.is_bot && (ev.kind !== 'join' || String(ev.user.id) === String(deps.botId))) return;
@@ -659,6 +661,7 @@ export function createChatAdmin(deps) {
     '/ban, /unban, /kick, /mute [мин|2h|1d], /unmute — ответом на сообщение (или по числовому id)',
     '/warn, /unwarn — предупреждения · /del — удалить сообщение · /pin, /unpin',
     '/settings, /set, /setwelcome, /setrules — настройки · /rules — правила',
+    '/pause [мин|2h|1d] — выключить бота в чате на время (по умолчанию час) · /resume — вернуть сразу · /reload — перезагрузить настройки бота',
     'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 3–600 (секунд на нажатие кнопки)',
     'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
     'Видеозвонки: /call, /connect',
@@ -689,6 +692,35 @@ export function createChatAdmin(deps) {
     return { ok: true, text: `Готово: ${key} = ${v === true ? 'включено' : v === false ? 'выключено' : v}.` };
   }
 
+  // Пауза: людей, которые сейчас проходят проверку «я не бот», отпускаем (иначе они остались бы немыми, а таймер на паузе не идёт)
+  async function pauseChat(chat, chatKey, until) {
+    const pend = await deps.dbGet(`chatAdmin/${chatKey}/pending`).catch(() => null);
+    const w = { [`chatAdmin/${chatKey}/meta/pausedUntil`]: until };
+    if (pend && typeof pend === 'object') {
+      const perms = await defaultPerms(chat.id);
+      for (const [uid, p] of Object.entries(pend).slice(0, 30)) {
+        if (!p || typeof p !== 'object' || !/^\d{1,15}$/.test(uid)) continue;
+        if (!p.kicked) await deps.tg('restrictChatMember', { chat_id: chat.id, user_id: Number(uid), permissions: perms, use_independent_chat_permissions: true });
+        if (p.msgId) await deps.tg('deleteMessage', { chat_id: chat.id, message_id: p.msgId });
+        w[`chatAdmin/${chatKey}/pending/${uid}`] = null;
+      }
+    }
+    await deps.dbUpdate(w);
+    metaCache.delete(chatKey);
+  }
+  // Перезагрузка: сбрасываем все запомненные ответы по этому чату и перечитываем настройки, права бота и вебхук
+  async function reloadChat(chat, chatKey) {
+    metaCache.delete(chatKey); noticeAt.delete(chatKey); sweepAt.delete(chatKey); bannedCache = { at: 0, set: new Set() };
+    for (const k of [...adminCache.keys()]) if (k.startsWith(chat.id + ':')) adminCache.delete(k);
+    const meta = await getMeta(chatKey, true);
+    const botSt = await memberStatus(chat.id, deps.botId);
+    if (botSt) { await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/botStatus`]: botSt, [`chatAdmin/${chatKey}/meta/title`]: cleanText(chat.title, 80) }).catch(() => {}); metaCache.delete(chatKey); }
+    let hook = '';
+    if (deps.onEnabled) { try { await deps.onEnabled(); hook = ' Приём сообщений проверен.'; } catch { hook = ' Приём сообщений проверить не удалось, повторите позже.'; } }
+    const isAdm = botSt === 'administrator' || botSt === 'creator';
+    return `Перезагружено: настройки перечитаны. Бот ${isAdm ? 'администратор чата — всё в порядке' : 'НЕ администратор: сделайте меня администратором (удаление сообщений, блокировка участников)'}. `
+      + (meta && meta.enabled ? 'Админ-функции включены' : 'Админ-функции выключены') + (isPaused(meta) ? ', бот на паузе.' : '.') + hook;
+  }
   async function disable(chatKey) {
     await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: false, [`${GLOBAL}/chats/${chatKey}`]: null, [`${GLOBAL}/tenants/${chatKey}`]: null });
     metaCache.delete(chatKey);
@@ -747,6 +779,31 @@ export function createChatAdmin(deps) {
 
     const meta = await getMeta(chatKey);
     if (!meta || !meta.enabled) return false;
+
+    // пауза, возобновление и перезагрузка работают и во время паузы; всё остальное при паузе — молча дальше по цепочке (/call и т. п.)
+    if (cmd && (cmd.name === 'pause' || cmd.name === 'resume' || cmd.name === 'reload' || cmd.name === 'restart')) {
+      if (!fromId) return true;
+      if (!(await isChatAdmin(chat.id, fromId))) { await say(chat.id, 'Эта команда — для администраторов чата.'); return true; }
+      if (cmd.name === 'pause') {
+        const sec = parseDuration(cmd.args.split(/\s+/)[0], 60);
+        if (sec === null) { await say(chat.id, 'Укажите срок: /pause 30 (минут), /pause 2h, /pause 1d. Без срока — на час.'); return true; }
+        const capped = Math.min(sec, 7 * 86400);
+        await pauseChat(chat, chatKey, now() + capped * 1000);
+        await say(chat.id, `Бот на паузе на ${formatDuration(capped)}: не проверяет новичков, не удаляет сообщения, не считает статистику. Вернуть сразу: /resume.`);
+        return true;
+      }
+      if (cmd.name === 'resume') {
+        const wasPaused = isPaused(meta);
+        await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/pausedUntil`]: null });
+        metaCache.delete(chatKey);
+        await say(chat.id, wasPaused ? 'Пауза снята, бот снова работает.' : 'Бот и так не на паузе.');
+        return true;
+      }
+      const r = await reloadChat(chat, chatKey);
+      await say(chat.id, r);
+      return true;
+    }
+    if (isPaused(meta)) return false;
     const cfg = cfgOf(meta);
     if (cfg.captcha) await sweepCaptcha(chatKey).catch(() => 0);
 

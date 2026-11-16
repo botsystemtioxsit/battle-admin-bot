@@ -1081,6 +1081,9 @@ const BOT_COMMANDS_GROUP_ADMIN = [
   { command: 'del', description: 'Удалить сообщение (ответом)' },
   { command: 'pin', description: 'Закрепить сообщение (ответом)' },
   { command: 'settings', description: 'Настройки админ-бота' },
+  { command: 'pause', description: 'Выключить бота на время: /pause 30, 2h, 1d' },
+  { command: 'resume', description: 'Включить бота после паузы' },
+  { command: 'reload', description: 'Перезагрузить настройки бота' },
   ...BOT_COMMANDS_GROUP,
 ];
 const BOT_SHORT_DESCRIPTION = 'Терминал экосистемы TIOXSIT: Тролль-Баттл, ВидеоЧат, лаунчер. Входы по заявкам, подключение чатов.';

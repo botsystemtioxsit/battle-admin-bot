@@ -18,11 +18,13 @@
 // его добавил участник, заявка, папка чатов или сам (поиск / публичная ссылка).
 
 export const DAY_MS = 86_400_000;
+import { createIris, IRIS_CFG_DEFAULTS, IRIS_CFG_KEYS, IRIS_COMMANDS, IRIS_PUBLIC, parseNight } from './chat-iris.mjs';
+
 const GLOBAL = 'chatAdmin/_global';
 const EVENTS_KEEP_DAYS = 120;
 const DAILY_KEEP_DAYS = 800;
-const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', captcha: true, captchaSec: 10 });
-export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', captcha: 'bool', maxWarns: 'num', captchaSec: 'num', tz: 'tz', welcomeText: 'text', rules: 'text' });
+const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', captcha: true, captchaSec: 10, ...IRIS_CFG_DEFAULTS });
+export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', captcha: 'bool', maxWarns: 'num', captchaSec: 'num', tz: 'tz', welcomeText: 'text', rules: 'text', ...IRIS_CFG_KEYS });
 const MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
 const HOW_LABELS = { invite: 'по пригласительной ссылке', added: 'добавил участник', request: 'по заявке', folder: 'по папке чатов', direct: 'сам (поиск или публичная ссылка)' };
 
@@ -197,6 +199,13 @@ export function createChatAdmin(deps) {
     eraseLater(chatId, [r && r.ok && r.result ? r.result.message_id : null, cmdMsgId]);
     return r;
   }
+
+  // Функции в духе «Ириса» (карма, антифлуд, фильтр слов, ночной режим, досье, игры) — отдельный модуль chat-iris.mjs
+  const iris = createIris({
+    deps, now, inc, cleanText, displayName, ALL_FALSE, dayKey, HOW_LABELS,
+    act: (...a) => act(...a), logMod: (...a) => logMod(...a), resolveTarget: (...a) => resolveTarget(...a), defaultPerms: (...a) => defaultPerms(...a),
+    forgetMeta: (k) => metaCache.delete(k),
+  });
 
   async function getMeta(chatKey, fresh = false) {
     const hit = metaCache.get(chatKey);
@@ -431,7 +440,9 @@ export function createChatAdmin(deps) {
     const part = all.length > PER_RUN ? Array.from({ length: PER_RUN }, (_, i) => all[(start + i) % all.length]) : all;
     for (const c of part) {
       const meta = await getMeta(c);
-      if (!meta || !meta.enabled || isPaused(meta) || !cfgOf(meta).captcha) continue;
+      if (!meta || !meta.enabled || isPaused(meta)) continue;
+      if (cfgOf(meta).night || meta.nightState === 'closed') await iris.nightTick(c, null, meta).catch(() => false); // ночной режим: закрыть и открыть чат по расписанию
+      if (!cfgOf(meta).captcha) continue;
       total += await sweepCaptcha(c, true).catch(() => 0);
     }
     return total;
@@ -667,7 +678,7 @@ export function createChatAdmin(deps) {
     const c = cfgOf(meta);
     const on = (v) => (v ? 'включено' : 'выключено');
     return ['⚙️ Настройки чата', `welcome — приветствие новичков: ${on(c.welcome)}`, `links — удалять ссылки у обычных участников: ${on(c.links)}`, `cleanup — удалять служебные «вошёл/вышел»: ${on(c.cleanup)}`,
-      `captcha — проверка «я не бот» для новичков: ${on(c.captcha)} (captchaSec — секунд на ответ: ${c.captchaSec})`, `count — считать сообщения (только счётчик): ${on(c.count)}`, `maxWarns — предупреждений до мута: ${c.maxWarns}`, `tz — часовой пояс: ${c.tz}`, '', 'Менять: /set <ключ> on|off (или число). Приветствие: /setwelcome текст ({name}, {chat}). Правила: /setrules текст.'].join('\n');
+      `captcha — проверка «я не бот» для новичков: ${on(c.captcha)} (captchaSec — секунд на ответ: ${c.captchaSec})`, `count — считать сообщения (только счётчик): ${on(c.count)}`, `maxWarns — предупреждений до мута: ${c.maxWarns}`, `tz — часовой пояс: ${c.tz}`, `karma — карма за «+» и «спасибо»: ${on(c.karma)}`, `flood — антифлуд: ${on(c.flood)} (floodMax — сообщений за 10 секунд: ${c.floodMax})`, `noFwd — запрет пересылок: ${on(c.noFwd)}`, `newbieLinks — без ссылок в первые сутки: ${on(c.newbieLinks)}`, `games — игры и ириски: ${on(c.games)}`, `night — ночной режим: ${c.night || 'выключен'} (/night 23:00-07:00)`, `Запрещённых слов: ${String(c.words || '').split(',').filter(Boolean).length} (/words)`, '', 'Менять: /set <ключ> on|off (или число). Приветствие: /setwelcome текст ({name}, {chat}). Правила: /setrules текст.'].join('\n');
   }
 
   const HELP = [
@@ -676,6 +687,10 @@ export function createChatAdmin(deps) {
     '/ban, /unban, /kick, /mute [мин|2h|1d], /unmute — ответом на сообщение (или по числовому id)',
     '/warn, /unwarn — предупреждения · /del — удалить сообщение · /pin, /unpin',
     '/settings, /set, /setwelcome, /setrules — настройки · /rules — правила',
+    'Карма: ответьте «+» или «спасибо» — человеку плюс к карме; /karma, /topkarma',
+    'Игры (включить: /set games on): /daily, /balance, /gift 50, /flip 10, /topcoins',
+    'Антиспам: /set flood on (floodMax — сообщений за 10 с), /set noFwd on (запрет пересылок), /set newbieLinks on (без ссылок в первые сутки)',
+    'Слова: /addword, /delword, /words · Ночной режим: /night 23:00-07:00 или /night off · Досье: /whois (ответом или по id)',
     '/all [текст] — позвать всех в видеочат (уведомление придёт каждому; раз в 5 минут)',
     '/pause [мин|2h|1d] — выключить бота в чате на время (по умолчанию час) · /resume — вернуть сразу · /reload — перезагрузить настройки бота',
     'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 3–600 (секунд на нажатие кнопки)',
@@ -696,10 +711,12 @@ export function createChatAdmin(deps) {
       const t = String(raw).toLowerCase();
       if (['on', 'вкл', '1', 'true', 'да'].includes(t)) v = true; else if (['off', 'выкл', '0', 'false', 'нет'].includes(t)) v = false; else return { ok: false, text: 'Нужно on или off.' };
     } else if (kind === 'text') {
-      v = cleanText(raw, key === 'rules' ? 1500 : 500);
+      v = cleanText(raw, key === 'rules' || key === 'words' ? 1500 : 500);
+      if (key === 'night') { const a = String(raw).trim().toLowerCase(); if (a === 'off' || a === '') v = ''; else if (parseNight(a)) v = a; else return { ok: false, text: 'Нужно время вида 23:00-07:00 или off.' }; }
     } else if (kind === 'num') {
       v = Number(raw);
       if (key === 'captchaSec') { if (!Number.isInteger(v) || v < 3 || v > 600) return { ok: false, text: 'Нужно число секунд от 3 до 600.' }; }
+      else if (key === 'floodMax') { if (!Number.isInteger(v) || v < 3 || v > 20) return { ok: false, text: 'Нужно число сообщений за 10 секунд от 3 до 20.' }; }
       else if (!Number.isInteger(v) || v < 1 || v > 10) return { ok: false, text: 'Нужно число от 1 до 10.' };
     } else {
       v = String(raw).trim(); try { new Date().toLocaleString('ru-RU', { timeZone: v }); } catch { return { ok: false, text: 'Не знаю такой часовой пояс (пример: Europe/Berlin).' }; }
@@ -900,9 +917,13 @@ export function createChatAdmin(deps) {
       if (fromId && banned.has(fromId) && !msg.from.is_bot) { await blockBanned(chat.id, msg.from); await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id }); return true; }
     }
 
+    // «Ирис»: карма, антифлуд, фильтр слов, пересылки, ссылки новичков — для обычных сообщений (не команд)
+    const irisCtx = { chat, chatKey, meta, cfg, msg, cmd, fromId, tmp, say: (text) => say(chat.id, text), setCfg: (k, v) => setCfg(chatKey, meta, k, v), isAdmin: () => (fromId ? isChatAdmin(chat.id, fromId) : false) };
     // служебные сообщения (вошёл/вышел) — убрать, если включено
     if (cfg.cleanup && (msg.new_chat_members || msg.left_chat_member)) { await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id }); return true; }
     if (!msg.from || msg.from.is_bot || msg.sender_chat || !fromId) return false;
+
+    if (!cmd && !msg.new_chat_members && !msg.left_chat_member) { if (await iris.onText(irisCtx)) return true; }
 
     // счётчики сообщений (текст не сохраняется)
     if (cfg.count && !msg.new_chat_members && !msg.left_chat_member) {
@@ -930,6 +951,7 @@ export function createChatAdmin(deps) {
     if (!cmd) return false;
     const publicCmds = ['rules', 'help'];
     const adminCmds = ['gban', 'ungban', 'stats', 'top', 'joins', 'ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'del', 'pin', 'unpin', 'settings', 'set', 'setwelcome', 'setrules', 'all', 'everyone', 'tagall'];
+    if (iris.handles(cmd.name)) return iris.onCommand(irisCtx);
     if (!publicCmds.includes(cmd.name) && !adminCmds.includes(cmd.name)) return false; // чужая команда (например /call) — дальше по цепочке
     if (cmd.name === 'rules') { await say(chat.id, cfg.rules ? '📜 Правила чата\n' + cfg.rules : 'Правила чата ещё не заданы (админ: /setrules текст).'); return true; }
     if (cmd.name === 'help') { await say(chat.id, HELP); return true; }

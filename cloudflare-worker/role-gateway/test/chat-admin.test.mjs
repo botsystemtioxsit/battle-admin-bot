@@ -564,5 +564,46 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   t('/settings показывает проверку «я не бот»', e.sent().at(-1).includes('captcha') && e.sent().at(-1).includes('captchaSec'));
 }
 
+// ---------- пауза, возобновление и перезагрузка ----------
+{
+  const e = await enabled({}, {});
+  let hook = 0; e.deps.onEnabled = async () => { hook++; };
+  let r = await e.ca.onMessage(msg(USER, '/pause 30'));
+  t('/pause: обычному участнику отказ, паузы нет', e.sent().at(-1).includes('для администраторов') && !(e.db.root.chatAdmin[KEY].meta.pausedUntil));
+  r = await e.ca.onMessage(msg(ADMIN, '/pause 30'));
+  t('/pause 30: пауза на 30 минут записана', e.db.root.chatAdmin[KEY].meta.pausedUntil === NOW + 30 * 60000 && e.sent().at(-1).includes('30 мин.'), e.db.root.chatAdmin[KEY].meta);
+  const before = e.db.writes.length;
+  r = await e.ca.onMessage(msg(USER, 'привет всем'));
+  t('на паузе: обычное сообщение не считается и не обрабатывается', r === false && e.db.writes.length === before);
+  r = await e.ca.onMessage(msg(ADMIN, '/ban 12345678'));
+  t('на паузе: команды модерации не работают', r === false && !e.calls.some((c) => c.method === 'banChatMember'));
+  e.clock.t = NOW + 31 * 60000;
+  r = await e.ca.onMessage(msg(USER, 'уже можно'));
+  t('пауза кончилась сама: бот снова считает сообщения', e.db.writes.length > before);
+  await e.ca.onMessage(msg(ADMIN, '/pause 2h'));
+  e.clock.t = NOW + 32 * 60000;
+  const n = e.sent().length;
+  await e.ca.onMessage(msg(ADMIN, '/resume'));
+  t('/resume: пауза снята сразу', !e.db.root.chatAdmin[KEY].meta.pausedUntil && e.sent().at(-1).includes('Пауза снята') && e.sent().length === n + 1, [e.db.root.chatAdmin[KEY].meta.pausedUntil, e.sent().slice(-2), n]);
+  await e.ca.onMessage(msg(ADMIN, '/pause абв'));
+  t('/pause с мусором — подсказка про срок', e.sent().at(-1).includes('Укажите срок'));
+  await e.ca.onMessage(msg(ADMIN, '/pause 999d'));
+  t('/pause: больше недели не бывает', e.db.root.chatAdmin[KEY].meta.pausedUntil === e.clock.t + 7 * 86400000);
+  await e.ca.onMessage(msg(ADMIN, '/reload'));
+  t('/reload во время паузы работает, вебхук перепроверен, права бота прочитаны', hook === 1 && e.sent().at(-1).includes('Перезагружено') && e.sent().at(-1).includes('на паузе') && e.db.root.chatAdmin[KEY].meta.botStatus === 'administrator');
+  await e.ca.onMessage(msg(ADMIN, '/resume'));
+  await e.ca.onMessage(msg(USER, '/reload'));
+  t('/reload обычному участнику — отказ', e.sent().at(-1).includes('для администраторов'));
+}
+{
+  // пауза отпускает тех, кто проходил проверку «я не бот»
+  const e = await enabled({}, {});
+  e.db.root.chatAdmin[KEY].pending = { 777: { at: NOW, until: NOW + 10000, msgId: 55, name: 'Н' } };
+  await e.ca.onMessage(msg(ADMIN, '/pause 10'));
+  t('пауза: ожидавший проверку получил права назад, кнопка удалена, запись снята',
+    e.calls.some((c) => c.method === 'restrictChatMember' && c.payload.user_id === 777 && c.payload.permissions.can_send_messages === true)
+    && e.calls.some((c) => c.method === 'deleteMessage' && c.payload.message_id === 55) && !(e.db.root.chatAdmin[KEY].pending && e.db.root.chatAdmin[KEY].pending[777]));
+}
+
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

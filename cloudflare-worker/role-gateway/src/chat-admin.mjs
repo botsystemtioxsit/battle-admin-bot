@@ -183,6 +183,21 @@ export function createChatAdmin(deps) {
 
   const say = (chatId, text, extra) => deps.tg('sendMessage', { chat_id: chatId, text: String(text).slice(0, 4000), ...(extra || {}) });
 
+  // Служебные сообщения бота (подтверждения, отказы, пауза, перезагрузка) стирают себя через TEMP_MS, вместе с командой, на которую они отвечают.
+  // Отложенное удаление нужно Worker'у в фоне (deps.later = waitUntil); без него (тесты, другая среда) сообщения остаются как были.
+  const TEMP_MS = 3000;
+  const sleep = (ms) => (deps.sleep ? deps.sleep(ms) : new Promise((res) => setTimeout(res, ms)));
+  function eraseLater(chatId, ids, ms = TEMP_MS) {
+    const list = ids.filter((x) => Number.isInteger(x));
+    if (!list.length || !deps.later) return;
+    deps.later((async () => { await sleep(ms); for (const id of list) await deps.tg('deleteMessage', { chat_id: chatId, message_id: id }).catch(() => {}); })().catch(() => {}));
+  }
+  async function sayTemp(chatId, text, cmdMsgId) {
+    const r = await say(chatId, text);
+    eraseLater(chatId, [r && r.ok && r.result ? r.result.message_id : null, cmdMsgId]);
+    return r;
+  }
+
   async function getMeta(chatKey, fresh = false) {
     const hit = metaCache.get(chatKey);
     if (!fresh && hit && now() - hit.at < META_TTL) return hit.meta;
@@ -751,6 +766,7 @@ export function createChatAdmin(deps) {
     const fromId = msg.from && userKeyOf(msg.from.id);
     const text = typeof msg.text === 'string' ? msg.text : typeof msg.caption === 'string' ? msg.caption : '';
     const cmd = typeof msg.text === 'string' ? parseCommand(msg.text, deps.botUsername) : null;
+    const tmp = (text) => sayTemp(chat.id, text, cmd ? msg.message_id : null);
 
     // включение и выключение — только владелец проекта (иначе любой чат мог бы заставить бота писать в базу)
     if (cmd && (cmd.name === 'admin_on' || cmd.name === 'admin_off')) {
@@ -759,19 +775,19 @@ export function createChatAdmin(deps) {
       const st = isOwner ? 'creator' : await memberStatus(chat.id, fromId);
       if (!isOwner && st !== 'creator') {
         // включить бота в чате может владелец проекта или создатель самого чата; остальным — короткий ответ, ничего не пишем
-        if (st === 'administrator') await say(chat.id, 'Включить и выключить админ-функции может только создатель чата.');
+        if (st === 'administrator') await tmp('Включить и выключить админ-функции может только создатель чата.');
         return true;
       }
       if (cmd.name === 'admin_off') {
         await disable(chatKey);
-        await say(chat.id, '⏹ Админ-функции для этого чата выключены. Собранная статистика сохранена.');
+        await tmp('⏹ Админ-функции для этого чата выключены. Собранная статистика сохранена.');
         return true;
       }
       if (!isOwner) {
         // у чужих владельцев — не больше MAX_TENANT_CHATS чатов, чтобы один человек не заставил бота работать на сотню чатов
         const mine = await deps.dbGet(`chatAdmin/_owners/${fromId}`, { shallow: true }).catch(() => null);
         const keys = Object.keys(mine && typeof mine === 'object' ? mine : {}).filter((k) => k !== chatKey);
-        if (keys.length >= MAX_TENANT_CHATS) { await say(chat.id, `Можно подключить не больше ${MAX_TENANT_CHATS} чатов.`); return true; }
+        if (keys.length >= MAX_TENANT_CHATS) { await tmp(`Можно подключить не больше ${MAX_TENANT_CHATS} чатов.`); return true; }
       }
       const botAdmin = await enable(chat, msg.from);
       if (deps.onEnabled) { try { await deps.onEnabled(); } catch { /* вебхук проверит /health */ } }
@@ -787,20 +803,20 @@ export function createChatAdmin(deps) {
     // пауза, возобновление и перезагрузка работают и во время паузы; всё остальное при паузе — молча дальше по цепочке (/call и т. п.)
     if (cmd && (cmd.name === 'pause' || cmd.name === 'resume' || cmd.name === 'reload' || cmd.name === 'restart')) {
       if (!fromId) return true;
-      if (!(await isChatAdmin(chat.id, fromId))) { await say(chat.id, 'Эта команда — для администраторов чата.'); return true; }
+      if (!(await isChatAdmin(chat.id, fromId))) { await tmp('Эта команда — для администраторов чата.'); return true; }
       if (cmd.name === 'pause') {
         const sec = parseDuration(cmd.args.split(/\s+/)[0], 60);
-        if (sec === null) { await say(chat.id, 'Укажите срок: /pause 30 (минут), /pause 2h, /pause 1d. Без срока — на час.'); return true; }
+        if (sec === null) { await tmp('Укажите срок: /pause 30 (минут), /pause 2h, /pause 1d. Без срока — на час.'); return true; }
         const capped = Math.min(sec, 7 * 86400);
         await pauseChat(chat, chatKey, now() + capped * 1000);
-        await say(chat.id, `Бот на паузе на ${formatDuration(capped)}: не проверяет новичков, не удаляет сообщения, не считает статистику. Вернуть сразу: /resume.`);
+        await tmp(`Бот на паузе на ${formatDuration(capped)}: не проверяет новичков, не удаляет сообщения, не считает статистику. Вернуть сразу: /resume.`);
         return true;
       }
       if (cmd.name === 'resume') {
         const wasPaused = isPaused(meta);
         await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/pausedUntil`]: null });
         metaCache.delete(chatKey);
-        await say(chat.id, wasPaused ? 'Пауза снята, бот снова работает.' : 'Бот и так не на паузе.');
+        await tmp(wasPaused ? 'Пауза снята, бот снова работает.' : 'Бот и так не на паузе.');
         return true;
       }
       // анимация: одно сообщение, которое бот сам редактирует по шагам настоящей перезагрузки
@@ -820,8 +836,8 @@ export function createChatAdmin(deps) {
       if (mid) {
         await step(100, 'готово');
         const ed = await deps.tg('editMessageText', { chat_id: chat.id, message_id: mid, text: r }).catch(() => null);
-        if (!ed || ed.ok === false) await say(chat.id, r);
-      } else await say(chat.id, r);
+        if (!ed || ed.ok === false) await tmp(r); else eraseLater(chat.id, [mid, cmd ? msg.message_id : null]);
+      } else await tmp(r);
       return true;
     }
     if (isPaused(meta)) return false;
@@ -858,7 +874,7 @@ export function createChatAdmin(deps) {
     if (!cmd && cfg.links && (msg.entities || msg.caption_entities || []).some((e) => e.type === 'url' || e.type === 'text_link')) {
       if (!(await isChatAdmin(chat.id, fromId))) {
         const r = await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id });
-        if (r.ok && now() - (noticeAt.get(chatKey) || 0) > 60_000) { noticeAt.set(chatKey, now()); await say(chat.id, 'Ссылки в этом чате может отправлять только администрация.'); }
+        if (r.ok && now() - (noticeAt.get(chatKey) || 0) > 60_000) { noticeAt.set(chatKey, now()); await tmp('Ссылки в этом чате может отправлять только администрация.'); }
         return true;
       }
     }
@@ -869,13 +885,13 @@ export function createChatAdmin(deps) {
     if (!publicCmds.includes(cmd.name) && !adminCmds.includes(cmd.name)) return false; // чужая команда (например /call) — дальше по цепочке
     if (cmd.name === 'rules') { await say(chat.id, cfg.rules ? '📜 Правила чата\n' + cfg.rules : 'Правила чата ещё не заданы (админ: /setrules текст).'); return true; }
     if (cmd.name === 'help') { await say(chat.id, HELP); return true; }
-    if (!(await isChatAdmin(chat.id, fromId))) { await say(chat.id, 'Эта команда — для администраторов чата.'); return true; }
+    if (!(await isChatAdmin(chat.id, fromId))) { await tmp('Эта команда — для администраторов чата.'); return true; }
     const actor = { id: fromId, name: displayName(msg.from) };
 
     if (cmd.name === 'gban' || cmd.name === 'ungban') {
-      if (!owners.has(fromId)) { await say(chat.id, 'Бан и разбан везде — только для владельца проекта.'); return true; }
+      if (!owners.has(fromId)) { await tmp('Бан и разбан везде — только для владельца проекта.'); return true; }
       const tg = await resolveTarget(msg, cmd.args);
-      if (!tg) { await say(chat.id, 'Ответьте этой командой на сообщение человека (или укажите его числовой id).'); return true; }
+      if (!tg) { await tmp('Ответьте этой командой на сообщение человека (или укажите его числовой id).'); return true; }
       const r = cmd.name === 'gban' ? await globalBan({ id: tg.id, name: tg.name, username: tg.user && tg.user.username }, { reason: tg.rest }, actor) : await globalUnban({ id: tg.id }, actor);
       await say(chat.id, r.text);
       return true;
@@ -888,17 +904,17 @@ export function createChatAdmin(deps) {
     if (cmd.name === 'set') {
       const [k, ...v] = cmd.args.split(/\s+/);
       const r = k ? await applySetting(chatKey, meta, k, v.join(' ')) : { ok: false, text: settingsText(meta) };
-      await say(chat.id, r.text); return true;
+      await tmp(r.text); return true;
     }
     if (cmd.name === 'setwelcome') {
-      if (!cmd.args) { await say(chat.id, 'Напишите текст после команды. Можно {name} и {chat}. Включить: /set welcome on'); return true; }
+      if (!cmd.args) { await tmp('Напишите текст после команды. Можно {name} и {chat}. Включить: /set welcome on'); return true; }
       await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/cfg/welcomeText`]: cleanText(cmd.args, 500), [`chatAdmin/${chatKey}/meta/cfg/welcome`]: true });
-      metaCache.delete(chatKey); await say(chat.id, 'Приветствие сохранено и включено.'); return true;
+      metaCache.delete(chatKey); await tmp('Приветствие сохранено и включено.'); return true;
     }
     if (cmd.name === 'setrules') {
-      if (!cmd.args) { await say(chat.id, 'Напишите текст правил после команды.'); return true; }
+      if (!cmd.args) { await tmp('Напишите текст правил после команды.'); return true; }
       await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/cfg/rules`]: cleanText(cmd.args, 1500) });
-      metaCache.delete(chatKey); await say(chat.id, 'Правила сохранены. Показать: /rules'); return true;
+      metaCache.delete(chatKey); await tmp('Правила сохранены. Показать: /rules'); return true;
     }
 
     // действия над человеком / сообщением
@@ -908,14 +924,14 @@ export function createChatAdmin(deps) {
     if (cmd.name === 'mute') {
       const first = String(rest || '').split(/\s+/)[0];
       const sec = parseDuration(first, 60);
-      if (sec === null) { await say(chat.id, 'Не понял срок. Примеры: /mute 30, /mute 2h, /mute 1d'); return true; }
+      if (sec === null) { await tmp('Не понял срок. Примеры: /mute 30, /mute 2h, /mute 1d'); return true; }
       opts = { seconds: sec, reason: cleanText(/^\d/.test(first) ? String(rest).slice(first.length) : rest, 200) };
     }
     if (cmd.name === 'del' || cmd.name === 'pin' || cmd.name === 'unpin') opts.messageId = msg.reply_to_message ? msg.reply_to_message.message_id : null;
-    if (!target && !['del', 'pin', 'unpin'].includes(cmd.name)) { await say(chat.id, 'Ответьте этой командой на сообщение человека (или укажите его числовой id).'); return true; }
+    if (!target && !['del', 'pin', 'unpin'].includes(cmd.name)) { await tmp('Ответьте этой командой на сообщение человека (или укажите его числовой id).'); return true; }
     const res = await act(chat.id, cmd.name, target, opts, actor);
     if (cmd.name === 'del' && res.ok) { await deps.tg('deleteMessage', { chat_id: chat.id, message_id: msg.message_id }); return true; }
-    if (res.text) await say(chat.id, res.text);
+    if (res.text) await tmp(res.text);
     return true;
   }
 

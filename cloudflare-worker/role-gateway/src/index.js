@@ -1200,12 +1200,14 @@ async function handleBotMessage(env, message) {
 // Все пути в базе строятся из проверенных id (цифры, 'YYYY-MM-DD', hex) и всё равно проходят проверку здесь.
 const CHAT_DB_PATH_RE = /^chatAdmin(\/[A-Za-z0-9_-]{1,64}){0,8}$/;
 let chatAdminHolder = { key: null, inst: null };
+let chatAdminCtx = null; // контекст текущего запроса (waitUntil) — для фоновых задач вроде удаления служебных сообщений
 async function getChatAdmin(env, origin) {
   const info = await getBotInfo(env);
   const key = String(env.BOT_TOKEN);
   if (chatAdminHolder.key === key && chatAdminHolder.inst && chatAdminHolder.botId === (info && info.id)) return chatAdminHolder.inst;
   const inst = createChatAdmin({
     tg: (method, payload) => tgApi(env, method, payload),
+    later: (promise) => { if (chatAdminCtx && chatAdminCtx.waitUntil) chatAdminCtx.waitUntil(promise); }, // отложенное удаление служебных сообщений
     dbGet: async (path, o) => {
       if (!CHAT_DB_PATH_RE.test(path)) throw new Error('недопустимый путь');
       const res = await dbReadAdmin(env, '/' + path + '.json', !!(o && o.shallow));
@@ -1296,6 +1298,7 @@ function getMailer(env) {
 }
 
 async function handleTelegramUpdate(env, update, origin, ctx) {
+  chatAdminCtx = ctx || null;
   if (update && update.chat_member) {
     try {
       const ca = await getChatAdmin(env, origin);

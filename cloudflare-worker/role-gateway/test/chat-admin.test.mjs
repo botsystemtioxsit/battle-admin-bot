@@ -607,5 +607,42 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
     && e.calls.some((c) => c.method === 'deleteMessage' && c.payload.message_id === 55) && !(e.db.root.chatAdmin[KEY].pending && e.db.root.chatAdmin[KEY].pending[777]));
 }
 
+// ---------- служебные сообщения стирают себя через 3 секунды ----------
+{
+  const e = await enabled({}, {});
+  const pend = []; const sleeps = []; let release; let gate = new Promise((r) => { release = r; });
+  const open = () => { release(); gate = new Promise((r) => { release = r; }); };
+  e.deps.later = (p) => pend.push(p); e.deps.sleep = (ms) => { sleeps.push(ms); return gate; }; e.deps.pace = false;
+  const dels = () => e.calls.filter((c) => c.method === 'deleteMessage').map((c) => c.payload.message_id);
+  await e.ca.onMessage(msg(ADMIN, '/pause 30'));
+  const botId = e.calls.filter((c) => c.method === 'sendMessage').at(-1);
+  t('служебное сообщение: до срока не удалено', dels().length === 0);
+  open(); await Promise.all(pend.splice(0));
+  t('служебное сообщение стёрто через 3 секунды вместе с командой админа', sleeps.at(-1) === 3000 && dels().length === 2 && dels().includes(1), dels());
+  e.calls.length = 0;
+  await e.ca.onMessage(msg(USER, '/pause'));
+  open(); await Promise.all(pend.splice(0));
+  t('отказ («для администраторов») тоже стирается', e.calls.some((c) => c.method === 'deleteMessage'));
+  e.calls.length = 0;
+  await e.ca.onMessage(msg(ADMIN, '/resume'));
+  await e.ca.onMessage(msg(ADMIN, '/help'));
+  open(); await Promise.all(pend.splice(0));
+  const helpMsgs = e.calls.filter((c) => c.method === 'sendMessage' && c.payload.text.includes('Команды администратора'));
+  t('/help не стирается, а подтверждение /resume — да', helpMsgs.length === 1 && dels().length === 2, dels());
+  e.calls.length = 0;
+  await e.ca.onMessage(msg(ADMIN, '/reload'));
+  const lastEdit = e.calls.map((c) => c.method).lastIndexOf('editMessageText');
+  t('/reload: до конца загрузки ничего не удаляется', !e.calls.some((c) => c.method === 'deleteMessage'));
+  open(); await Promise.all(pend.splice(0));
+  const firstDel = e.calls.map((c) => c.method).indexOf('deleteMessage');
+  t('/reload: сообщение с загрузкой стирается через 3 секунды после итога', firstDel > lastEdit && dels().length === 2, [firstDel, lastEdit, dels()]);
+}
+{
+  // без фонового исполнителя (deps.later) сообщения остаются, ничего не ломается
+  const e = await enabled({}, {});
+  await e.ca.onMessage(msg(ADMIN, '/pause 5'));
+  t('без deps.later сообщение просто остаётся', !e.calls.some((c) => c.method === 'deleteMessage'));
+}
+
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

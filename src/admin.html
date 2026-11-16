@@ -196,6 +196,9 @@
   .live-line{ animation:liveIn .25s ease-out; }
   @keyframes liveIn{ from{ background:rgba(91,157,255,.22); } to{ background:transparent; } }
   .live-line.term-warn{ color:#E8B04B; } .live-line.term-err{ color:var(--live); } .live-line.term-ok{ color:#3FB67E; } .live-line.term-dim{ color:var(--muted); }
+  .live-app{ display:none; color:var(--muted); }
+  #live-out[data-scope="all"] .live-app{ display:inline; }
+  .app-ic svg{ width:22px; height:22px; display:block; margin:0 auto; }
   #live-out[data-filter="actions"] .live-line:not([data-kind="actions"]),
   #live-out[data-filter="requests"] .live-line:not([data-kind="requests"]),
   #live-out[data-filter="errors"] .live-line:not([data-kind="errors"]),
@@ -407,7 +410,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. v5.46: «Эфир» у каждого проекта (ВидеоЧат, лаунчер, VPN, чаты) со своей статистикой и вкладка «Общая численность» в зоне «Админ». v5.45: без смайликов; общие разделы (Терминал, Аккаунт, Приложения, Супердоступ) вынесены в кнопку «Админ» внизу меню. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.44: время на кнопку «Я не бот» теперь от 3 секунд. v5.43: «База данных» убрана совсем; админу Супердоступ выдаёт приложения «Чаты», «VPN», «Лаунчер» (Администрация); создатель чата, подключивший бота сам (/admin_on), видит в панели только свои чаты («Мои чаты»). v5.42: время на кнопку «Я не бот» теперь в секундах (по умолчанию 10, от 10 до 600), выгон ровно по сроку. v5.41: проверка «я не бот» для новичков чата теперь включена по умолчанию (выключить — /set captcha off или переключатель в «Чаты → Обзор»). v5.40: вкладка «Чаты → Рассылки» — регулярные сообщения в чаты от ваших ботов: несколько вариантов текста, расписание, тихие часы, несколько ботов по очереди, проверка и пробная отправка. v5.39: проверка «я не бот» для новичков чата — кнопка, выгон по таймеру, переключатель и время в «Чаты → Обзор», счётчики. v5.38: «Бан везде» — один бан сразу во всех чатах бота, в игре и в ВидеоЧате (вкладка «Баны везде», кнопка в карточках игрока и участника, команды Терминала gban и ungban). v5.37: приложение «Чаты» — админ-бот Telegram-чатов (статистика входов: кто, когда и как зашёл, по какой ссылке; модерация; настройки), команды Терминала chats и chatstats. v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.46</span></div>
+    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. v5.47: эфиры проектов выглядят так же, как эфир Тролль-Баттл; общий «Эфир всех проектов» в зоне «Админ»; у приложений настоящие значки. v5.46: «Эфир» у каждого проекта (ВидеоЧат, лаунчер, VPN, чаты) со своей статистикой и вкладка «Общая численность» в зоне «Админ». v5.45: без смайликов; общие разделы (Терминал, Аккаунт, Приложения, Супердоступ) вынесены в кнопку «Админ» внизу меню. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.44: время на кнопку «Я не бот» теперь от 3 секунд. v5.43: «База данных» убрана совсем; админу Супердоступ выдаёт приложения «Чаты», «VPN», «Лаунчер» (Администрация); создатель чата, подключивший бота сам (/admin_on), видит в панели только свои чаты («Мои чаты»). v5.42: время на кнопку «Я не бот» теперь в секундах (по умолчанию 10, от 10 до 600), выгон ровно по сроку. v5.41: проверка «я не бот» для новичков чата теперь включена по умолчанию (выключить — /set captcha off или переключатель в «Чаты → Обзор»). v5.40: вкладка «Чаты → Рассылки» — регулярные сообщения в чаты от ваших ботов: несколько вариантов текста, расписание, тихие часы, несколько ботов по очереди, проверка и пробная отправка. v5.39: проверка «я не бот» для новичков чата — кнопка, выгон по таймеру, переключатель и время в «Чаты → Обзор», счётчики. v5.38: «Бан везде» — один бан сразу во всех чатах бота, в игре и в ВидеоЧате (вкладка «Баны везде», кнопка в карточках игрока и участника, команды Терминала gban и ungban). v5.37: приложение «Чаты» — админ-бот Telegram-чатов (статистика входов: кто, когда и как зашёл, по какой ссылке; модерация; настройки), команды Терминала chats и chatstats. v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.47</span></div>
     <div class="me" id="me-box" style="display:none;">
       <button type="button" class="zone-btn" id="zone-btn" aria-pressed="false">Админ</button>
       Вошёл как <b id="me-name">—</b><br>
@@ -550,20 +553,20 @@
       <div class="tab" data-tab="vc-overview" data-app="videochat" data-title="Обзор" data-sub="Сколько людей сейчас в комнатах"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"></rect><path d="M15.5 10.5l6-3.5v10l-6-3.5"></path></svg>Обзор</div>
       <div class="tab" data-tab="vc-communities" data-app="videochat" data-title="Сообщества" data-sub="Подключённые Telegram-чаты и заявки на подключение"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"></circle><circle cx="17" cy="9" r="2.4"></circle><path d="M2.5 20c0-3 2.5-5.5 5.5-5.5S13.5 17 13.5 20M14.5 15c2.6-.4 6 .9 6 5"></path></svg>Сообщества</div>
       <div class="tab" data-tab="vc-moderation" data-app="videochat" data-title="Блокировки" data-sub="Запрет на весь ВидеоЧат"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path><path d="M12 8v5M12 16.5v.01"></path></svg>Блокировки</div>
-      <div class="tab" data-tab="vc-live" data-view="aplive" data-app="videochat" data-title="Эфир" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
+      <div class="tab" data-tab="vc-live" data-view="live" data-app="videochat" data-title="Эфир ВидеоЧата" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
       <div class="tab-grp">Лаунчер</div>
       <div class="tab" data-tab="lf-inbox" data-app="launcher" data-title="Сообщения в лаунчере" data-sub="Ошибки и предложения, которые люди присылают из Ghost Shell Launcher"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>Сообщения</div>
-      <div class="tab" data-tab="lf-live" data-view="aplive" data-app="launcher" data-title="Эфир" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
+      <div class="tab" data-tab="lf-live" data-view="live" data-app="launcher" data-title="Эфир лаунчера" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
       <div class="tab-grp">VPN · Gateway Plus</div>
       <div class="tab" data-tab="gw-accounts" data-app="gateway" data-title="VPN · аккаунты" data-sub="Gateway Plus — личный VPN: кто пользуется и блокировка тех, кто нарушает правила"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Аккаунты</div>
-      <div class="tab" data-tab="gw-live" data-view="aplive" data-app="gateway" data-title="Эфир" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
+      <div class="tab" data-tab="gw-live" data-view="live" data-app="gateway" data-title="Эфир VPN" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
       <div class="tab-grp">Чаты</div>
       <div class="tab" data-tab="ch-overview" data-app="chats" data-title="Чаты" data-sub="Статистика входов, настройки бота и подключение чатов"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"></path></svg>Обзор</div>
       <div class="tab" data-tab="ch-events" data-app="chats" data-title="События" data-sub="Кто вошёл и вышел, как именно, и что делала модерация"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>События</div>
       <div class="tab" data-tab="ch-people" data-app="chats" data-title="Участники" data-sub="Кто сколько пишет, предупреждения, мут и бан"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M17 11a3 3 0 100-6M21 20c0-2.6-1.6-4.8-4-5.6"></path></svg>Участники</div>
       <div class="tab" data-tab="ch-bans" data-app="chats" data-title="Баны везде" data-sub="Заблокировать человека сразу во всех чатах, в игре и в ВидеоЧате"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M5.6 5.6l12.8 12.8"></path></svg>Баны везде</div>
       <div class="tab" data-tab="ch-mail" data-app="chats" data-title="Рассылки" data-sub="Регулярные сообщения в чаты от ваших ботов"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3L3 10.5l6.5 2.5L12 20z"></path><path d="M9.5 13L21 3"></path></svg>Рассылки</div>
-      <div class="tab" data-tab="ch-live" data-view="aplive" data-app="chats" data-title="Эфир" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
+      <div class="tab" data-tab="ch-live" data-view="live" data-app="chats" data-title="Эфир чатов" data-sub="Что происходит в проекте и его статистика"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир</div>
       <div class="tab-grp">Комната</div>
       <div class="tab" data-tab="cm-room" data-app="videochat community" data-title="Комната" data-sub="Кто в комнате, мут и выгон"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"></path><path d="M10 20v-5h4v5"></path></svg>Комната</div>
       <div class="tab" data-tab="cm-team" data-app="videochat community" data-title="Команда и журнал" data-sub="Админы и минеры комнаты, журнал действий"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v16H5z"></path><path d="M9 9h6M9 13h6M9 17h3"></path></svg>Команда и журнал</div>
@@ -593,6 +596,7 @@
            для чтения" (см. loadStatsTab), не отдельное переключаемое право -->
       <div class="tab" data-tab="stats" data-app="troll" id="tab-stats" data-title="Статистика" data-sub="Сводка по игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Статистика</div>
       <div class="tab-grp" data-zone="admin">Сеть</div>
+      <div class="tab" data-zone="admin" data-tab="live-all" data-view="live" data-title="Эфир всех проектов" data-sub="Всё, что происходит во всех проектах сразу"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Эфир всех проектов</div>
       <div class="tab" data-zone="admin" data-tab="net-total" data-title="Общая численность" data-sub="Сколько людей и чего во всех проектах сразу"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg> Общая численность</div>
       <div class="tab-grp" data-zone="admin">Инструменты</div>
       <div class="tab" data-zone="admin" data-tab="terminal" id="tab-terminal" data-title="Терминал" data-sub="Команды для Супердоступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 10l3 2-3 2M13 15h4"></path></svg>Терминал</div>
@@ -1178,14 +1182,7 @@
           <button type="button" class="term-chip" id="live-pause">пауза</button>
           <button type="button" class="term-chip" id="live-clear">очистить</button>
         </div>
-        <div class="term-chips">
-          <button type="button" class="term-chip active" data-live-filter="all">всё</button>
-          <button type="button" class="term-chip" data-live-filter="actions">действия</button>
-          <button type="button" class="term-chip" data-live-filter="requests">заявки</button>
-          <button type="button" class="term-chip" data-live-filter="errors">ошибки</button>
-          <button type="button" class="term-chip" data-live-filter="players">игроки</button>
-          <button type="button" class="term-chip" data-live-filter="matches">бои</button>
-        </div>
+        <div class="term-chips" id="live-chips"></div>
         <div class="live-stage">
           <div id="live-out" data-filter="all" role="log"></div>
           <button type="button" id="live-jump" style="display:none;"></button>
@@ -1256,16 +1253,6 @@
       </div>
     </div>
 
-    <div class="subview" data-panel="aplive" id="panel-aplive">
-      <div class="admin-card">
-        <div class="section-label" id="ap-title">Эфир</div>
-        <div class="stat-grid" id="ap-tiles"></div>
-        <div class="section-label" style="margin-top:16px;">Последние события</div>
-        <div id="ap-feed"></div>
-        <div class="admin-empty" id="ap-empty" style="display:none;">Событий пока нет</div>
-        <div class="admin-empty" style="text-align:left; padding:8px 0 0;">Обновляется само раз в 20 секунд, пока вкладка открыта.</div>
-      </div>
-    </div>
     <div class="subview" data-panel="net-total" id="panel-net-total">
       <div class="admin-card">
         <div class="section-label">Все проекты сразу</div>
@@ -2142,24 +2129,24 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // Совместимость: у админа, которому приложения ещё ни разу не выбирали, считается
   // «Тролль-Баттл» включён, «ВидеоЧат» выключен — как было до появления видеочата.
   const APP_DEFS = [
-    { id: 'troll', label: 'Тролль-Баттл', perm: 'app_troll', icon: 'ТБ', sub: 'Игра и игроки' },
-    { id: 'videochat', label: 'ВидеоЧат', perm: 'app_videochat', icon: 'ВЧ', sub: 'Комнаты и чаты' },
+    { id: 'troll', label: 'Тролль-Баттл', perm: 'app_troll', sub: 'Игра и игроки' },
+    { id: 'videochat', label: 'ВидеоЧат', perm: 'app_videochat', sub: 'Комнаты и чаты' },
     // v5.34: «Сообщения в лаунчере» — ошибки и предложения из Ghost Shell Launcher. Только Супердоступ, не делегируется
     // (в PERMISSION_DEFS его нет): сообщения содержат сведения об аккаунтах и скриншоты людей.
-    { id: 'launcher', label: 'Лаунчер', perm: 'app_launcher', icon: 'ЛН', sub: 'Сообщения людей' },
+    { id: 'launcher', label: 'Лаунчер', perm: 'app_launcher', sub: 'Сообщения людей' },
     // v5.36: «VPN» — отдельное приложение: аккаунты плагина Gateway Plus (личный VPN в Ghost Shell Launcher) и их блокировка.
     // Так же только Супердоступ и не делегируется (в PERMISSION_DEFS его нет).
-    { id: 'gateway', label: 'VPN', perm: 'app_gateway', icon: 'VPN', sub: 'Личный VPN, аккаунты' },
+    { id: 'gateway', label: 'VPN', perm: 'app_gateway', sub: 'Личный VPN, аккаунты' },
     // v5.37: «Чаты» — админ-бот Telegram-чатов: статистика входов, настройки, бан/мут. Только Супердоступ, не делегируется:
     // тут имена и входы людей из чатов (см. блок «Чаты» ниже).
-    { id: 'chats', label: 'Чаты', perm: 'app_chats', icon: 'ЧТ', sub: 'Статистика и модерация' },
+    { id: 'chats', label: 'Чаты', perm: 'app_chats', sub: 'Статистика и модерация' },
     // v5.26: «Моя комната» — суб-админ/админ/минер одной комнаты ВидеоЧата. Это не переключаемое право:
     // оно появляется само, если у человека есть users/<uid>/vcCommunities (ставится при назначении на
     // должность), и только если нет права app_videochat (у админа видеочата те же вкладки лежат внутри него).
-    { id: 'community', label: 'Моя комната', perm: 'app_community', icon: 'КМ', sub: 'Ваша комната' },
+    { id: 'community', label: 'Моя комната', perm: 'app_community', sub: 'Ваша комната' },
     // v5.29: «Мой аккаунт» — окно для всех, у кого нет прав управлять платформой: кто вы, где подключены, как всё
     // работает, наши продукты. Не переключаемое право: включается само, когда нет ни одного другого приложения.
-    { id: 'me', label: 'Мой аккаунт', perm: 'app_me', icon: 'АК', sub: 'Ваш аккаунт' }
+    { id: 'me', label: 'Мой аккаунт', perm: 'app_me', sub: 'Ваш аккаунт' }
   ];
   const PERMISSION_DEFS = [
     { id: 'app_troll', label: 'Администрирует приложение «Тролль-Баттл»' },
@@ -3025,7 +3012,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         detachAdminsLiveListener();
         detachAccessTokensListener();
       }
-      if (tab.dataset.view === 'aplive') apOpen(tab.dataset.tab); else if (tab.dataset.tab === 'net-total') apOpenNet(); else apLeave();
+      if (tab.dataset.tab === 'net-total') apOpenNet(); else apLeaveNet();
       if (tab.dataset.tab !== 'terminal') termLeave();
       if (tab.dataset.tab === 'terminal') termOpen();
       if (tab.dataset.tab !== 'lf-inbox') lfDetach();
@@ -3040,8 +3027,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (tab.dataset.tab === 'vc-moderation') vcOpenModeration();
       if (tab.dataset.tab === 'cm-room') cmOpenRoom();
       if (tab.dataset.tab === 'cm-team') cmOpenTeam();
-      if (tab.dataset.tab !== 'live') liveLeave();
-      if (tab.dataset.tab === 'live') liveOpen();
+      if (!LIVE_SCOPE_OF[tab.dataset.tab]) liveLeave();
+      if (LIVE_SCOPE_OF[tab.dataset.tab]) liveOpen(LIVE_SCOPE_OF[tab.dataset.tab]);
       if (tab.dataset.tab === 'logs') showLogsSection();
       if (tab.dataset.tab === 'event') loadEventsAdminList();
       if (tab.dataset.tab === 'beta') showBetaSection();
@@ -3677,6 +3664,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     Object.keys(apGate).forEach((k) => { const el = document.querySelector('.tab[data-tab="' + k + '"]'); if (el && !apGate[k]) el.style.display = 'none'; });
     const netTab = document.querySelector('.tab[data-tab="net-total"]');
     if (netTab) netTab.style.display = canManageRoles() ? '' : 'none';
+    const liveAllTab = document.querySelector('.tab[data-tab="live-all"]');
+    if (liveAllTab) liveAllTab.style.display = canManageRoles() ? '' : 'none';
     // v5.43: «Баны везде» и «Рассылки» — только владелец проекта; создателю чата и админу с «Чаты» их не показываем
     ['ch-bans', 'ch-mail'].forEach((k) => { const el = document.querySelector('.tab[data-tab="' + k + '"]'); if (el && !canManageRoles()) el.style.display = 'none'; });
     syncTabGroups();
@@ -4828,10 +4817,29 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     renderAppSwitch();
   }
   // Одна кнопка «сейчас здесь» + список приложений (см. CSS .app-switch). Всё, что рисуется, — текст из APP_DEFS через textContent.
+  const APP_ICON_PATHS = {
+    troll: 'M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v4M8 21h8',
+    videochat: 'M3.5 7h11a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16.5 10.5l5-3v9l-5-3',
+    launcher: 'M12 4v11m0 0l-4-4m4 4l4-4M4 20h16',
+    gateway: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
+    chats: 'M4 5h16v11H9l-5 4zM8 10h8M8 13h5',
+    community: 'M4 11l8-7 8 7v9H4zM10 20v-5h4v5',
+    me: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7'
+  };
+  function appIcon(id) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round'); svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', APP_ICON_PATHS[id] || APP_ICON_PATHS.me);
+    svg.appendChild(path);
+    return svg;
+  }
   function appBadge(id) { return id === 'launcher' && lfNewCount > 0 ? lfNewCount : 0; }
   function appCard(def, tag) {
     const el = document.createElement(tag);
-    const ic = document.createElement('span'); ic.className = 'app-ic'; ic.textContent = def.icon || '•';
+    const ic = document.createElement('span'); ic.className = 'app-ic'; ic.appendChild(appIcon(def.id));
     const nm = document.createElement('span'); nm.className = 'app-nm';
     const mine = def.id === 'chats' && !canChatsAll(); // создатель чата видит не «Чаты», а свои
     const b = document.createElement('b'); b.textContent = mine ? 'Мои чаты' : def.label;
@@ -4908,10 +4916,6 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // Один общий раздел #panel-aplive на четыре вкладки (vc-live, lf-live, gw-live, ch-live): сверху плитки со статистикой
   // проекта, ниже лента последних событий. Данные читаются опросом раз в 20 секунд, пока вкладка открыта (закрыта — нет чтения).
   // Закрытые правилами узлы идут через adminDbRead; ВидеоЧат читается напрямую (его узлы открыты для чтения).
-  let apTimer = null;
-  let apKey = '';
-  let apBusy = false;
-  const AP_TITLES = { 'vc-live': 'Эфир ВидеоЧата', 'lf-live': 'Эфир лаунчера', 'gw-live': 'Эфир VPN', 'ch-live': 'Эфир чатов' };
   const DAY_MS = 86400000;
   function apObj(v) { return v && typeof v === 'object' ? v : {}; }
   function apTile(label, value) { return { label, value: typeof value === 'number' ? value.toLocaleString('ru-RU') : String(value) }; }
@@ -4927,10 +4931,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const inRooms = online.reduce((a, b) => a + b, 0);
     const pending = Object.values(reqs).filter((r) => r && r.status === 'pending');
     const events = [];
-    pending.forEach((r) => events.push({ at: r.at || 0, text: 'Заявка на подключение чата «' + apShort(r.title, 40) + '»', tone: 'gold' }));
-    Object.entries(comm).forEach(([id, c]) => { if (c && c.createdAt) events.push({ at: c.createdAt, text: 'Подключён чат «' + apShort(c.title || id, 40) + '»', tone: 'ok' }); });
-    Object.entries(bans).forEach(([id, b]) => { if (b && b.at) events.push({ at: b.at, text: 'Бан на весь ВидеоЧат: ' + apShort(id, 20) + (b.reason ? ' — ' + apShort(b.reason, 60) : ''), tone: 'err' }); });
-    ids.forEach((id, i) => { if (online[i]) events.push({ at: Date.now(), text: 'Сейчас в комнате «' + apShort(comm[id].title || id, 40) + '»: ' + online[i], tone: 'dim' }); });
+    pending.forEach((r) => events.push({ at: r.at || 0, kind: 'requests', text: 'Заявка на подключение чата «' + apShort(r.title, 40) + '»', tone: 'gold' }));
+    Object.entries(comm).forEach(([id, c]) => { if (c && c.createdAt) events.push({ at: c.createdAt, kind: 'rooms', text: 'Подключён чат «' + apShort(c.title || id, 40) + '»', tone: 'ok' }); });
+    Object.entries(bans).forEach(([id, b]) => { if (b && b.at) events.push({ at: b.at, kind: 'bans', text: 'Бан на весь ВидеоЧат: ' + apShort(id, 20) + (b.reason ? ' — ' + apShort(b.reason, 60) : ''), tone: 'err' }); });
     return { tiles: [apTile('Подключённых чатов', Object.keys(comm).length), apTile('Активных', Object.values(comm).filter((c) => c && c.status === 'active').length), apTile('Сейчас в комнатах', inRooms), apTile('Заявок ждут', pending.length), apTile('Банов на платформе', Object.keys(bans).length)], events };
   }
   async function apCollectLf() {
@@ -4938,7 +4941,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const rows = Object.entries(all).filter(([, m]) => m && typeof m === 'object');
     const cnt = (st) => rows.filter(([, m]) => m.status === st).length;
     const now = Date.now();
-    const events = rows.map(([, m]) => ({ at: m.createdAt || 0, text: (LF_TYPES[m.type] || 'Сообщение') + ': ' + apShort(m.text, 90) + (m.status ? ' [' + (LF_STATUS[m.status] || m.status) + ']' : ''), tone: m.status === 'new' ? 'gold' : 'dim' }));
+    const events = rows.map(([, m]) => ({ at: m.createdAt || 0, kind: 'messages', text: (LF_TYPES[m.type] || 'Сообщение') + ': ' + apShort(m.text, 90) + (m.status ? ' [' + (LF_STATUS[m.status] || m.status) + ']' : ''), tone: m.status === 'new' ? 'gold' : 'dim' }));
     return { tiles: [apTile('Всего сообщений', rows.length), apTile('Новых', cnt('new')), apTile('В работе', cnt('work')), apTile('За 24 часа', rows.filter(([, m]) => (m.createdAt || 0) > now - DAY_MS).length)], events };
   }
   async function apCollectGw() {
@@ -4947,10 +4950,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const now = Date.now();
     const events = [];
     rows.forEach(([, a]) => {
-      if (a.createdAt) events.push({ at: a.createdAt, text: 'Новый аккаунт: ' + apShort(a.name || 'без имени', 30), tone: 'ok' });
-      if (a.lastSeen && a.lastSeen !== a.createdAt) events.push({ at: a.lastSeen, text: 'Был в плагине: ' + apShort(a.name || 'без имени', 30) + (a.ver ? ' (версия ' + apShort(a.ver, 12) + ')' : ''), tone: 'dim' });
+      if (a.createdAt) events.push({ at: a.createdAt, kind: 'accounts', text: 'Новый аккаунт: ' + apShort(a.name || 'без имени', 30), tone: 'ok' });
+      if (a.lastSeen && a.lastSeen !== a.createdAt) events.push({ at: a.lastSeen, kind: 'accounts', text: 'Был в плагине: ' + apShort(a.name || 'без имени', 30) + (a.ver ? ' (версия ' + apShort(a.ver, 12) + ')' : ''), tone: 'dim' });
     });
-    Object.entries(apObj(blk)).forEach(([, b]) => { if (b && b.at) events.push({ at: b.at, text: 'Блокировка аккаунта' + (b.reason ? ': ' + apShort(b.reason, 70) : ''), tone: 'err' }); });
+    Object.entries(apObj(blk)).forEach(([, b]) => { if (b && b.at) events.push({ at: b.at, kind: 'blocks', text: 'Блокировка аккаунта' + (b.reason ? ': ' + apShort(b.reason, 70) : ''), tone: 'err' }); });
     return { tiles: [apTile('Аккаунтов', rows.length), apTile('Активны за сутки', rows.filter(([, a]) => (a.lastSeen || 0) > now - DAY_MS).length), apTile('Новых за неделю', rows.filter(([, a]) => (a.createdAt || 0) > now - 7 * DAY_MS).length), apTile('Заблокировано аккаунтов', Object.keys(apObj(blk)).length), apTile('Заблокировано компьютеров', Object.keys(apObj(dev)).length)], events };
   }
   async function apCollectCh() {
@@ -4967,46 +4970,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (!e || !e.at) return;
         if (e.at > Date.now() - DAY_MS) { if (e.t === 'join') joins++; else if (e.t === 'leave' || e.t === 'removed') leaves++; else if (e.t === 'ban') bansN++; }
         const [label] = chEventLabel(e);
-        events.push({ at: e.at, text: title + ' · ' + label + ' ' + apShort(e.name || e.id || '', 40), tone: e.t === 'join' ? 'ok' : (e.t === 'ban' ? 'err' : 'dim') });
+        events.push({ at: e.at, kind: e.t === 'join' ? 'joins' : (e.t === 'leave' || e.t === 'removed' ? 'leaves' : (e.t === 'ban' ? 'bans' : 'mod')), text: title + ' · ' + label + ' ' + apShort(e.name || e.id || '', 40), tone: e.t === 'join' ? 'ok' : (e.t === 'ban' ? 'err' : 'dim') });
       }));
     });
     return { tiles: [apTile('Чатов с ботом', Object.keys(chMetas).length), apTile('Включено', Object.values(chMetas).filter((m) => m && m.enabled).length), apTile('Входов за сутки', joins), apTile('Выходов за сутки', leaves), apTile('Банов за сутки', bansN)], events };
   }
-  const AP_COLLECT = { 'vc-live': apCollectVc, 'lf-live': apCollectLf, 'gw-live': apCollectGw, 'ch-live': apCollectCh };
-  function apRender(data) {
-    const tiles = document.getElementById('ap-tiles');
-    tiles.replaceChildren();
-    data.tiles.forEach((x) => { const d = lfEl('div', 'stat-tile'); d.append(lfSet(lfEl('div', 'st-val'), x.value), lfSet(lfEl('div', 'st-label'), x.label)); tiles.appendChild(d); });
-    const feed = document.getElementById('ap-feed');
-    feed.replaceChildren();
-    const ev = data.events.filter((e) => e.at).sort((a, b) => b.at - a.at).slice(0, 80);
-    ev.forEach((e) => {
-      const row = lfEl('div', 'log-row'); row.style.marginBottom = '6px';
-      const color = e.tone === 'err' ? 'var(--live)' : (e.tone === 'ok' ? 'var(--green, #2ecc71)' : (e.tone === 'gold' ? 'var(--gold)' : 'var(--text)'));
-      const t1 = lfSet(lfEl('div', 'l-title'), e.text); t1.style.color = color;
-      row.append(t1, lfSet(lfEl('div', 'l-time'), lfWhen(e.at)));
-      feed.appendChild(row);
-    });
-    document.getElementById('ap-empty').style.display = ev.length ? 'none' : '';
-  }
-  async function apLoad() {
-    if (apBusy || !AP_COLLECT[apKey]) return;
-    apBusy = true;
-    const key = apKey;
-    try { const data = await AP_COLLECT[key](); if (key === apKey) apRender(data); }
-    catch (err) { if (key === apKey) { document.getElementById('ap-feed').replaceChildren(lfSet(lfEl('div', 'admin-empty'), 'Не удалось загрузить: ' + (err.message || err))); } }
-    finally { apBusy = false; }
-  }
-  function apOpen(key) {
-    apKey = key;
-    apLeaveTimer();
-    document.getElementById('ap-title').textContent = AP_TITLES[key] || 'Эфир';
-    document.getElementById('ap-tiles').replaceChildren();
-    document.getElementById('ap-feed').replaceChildren();
-    apLoad();
-    apTimer = setInterval(apLoad, 20000);
-  }
-  function apLeaveTimer() { if (apTimer) { clearInterval(apTimer); apTimer = null; } }
   // «Общая численность»: по плитке на показатель каждого проекта (только Супердоступ)
   let apNetTimer = null;
   async function apLoadNet() {
@@ -5034,9 +5002,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       box.appendChild(g);
     });
   }
-  function apOpenNet() { apLeaveTimer(); apLeaveNet(); apLoadNet(); apNetTimer = setInterval(apLoadNet, 30000); }
+  function apOpenNet() { apLeaveNet(); apLoadNet(); apNetTimer = setInterval(apLoadNet, 30000); }
   function apLeaveNet() { if (apNetTimer) { clearInterval(apNetTimer); apNetTimer = null; } }
-  function apLeave() { apKey = ''; apLeaveTimer(); apLeaveNet(); }
 
   // ===== зона «Админ» (кнопка внизу меню): общие разделы отдельно от разделов проектов =====
   function adminZoneTabs() { return Array.from(document.querySelectorAll('#app-tabs .tab[data-zone="admin"]')).filter((t) => t.style.display !== 'none'); }
@@ -9083,6 +9050,20 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   const LIVE_MAX_LINES = 500;
   const LIVE_PAUSE_QUEUE_MAX = 300;
   const LIVE_CONFIG_FLAGS = { maintenanceMode: 'режим обслуживания', emergencyLockdown: 'аварийный режим', closedBeta: 'закрытый бета-тест', backupsDisabled: 'автобэкапы остановлены' };
+  // Область эфира: troll (прежний эфир Тролль-Баттл), videochat / launcher / gateway / chats (у каждого проекта свой) и all (все проекты сразу).
+  const LIVE_SCOPE_OF = { live: 'troll', 'vc-live': 'videochat', 'lf-live': 'launcher', 'gw-live': 'gateway', 'ch-live': 'chats', 'live-all': 'all' };
+  const LIVE_APP_NAMES = { troll: 'Тролль-Баттл', videochat: 'ВидеоЧат', launcher: 'Лаунчер', gateway: 'VPN', chats: 'Чаты' };
+  const LIVE_CHIPS = {
+    troll: [['all', 'всё'], ['actions', 'действия'], ['requests', 'заявки'], ['errors', 'ошибки'], ['players', 'игроки'], ['matches', 'бои']],
+    videochat: [['all', 'всё'], ['requests', 'заявки'], ['rooms', 'чаты'], ['bans', 'баны']],
+    launcher: [['all', 'всё'], ['messages', 'сообщения']],
+    gateway: [['all', 'всё'], ['accounts', 'аккаунты'], ['blocks', 'блокировки']],
+    chats: [['all', 'всё'], ['joins', 'входы'], ['leaves', 'выходы'], ['bans', 'баны'], ['mod', 'модерация']],
+    all: [['all', 'всё'], ['requests', 'заявки'], ['errors', 'ошибки'], ['bans', 'баны']]
+  };
+  let liveScope = 'troll';
+  let liveFilter = 'all';
+  const liveStats = {};   // строка статистики в шапке по областям
   let liveStarted = false;
   let liveActive = false;
   let livePaused = false;
@@ -9100,7 +9081,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const line = document.createElement('div');
     line.className = 'live-line' + (entry.tone ? ' term-' + entry.tone : '');
     line.dataset.kind = entry.kind;
-    line.textContent = '[' + entry.stamp + '] ' + entry.text;
+    line.dataset.app = entry.app || 'troll';
+    const pre = document.createElement('span'); pre.className = 'live-app'; pre.textContent = (LIVE_APP_NAMES[line.dataset.app] || '') + ' · ';
+    line.append(document.createTextNode('[' + entry.stamp + '] '), pre, document.createTextNode(entry.text));
+    line.style.display = liveLineVisible(line) ? '' : 'none';
     liveOutEl.appendChild(line);
     let excess = liveOutEl.childElementCount - LIVE_MAX_LINES;
     while (excess-- > 0) liveOutEl.removeChild(liveOutEl.firstChild);
@@ -9112,13 +9096,34 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       liveJumpEl.style.display = 'block';
     }
   }
+  function liveLineVisible(line) {
+    return (liveScope === 'all' || line.dataset.app === liveScope) && (liveFilter === 'all' || line.dataset.kind === liveFilter);
+  }
+  function liveApplyView() {
+    liveOutEl.dataset.scope = liveScope;
+    liveOutEl.querySelectorAll('.live-line').forEach((l) => { l.style.display = liveLineVisible(l) ? '' : 'none'; });
+    liveRenderChips();
+    const st = document.getElementById('live-online');
+    if (st) st.textContent = liveStats[liveScope] || (liveScope === 'troll' || liveScope === 'all' ? 'онлайн: —' : 'считаю…');
+    liveOutEl.scrollTop = liveOutEl.scrollHeight;
+  }
+  function liveRenderChips() {
+    const box = document.getElementById('live-chips');
+    box.replaceChildren();
+    (LIVE_CHIPS[liveScope] || LIVE_CHIPS.all).forEach(([key, label]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'term-chip' + (liveFilter === key ? ' active' : ''); b.textContent = label;
+      b.addEventListener('click', () => { liveFilter = key; liveApplyView(); });
+      box.appendChild(b);
+    });
+  }
   function livePauseLabel() {
     livePauseEl.textContent = livePaused ? 'продолжить' + (livePausedQueue.length ? ' (' + livePausedQueue.length + ')' : '') : 'пауза';
   }
   // kind: actions | requests | errors | players | matches | system
-  function liveEmit(kind, text, tone) {
+  function liveEmit(kind, text, tone, app) {
     const entry = {
       kind,
+      app: app || 'troll',
       tone: tone || (kind === 'errors' ? 'err' : kind === 'requests' ? 'warn' : kind === 'system' ? 'dim' : null),
       text: termClean(text, 400),
       stamp: termStamp(),
@@ -9151,22 +9156,63 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     livePauseLabel();
   });
   document.getElementById('live-clear').addEventListener('click', () => { liveOutEl.textContent = ''; liveBehind = 0; liveJumpEl.style.display = 'none'; });
-  document.querySelectorAll('[data-live-filter]').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('[data-live-filter]').forEach((c) => c.classList.toggle('active', c === chip));
-      liveOutEl.dataset.filter = chip.dataset.liveFilter;
-      liveOutEl.scrollTop = liveOutEl.scrollHeight;
-    });
-  });
 
-  function liveOpen() {
+  function liveOpen(scope) {
     liveActive = true;
+    liveScope = scope || 'troll';
+    liveFilter = 'all';
     liveUnread = 0;
     setTabDot('live', 0);
     liveFollow = true;
-    liveOutEl.scrollTop = liveOutEl.scrollHeight;
+    liveApplyView();
+    liveStartPoll();
   }
-  function liveLeave() { liveActive = false; }
+  function liveLeave() { liveActive = false; liveStopPoll(); }
+
+  // Эфир ВидеоЧата, лаунчера, VPN и чатов: узлы закрыты или лежат без «живых» подписок, поэтому опрос раз в 20 секунд,
+  // только пока эфир открыт. Печатаются новые события (на первом опросе — за последние 30 минут), цифры идут в шапку.
+  const LIVE_POLL = {
+    videochat: { run: () => apCollectVc(), ok: () => true },
+    launcher: { run: () => apCollectLf(), ok: () => canManageLauncher() },
+    gateway: { run: () => apCollectGw(), ok: () => canManageGateway() },
+    chats: { run: () => apCollectCh(), ok: () => canManageChats() }
+  };
+  const livePollSeen = {};
+  let livePollTimer = null;
+  let livePollBusy = false;
+  async function livePollTick() {
+    if (livePollBusy || !liveActive) return;
+    const apps = liveScope === 'all' ? Object.keys(LIVE_POLL) : (LIVE_POLL[liveScope] ? [liveScope] : []);
+    if (!apps.length) return;
+    livePollBusy = true;
+    try {
+      for (const app of apps) {
+        if (!LIVE_POLL[app].ok()) continue;
+        try {
+          const data = await LIVE_POLL[app].run();
+          liveStats[app] = data.tiles.map((x) => x.label.toLowerCase() + ': ' + x.value).join(' · ');
+          const first = livePollSeen[app] === undefined;
+          const since = first ? Date.now() - 30 * 60000 : livePollSeen[app];
+          const fresh = data.events.filter((e) => e.at && e.at > since).sort((a, b) => a.at - b.at);
+          fresh.forEach((e) => liveEmit(e.kind || 'actions', e.text, e.tone === 'gold' ? 'warn' : (e.tone || null), app));
+          livePollSeen[app] = Math.max(first ? 0 : since, ...data.events.map((e) => e.at || 0), Date.now() - 1000);
+          if (first && !fresh.length) liveEmit('system', 'эфир включён, новых событий пока нет', 'dim', app);
+        } catch (err) {
+          liveEmit('system', 'не удалось прочитать: ' + (err.message || err), 'err', app);
+        }
+      }
+      if (liveScope === 'all') liveStats.all = 'онлайн: ' + (document.getElementById('live-online').dataset.troll || '—');
+      const st = document.getElementById('live-online');
+      if (st && liveStats[liveScope]) st.textContent = liveStats[liveScope];
+    } finally { livePollBusy = false; }
+  }
+  function liveStartPoll() {
+    liveStopPoll();
+    if (liveScope === 'troll') return;
+    livePollTick();
+    livePollTimer = setInterval(livePollTick, 20000);
+  }
+  function liveStopPoll() { if (livePollTimer) { clearInterval(livePollTimer); livePollTimer = null; } }
 
   // Только новое: подписка начинается с последней записи, которая уже есть
   // (её самой пропускаем) — ключи push-записей идут по времени.
@@ -9260,7 +9306,10 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     });
 
     db.ref('presence').on('value', (snap) => {
-      document.getElementById('live-online').textContent = 'онлайн: ' + snap.numChildren();
+      const el = document.getElementById('live-online');
+      el.dataset.troll = String(snap.numChildren());
+      liveStats.troll = 'онлайн: ' + snap.numChildren();
+      if (liveScope === 'troll' || (liveScope === 'all' && !liveStats.all)) el.textContent = liveStats.troll;
     }, (err) => console.error('Эфир: presence', err));
 
     liveWatchNewByTime('users', 'createdAt', 'новые игроки', since, (key, u) => {

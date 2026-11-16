@@ -1062,6 +1062,11 @@ const BOT_COMMANDS_PRIVATE = [
 ];
 const BOT_COMMANDS_GROUP = [
   { command: 'rules', description: 'Правила чата' },
+  { command: 'karma', description: 'Карма (ответом на сообщение или своя)' },
+  { command: 'topkarma', description: 'Лучшая карма в чате' },
+  { command: 'daily', description: 'Ежедневный подарок (игры)' },
+  { command: 'balance', description: 'Сколько ирисок (игры)' },
+  { command: 'flip', description: 'Монетка на ириски: /flip 10' },
   { command: 'connect', description: 'Подключить чат к ВидеоЧату (администратор чата)' },
   { command: 'call', description: 'Открыть видеокомнату этого чата' },
   { command: 'help', description: 'Помощь' },
@@ -1081,6 +1086,11 @@ const BOT_COMMANDS_GROUP_ADMIN = [
   { command: 'del', description: 'Удалить сообщение (ответом)' },
   { command: 'pin', description: 'Закрепить сообщение (ответом)' },
   { command: 'settings', description: 'Настройки админ-бота' },
+  { command: 'whois', description: 'Досье на человека (ответом или по id)' },
+  { command: 'night', description: 'Ночной режим: /night 23:00-07:00 или off' },
+  { command: 'addword', description: 'Запретить слово (фильтр)' },
+  { command: 'delword', description: 'Разрешить слово' },
+  { command: 'words', description: 'Список запрещённых слов' },
   { command: 'all', description: 'Позвать всех в видеочат (раз в 5 минут)' },
   { command: 'pause', description: 'Выключить бота на время: /pause 30, 2h, 1d' },
   { command: 'resume', description: 'Включить бота после паузы' },

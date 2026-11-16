@@ -685,5 +685,159 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   t('/all: некого звать — подсказка, кулдаун не включается', e2.sent().at(-1).includes('Пока некого звать') && !e2.db.root.chatAdmin[KEY].meta.lastAllAt);
 }
 
+// ---------- «Ирис»: карма, антифлуд, слова, ночной режим, досье, игры ----------
+const cfgSet = (e, c) => { e.db.root.chatAdmin[KEY].meta.cfg = { ...(e.db.root.chatAdmin[KEY].meta.cfg || {}), ...c }; e.ca.invalidate(KEY); };
+const rmsg = (from, text, to) => msg(from, text, reply(to));
+{
+  const e = await enabled({}, {});
+  await e.ca.onMessage(rmsg(USER, 'спасибо!', VICTIM));
+  t('карма: «спасибо» в ответ даёт +1, ответ бота', e.db.root.chatAdmin[KEY].karma[VICTIM].n === 1 && e.sent().at(-1).includes('Карма') && e.sent().at(-1).includes('1'), e.db.root.chatAdmin[KEY].karma);
+  e.clock.t += 31000;
+  await e.ca.onMessage(rmsg(USER, '+', VICTIM));
+  t('карма: тому же человеку в течение часа нельзя', e.db.root.chatAdmin[KEY].karma[VICTIM].n === 1 && e.sent().at(-1).includes('меньше часа'));
+  await e.ca.onMessage(rmsg(USER, '+', USER));
+  t('карма: себе нельзя', !e.db.root.chatAdmin[KEY].karma[USER]);
+  e.clock.t += 31000;
+  await e.ca.onMessage(rmsg(ADMIN, 'минус', VICTIM));
+  t('карма: «минус» отнимает', e.db.root.chatAdmin[KEY].karma[VICTIM].n === 0);
+  e.clock.t += 31000;
+  await e.ca.onMessage(rmsg(OWNER, 'это просто длинное сообщение без слова спасибо в начале', VICTIM));
+  t('карма: обычный ответ кармы не меняет', e.db.root.chatAdmin[KEY].karma[VICTIM].n === 0);
+  await e.ca.onMessage(msg(USER, '/topkarma'));
+  t('/topkarma показывает людей с кармой', e.sent().at(-1).includes('Лучшая карма'), e.sent().at(-1));
+  await e.ca.onMessage(rmsg(USER, '/karma', VICTIM));
+  t('/karma ответом показывает карму человека', e.sent().at(-1).includes('Карма') && e.sent().at(-1).includes('0'));
+  cfgSet(e, { karma: false });
+  e.clock.t += 7200000;
+  await e.ca.onMessage(rmsg(USER, '+', VICTIM));
+  t('карма выключена настройкой', e.db.root.chatAdmin[KEY].karma[VICTIM].n === 0);
+}
+{
+  // фильтр слов
+  const e = await enabled({}, {});
+  await e.ca.onMessage(msg(USER, '/addword'));
+  t('/addword обычному участнику — отказ', e.sent().at(-1).includes('для администраторов'));
+  await e.ca.onMessage(msg(ADMIN, '/addword казино, ставки*'));
+  t('/addword: слова записаны', e.db.root.chatAdmin[KEY].meta.cfg.words === 'казино,ставки*', e.db.root.chatAdmin[KEY].meta.cfg);
+  e.calls.length = 0;
+  await e.ca.onMessage(msg(USER, 'Лучшее КАЗИНО тут'));
+  t('фильтр: запрещённое слово — сообщение удалено, предупреждение выдано', e.calls.some((c) => c.method === 'deleteMessage') && e.db.root.chatAdmin[KEY].users[USER].warns === 1, e.db.root.chatAdmin[KEY].users[USER]);
+  e.calls.length = 0;
+  await e.ca.onMessage(msg(USER, 'делайте СтавкИ сегодня'));
+  t('фильтр: слово со звёздочкой ловит любое окончание', e.calls.some((c) => c.method === 'deleteMessage'));
+  e.calls.length = 0;
+  await e.ca.onMessage(msg(USER, 'казиново — это совсем другое слово'));
+  t('фильтр: без звёздочки только целое слово', !e.calls.some((c) => c.method === 'deleteMessage'));
+  await e.ca.onMessage(msg(ADMIN, 'казино — админу можно'));
+  t('фильтр не трогает администраторов', !e.calls.some((c) => c.method === 'deleteMessage'));
+  await e.ca.onMessage(msg(ADMIN, '/delword казино'));
+  t('/delword убирает слово', e.db.root.chatAdmin[KEY].meta.cfg.words === 'ставки*');
+}
+{
+  // антифлуд, пересылки, ссылки новичков
+  const e = await enabled({}, {});
+  cfgSet(e, { flood: true, floodMax: 4 });
+  for (let i = 0; i < 4; i++) { e.clock.t += 1000; await e.ca.onMessage(msg(USER, 'сообщение номер ' + i + ' ' + 'x'.repeat(i))); }
+  t('антифлуд: до лимита ничего не происходит', !e.calls.some((c) => c.method === 'restrictChatMember'));
+  e.clock.t += 1000; await e.ca.onMessage(msg(USER, 'пятое подряд'));
+  const mu = e.calls.find((c) => c.method === 'restrictChatMember');
+  t('антифлуд: сверх лимита — мут на 10 минут и сообщение удалено', mu && mu.payload.until_date === e.clock.t / 1000 + 600 && e.calls.some((c) => c.method === 'deleteMessage'));
+  const e2 = await enabled({}, {});
+  cfgSet(e2, { flood: true });
+  for (let i = 0; i < 3; i++) { e2.clock.t += 5000; await e2.ca.onMessage(msg(USER, 'одно и то же сообщение')); }
+  t('антифлуд: три одинаковых сообщения подряд — мут', e2.calls.some((c) => c.method === 'restrictChatMember'));
+  const e3 = await enabled({}, {});
+  cfgSet(e3, { flood: true, floodMax: 3 });
+  for (let i = 0; i < 12; i++) { e3.clock.t += 1000; await e3.ca.onMessage(msg(ADMIN, 'админ пишет ' + i + 'я')); }
+  t('антифлуд не трогает администраторов', !e3.calls.some((c) => c.method === 'restrictChatMember'));
+  const e4 = await enabled({}, {});
+  cfgSet(e4, { noFwd: true });
+  await e4.ca.onMessage(msg(USER, 'пересланное', { forward_origin: { type: 'user' } }));
+  t('пересылки: удалены, у админа можно', e4.calls.some((c) => c.method === 'deleteMessage'));
+  e4.calls.length = 0;
+  await e4.ca.onMessage(msg(ADMIN, 'пересланное', { forward_origin: { type: 'user' } }));
+  t('пересылки: у админа не удаляются', !e4.calls.some((c) => c.method === 'deleteMessage'));
+  const e5 = await enabled({}, {});
+  cfgSet(e5, { newbieLinks: true });
+  e5.db.root.chatAdmin[KEY].users = { [USER]: { joinedAt: NOW - 3600000 }, [VICTIM]: { joinedAt: NOW - 3 * 86400000 } };
+  const link = { entities: [{ type: 'url', offset: 0, length: 10 }] };
+  await e5.ca.onMessage(msg(USER, 'https://a.bc', link));
+  t('ссылка от новичка (первые сутки) удалена', e5.calls.some((c) => c.method === 'deleteMessage'));
+  e5.calls.length = 0;
+  await e5.ca.onMessage(msg(VICTIM, 'https://a.bc', link));
+  t('ссылка от старожила не удаляется', !e5.calls.some((c) => c.method === 'deleteMessage'));
+}
+{
+  // досье
+  const e = await enabled({}, {});
+  e.db.root.chatAdmin[KEY].users = { 5000400: { name: 'Вася', username: 'vasya', joinedAt: NOW - 86400000, how: 'invite', messages: 12, warns: 1, lastSeen: NOW - 60000 } };
+  await e.ca.onMessage(msg(USER, '/whois 5000400'));
+  t('/whois обычному участнику — отказ', e.sent().at(-1).includes('для администраторов'));
+  await e.ca.onMessage(msg(ADMIN, '/whois 5000400'));
+  const w = e.sent().at(-1);
+  t('/whois: имя, @имя, способ входа, счётчики', w.includes('Вася') && w.includes('@vasya') && w.includes('по пригласительной ссылке') && w.includes('Сообщений: 12') && w.includes('предупреждений: 1'), w);
+}
+{
+  // ночной режим
+  const e = await enabled({}, {});
+  await e.ca.onMessage(msg(ADMIN, '/night 25:00-07:00'));
+  t('/night: неверный формат отклонён', !e.db.root.chatAdmin[KEY].meta.cfg || !e.db.root.chatAdmin[KEY].meta.cfg.night);
+  await e.ca.onMessage(msg(ADMIN, '/night 13:00-14:00'));
+  t('/night: окно записано', e.db.root.chatAdmin[KEY].meta.cfg.night === '13:00-14:00');
+  e.db.root.chatAdmin._global = { chats: { [KEY]: { title: 'Наш чат' } } };
+  const meta = () => e.db.root.chatAdmin[KEY].meta;
+  e.clock.t = Date.parse('2026-11-11T12:30:00Z'); // зимой Europe/Berlin = UTC+1 → 13:30, внутри окна
+  e.calls.length = 0;
+  const closed = await e.ca.sweepAll();
+  t('ночной режим: в окне чат закрыт (setChatPermissions все права выключены), прежние права сохранены', e.calls.some((c) => c.method === 'setChatPermissions' && c.payload.permissions.can_send_messages === false) && meta().nightState === 'closed' && JSON.parse(meta().nightPerms).can_send_photos === true, meta());
+  e.calls.length = 0;
+  await e.ca.sweepAll();
+  t('ночной режим: повторный проход ничего не делает', !e.calls.some((c) => c.method === 'setChatPermissions'));
+  e.clock.t = Date.parse('2026-11-11T13:30:00Z'); // 14:30 — окно закончилось
+  e.calls.length = 0;
+  await e.ca.sweepAll();
+  const open = e.calls.find((c) => c.method === 'setChatPermissions');
+  t('ночной режим: после окна права возвращены такие, какими были, чат открыт', open && open.payload.permissions.can_send_messages === true && open.payload.permissions.can_send_photos === true && meta().nightState === 'open' && !meta().nightPerms, meta());
+  await e.ca.onMessage(msg(ADMIN, '/night off'));
+  t('/night off выключает', meta().cfg.night === '');
+}
+{
+  // игры
+  const e = await enabled({}, {});
+  await e.ca.onMessage(msg(USER, '/daily'));
+  t('игры выключены по умолчанию', e.sent().at(-1).includes('Игры выключены') && !e.db.root.chatAdmin[KEY].coins);
+  cfgSet(e, { games: true });
+  await e.ca.onMessage(msg(USER, '/daily'));
+  const bal = e.db.root.chatAdmin[KEY].coins[USER].n;
+  t('/daily: от 20 до 60 ирисок', bal >= 20 && bal <= 60, bal);
+  await e.ca.onMessage(msg(USER, '/daily'));
+  t('/daily: второй раз за день — отказ', e.sent().at(-1).includes('уже забрали') && e.db.root.chatAdmin[KEY].coins[USER].n === bal);
+  await e.ca.onMessage(rmsg(USER, '/gift 10', VICTIM));
+  t('/gift: перевод другому человеку', e.db.root.chatAdmin[KEY].coins[USER].n === bal - 10 && e.db.root.chatAdmin[KEY].coins[VICTIM].n === 10);
+  await e.ca.onMessage(rmsg(USER, '/gift 10', USER));
+  t('/gift себе нельзя', e.db.root.chatAdmin[KEY].coins[USER].n === bal - 10);
+  await e.ca.onMessage(rmsg(USER, '/gift 99999', VICTIM));
+  t('/gift: слишком большая сумма отклонена', e.db.root.chatAdmin[KEY].coins[VICTIM].n === 10);
+  e.clock.t += 20000;
+  await e.ca.onMessage(msg(USER, '/flip 5'));
+  const after = e.db.root.chatAdmin[KEY].coins[USER].n;
+  t('/flip: баланс изменился ровно на ставку', after === bal - 10 + 5 || after === bal - 10 - 5, after);
+  await e.ca.onMessage(msg(USER, '/flip 5'));
+  t('/flip: слишком быстро нельзя', e.sent().at(-1).includes('Не так быстро') && e.db.root.chatAdmin[KEY].coins[USER].n === after);
+  await e.ca.onMessage(msg(USER, '/topcoins'));
+  t('/topcoins показывает список', e.sent().at(-1).includes('Богатейшие'));
+}
+{
+  const e = await enabled({}, {});
+  await e.ca.onMessage(msg(ADMIN, '/set floodMax 2'));
+  t('/set floodMax: меньше 3 нельзя', e.sent().at(-1).includes('от 3 до 20'));
+  await e.ca.onMessage(msg(ADMIN, '/set flood on'));
+  t('/set flood on', e.db.root.chatAdmin[KEY].meta.cfg.flood === true);
+  await e.ca.onMessage(msg(ADMIN, '/set night 22:00-06:30'));
+  t('/set night принимает время', e.db.root.chatAdmin[KEY].meta.cfg.night === '22:00-06:30');
+  await e.ca.onMessage(msg(ADMIN, '/settings'));
+  t('/settings показывает новые настройки', e.sent().at(-1).includes('flood') && e.sent().at(-1).includes('night'));
+}
+
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

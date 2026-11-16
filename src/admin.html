@@ -55,6 +55,13 @@
   .brand-logo{ width:24px; height:24px; border-radius:7px; vertical-align:top; margin:-1px 9px 0 0; background:#000; }
   .brand span{ color:var(--live); }
   .brand .brand-version{ color:var(--muted); }
+  /* Зона «Админ»: общие разделы (терминал, аккаунт, приложения, супердоступ) не висят в меню каждого проекта, а открываются кнопкой внизу */
+  .zone-btn{ display:block; width:100%; margin:0 0 10px; padding:9px 12px; background:var(--panel-2); border:1px solid var(--line); color:var(--text); border-radius:8px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; text-align:left; }
+  .zone-btn:hover{ border-color:var(--gold); }
+  body.zone-admin .zone-btn{ background:var(--gold); color:var(--on-gold, #111); border-color:var(--gold); }
+  body:not(.zone-admin) #app-tabs [data-zone="admin"]{ display:none !important; }
+  body.zone-admin #app-tabs > :not([data-zone="admin"]){ display:none !important; }
+  body.zone-admin #app-tabs > .tab-grp[data-zone="admin"].empty{ display:none !important; }
   .me{ font-size:12px; color:var(--muted); text-align:right; line-height:1.5; }
   .me b{ color:var(--text); font-weight:600; }
 
@@ -400,8 +407,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="menu-count" id="menu-count"></span>
     </button>
-    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.44: время на кнопку «Я не бот» теперь от 3 секунд. v5.43: «База данных» убрана совсем; админу Супердоступ выдаёт приложения «Чаты», «VPN», «Лаунчер» (Администрация); создатель чата, подключивший бота сам (/admin_on), видит в панели только свои чаты («Мои чаты»). v5.42: время на кнопку «Я не бот» теперь в секундах (по умолчанию 10, от 10 до 600), выгон ровно по сроку. v5.41: проверка «я не бот» для новичков чата теперь включена по умолчанию (выключить — /set captcha off или переключатель в «Чаты → Обзор»). v5.40: вкладка «Чаты → Рассылки» — регулярные сообщения в чаты от ваших ботов: несколько вариантов текста, расписание, тихие часы, несколько ботов по очереди, проверка и пробная отправка. v5.39: проверка «я не бот» для новичков чата — кнопка, выгон по таймеру, переключатель и время в «Чаты → Обзор», счётчики. v5.38: «Бан везде» — один бан сразу во всех чатах бота, в игре и в ВидеоЧате (вкладка «Баны везде», кнопка в карточках игрока и участника, команды Терминала gban и ungban). v5.37: приложение «Чаты» — админ-бот Telegram-чатов (статистика входов: кто, когда и как зашёл, по какой ссылке; модерация; настройки), команды Терминала chats и chatstats. v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.44</span></div>
+    <div class="brand">GHOST SHELL<span>.</span> TERMINAL <span class="brand-version" id="admin-version" title="Версия приложения. v5.45: без смайликов; общие разделы (Терминал, Аккаунт, Приложения, Супердоступ) вынесены в кнопку «Админ» внизу меню. Панель сама обновляется до новой версии (не посреди команды Терминала, запроса к серверу или набора текста). v5.44: время на кнопку «Я не бот» теперь от 3 секунд. v5.43: «База данных» убрана совсем; админу Супердоступ выдаёт приложения «Чаты», «VPN», «Лаунчер» (Администрация); создатель чата, подключивший бота сам (/admin_on), видит в панели только свои чаты («Мои чаты»). v5.42: время на кнопку «Я не бот» теперь в секундах (по умолчанию 10, от 10 до 600), выгон ровно по сроку. v5.41: проверка «я не бот» для новичков чата теперь включена по умолчанию (выключить — /set captcha off или переключатель в «Чаты → Обзор»). v5.40: вкладка «Чаты → Рассылки» — регулярные сообщения в чаты от ваших ботов: несколько вариантов текста, расписание, тихие часы, несколько ботов по очереди, проверка и пробная отправка. v5.39: проверка «я не бот» для новичков чата — кнопка, выгон по таймеру, переключатель и время в «Чаты → Обзор», счётчики. v5.38: «Бан везде» — один бан сразу во всех чатах бота, в игре и в ВидеоЧате (вкладка «Баны везде», кнопка в карточках игрока и участника, команды Терминала gban и ungban). v5.37: приложение «Чаты» — админ-бот Telegram-чатов (статистика входов: кто, когда и как зашёл, по какой ссылке; модерация; настройки), команды Терминала chats и chatstats. v5.36: VPN (Gateway Plus) — отдельное четвёртое приложение рядом с «Тролль-Баттл», «ВидеоЧат» и «Лаунчер»; переключатель приложений сверху переделан: одна кнопка «сейчас здесь» со значком и пояснением, по нажатию — список. v5.35: в приложении «Лаунчер» вторая вкладка «Gateway Plus» — аккаунты личного VPN (плагин Gateway Plus): список, поиск, блокировка с причиной (аккаунт и компьютер) и разблокировка через Worker, список заблокированных компьютеров. v5.34: третье приложение «Сообщения в лаунчере» (только Супердоступ) — ошибки и предложения, которые люди присылают из Ghost Shell Launcher: скриншоты, статус, ответ (человек видит его в лаунчере), счётчик новых. v5.33: токены доступа и разделы базы, закрытые от чтения правилами (почты, имена, коды, привязки), панель читает через Worker — только для Супердоступа. v5.32: панель теперь называется Ghost Shell Terminal (вместо «БАТТЛ. Админ»). v5.31: уборка гостей теперь стирает и привязку владельца (owners), иначе гость ВидеоЧата с прежним id не мог создать профиль заново. v5.30: правки по проверке — у обычного игрока права от прошлой роли не действуют, вход по токену снова работает, новый профиль привязывается к владельцу как в игре. v5.29: «Мой аккаунт» для всех (кто вы, где подключены), профиль создаётся при первом заходе через бота, вкладки «Как работает бот» и «Наши продукты». v5.28: имя бота в подсказке «Сообщества» стало ссылкой. v5.27: в подсказках ВидеоЧата указан бот @troll_battle_Terminal_bot. v5.26: ВидеоЧат для Telegram-чатов — сообщества (подключение по /connect и одобрение владельцем), суб-админы со своей комнатой, админы и минеры, журнал комнаты. v5.25: панель умеет администрировать несколько приложений — Супердоступ выбирает каждому админу, что он администрирует (Тролль-Баттл и/или ВидеоЧат); добавлены вкладки ВидеоЧата: обзор, жалобы и блокировки. v5.24: в журнале у закрытой жалобы теперь понятная подпись. v5.23: жалобы теперь только на дискриминацию. v5.22: в «Журнале» появился блок «Жалобы игроков» — жалобы из окна итога боя в игре, с кнопками «Найти игрока» и «Закрыть жалобу». v5.21: в карточке игрока (Панель → найти игрока или выбрать из списка) у Супердоступа появилось «Удалить профиль» — с подтверждением вводом ID. До этого: «Заявки» и «Журнал» целиком, полка «Супердоступ», база справа по кнопке, логотип, масштаб (v5.20), несколько аккаунтов в приложении для компьютера (v5.19), новый вид «Полочки» (v5.18), пакетное удаление бэкапов (v5.17), версия приложения в шапке и значок (v5.16), вход и уведомления (v5.15), «Эфир» и «Терминал» (v5.14), скорость (v5.13).">v5.45</span></div>
     <div class="me" id="me-box" style="display:none;">
+      <button type="button" class="zone-btn" id="zone-btn" aria-pressed="false">Админ</button>
       Вошёл как <b id="me-name">—</b><br>
       <span id="me-role">—</span><br>
       <a href="#" id="me-logout-link" style="display:none; color:var(--muted); text-decoration:underline;">Выйти</a>
@@ -481,7 +489,7 @@
        проверку рядом с определением роли в JS ниже) -->
   <div class="screen" id="screen-emergency">
     <div class="center-msg denied">
-      <div class="big">🚨 АВАРИЙНЫЙ РЕЖИМ</div>
+      <div class="big">АВАРИЙНЫЙ РЕЖИМ</div>
       <div class="small">Панель закрыта для всех, кроме Супердоступа. Доступ вернётся, как только режим снимут.</div>
     </div>
   </div>
@@ -520,7 +528,7 @@
        доверяется сама), одобряются заново. -->
   <div class="screen" id="screen-device-trust">
     <div class="center-msg">
-      <div class="big">🔒 УСТРОЙСТВО НЕ ПОДТВЕРЖДЕНО</div>
+      <div class="big">УСТРОЙСТВО НЕ ПОДТВЕРЖДЕНО</div>
       <div class="small" style="margin-bottom:18px;">У аккаунта есть роль администратора, но именно это устройство ещё не одобрено — отдельно от самого Telegram-входа. Запроси одобрение, любой Супердоступ подтвердит его в панели («Администрация» → «Запросы на устройства»).</div>
       <button class="btn btn-gold" id="device-trust-request-btn" style="max-width:280px; width:100%;">Запросить одобрение для этого устройства</button>
       <div class="small" id="device-trust-status" style="display:none; color:var(--gold); margin-top:14px;"></div>
@@ -580,17 +588,17 @@
       <!-- видна всем, у кого вообще есть доступ к панели — отчёт "только
            для чтения" (см. loadStatsTab), не отдельное переключаемое право -->
       <div class="tab" data-tab="stats" data-app="troll" id="tab-stats" data-title="Статистика" data-sub="Сводка по игре"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"></path></svg>Статистика</div>
-      <div class="tab-grp">Инструменты</div>
-      <div class="tab" data-tab="terminal" data-app="troll" id="tab-terminal" data-title="Терминал" data-sub="Команды для Супердоступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 10l3 2-3 2M13 15h4"></path></svg>Терминал</div>
+      <div class="tab-grp" data-zone="admin">Инструменты</div>
+      <div class="tab" data-zone="admin" data-tab="terminal" id="tab-terminal" data-title="Терминал" data-sub="Команды для Супердоступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 10l3 2-3 2M13 15h4"></path></svg>Терминал</div>
       <!-- ссылки на скачивание Desktop/Android/веб-версии панели + инструкция
            по установке под Linux — было засунуто внутрь бывшей вкладки
            "Ассистент" (см. её полное удаление в истории коммитов), из-за
            чего видно было только Супердоступу — по смыслу нужно любому, у
            кого вообще есть доступ в панель, поэтому вынесено в отдельную
            вкладку без ограничения по роли. -->
-      <div class="tab" data-tab="apps" data-title="Приложения" data-sub="Панель на компьютер и телефон"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"></path></svg>Приложения</div>
-      <div class="tab-grp">Доступ</div>
-      <div class="tab" data-tab="account" data-title="Аккаунт" data-sub="Кто вы, где подключены, вход с других устройств и ваши заявки на вход"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path></svg>Аккаунт</div>
+      <div class="tab" data-zone="admin" data-tab="apps" data-title="Приложения" data-sub="Панель на компьютер и телефон"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"></path></svg>Приложения</div>
+      <div class="tab-grp" data-zone="admin">Доступ</div>
+      <div class="tab" data-zone="admin" data-tab="account" data-title="Аккаунт" data-sub="Кто вы, где подключены, вход с других устройств и ваши заявки на вход"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path></svg>Аккаунт</div>
       <!-- ===== Полка «Супердоступ»: три вкладки на одной .subview#panel-super
            (поэтому data-view="super", а не data-panel — тот атрибут ищет
            диспетчер вкладок среди разделов). «Администрация» показывает сразу
@@ -601,13 +609,13 @@
            applyRoleUI/canManageRoles) — кроме «Опасной зоны», которую
            делегирует отдельное право danger, и «Бэкапов» по токену с этим
            правом (myTokenBackupsAccess). -->
-      <div class="tab-grp">О проектах</div>
-      <div class="tab" data-tab="help" data-title="Как работает бот" data-sub="Команды бота «Терминал» и инструкции"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.9M12 17v.01"></path></svg>Как работает бот</div>
-      <div class="tab" data-tab="products" data-title="Наши продукты" data-sub="Все проекты экосистемы TIOXSIT — ссылки, чтобы зайти и посмотреть"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"></rect></svg>Наши продукты</div>
-      <div class="tab-grp">Супердоступ</div>
-      <div class="tab" data-tab="super-admins" data-view="super" data-title="Администрация" data-sub="Права админов, запросы на устройства и токены доступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Администрация</div>
-      <div class="tab" data-tab="super-backups" data-view="super" data-title="Бэкапы" data-sub="Снимки кода и базы, восстановление"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18v4H3zM5 11v8h14v-8M10 15h4"></path></svg>Бэкапы</div>
-      <div class="tab" data-tab="super-danger" data-view="super" data-title="Система" data-sub="Обслуживание и аварийные режимы"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2"></path><circle cx="14" cy="6" r="2"></circle><circle cx="8" cy="12" r="2"></circle><circle cx="16" cy="18" r="2"></circle></svg>Система</div>
+      <div class="tab-grp" data-zone="admin">О проектах</div>
+      <div class="tab" data-zone="admin" data-tab="help" data-title="Как работает бот" data-sub="Команды бота «Терминал» и инструкции"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.9M12 17v.01"></path></svg>Как работает бот</div>
+      <div class="tab" data-zone="admin" data-tab="products" data-title="Наши продукты" data-sub="Все проекты экосистемы TIOXSIT — ссылки, чтобы зайти и посмотреть"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"></rect></svg>Наши продукты</div>
+      <div class="tab-grp" data-zone="admin">Супердоступ</div>
+      <div class="tab" data-zone="admin" data-tab="super-admins" data-view="super" data-title="Администрация" data-sub="Права админов, запросы на устройства и токены доступа"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Администрация</div>
+      <div class="tab" data-zone="admin" data-tab="super-backups" data-view="super" data-title="Бэкапы" data-sub="Снимки кода и базы, восстановление"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h18v4H3zM5 11v8h14v-8M10 15h4"></path></svg>Бэкапы</div>
+      <div class="tab" data-zone="admin" data-tab="super-danger" data-view="super" data-title="Система" data-sub="Обслуживание и аварийные режимы"><svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2"></path><circle cx="14" cy="6" r="2"></circle><circle cx="8" cy="12" r="2"></circle><circle cx="16" cy="18" r="2"></circle></svg>Система</div>
     </div>
 
     <!-- заголовок раздела: текст берётся из data-title/data-sub активной
@@ -655,7 +663,7 @@
           <div class="r-toggle-label">Уровень доступа</div>
           <div id="role-info"></div>
           <div id="role-manage-block" style="display:none; flex-wrap:wrap; gap:8px; margin-top:8px;"></div>
-          <button class="btn btn-line" id="btn-open-admin-rights" style="display:none; width:100%; margin-top:10px;">⚙️ Настроить права администратора</button>
+          <button class="btn btn-line" id="btn-open-admin-rights" style="display:none; width:100%; margin-top:10px;">Настроить права администратора</button>
         </div>
 
         <!-- защита от угона доступа (см. комментарий у #screen-device-trust) —
@@ -740,7 +748,7 @@
           </div>
         </div>
 
-        <button class="btn btn-line" id="btn-open-player-history" style="width:100%; margin-top:14px;">📜 История этого игрока</button>
+        <button class="btn btn-line" id="btn-open-player-history" style="width:100%; margin-top:14px;">История этого игрока</button>
       </div>
 
     </div>
@@ -958,7 +966,7 @@
         <div style="display:flex; gap:8px;">
           <input type="color" id="event-frame-color" value="#F2B705" style="width:44px; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); cursor:pointer;">
           <input type="text" id="event-frame-name" placeholder="Название рамки" style="flex:1; min-width:0; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px 12px; color:var(--text); font-size:13px;">
-          <input type="number" id="event-frame-price" placeholder="Цена ⭐" min="1" style="width:84px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px; color:var(--text); font-size:13px;">
+          <input type="number" id="event-frame-price" placeholder="Цена" min="1" style="width:84px; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:9px; color:var(--text); font-size:13px;">
         </div>
         <select class="field-input" id="event-frame-effect" style="margin-top:8px;">
           <option value="none">Без анимации — просто цвет</option>
@@ -1161,7 +1169,7 @@
           <span class="live-badge" id="live-badge"><span class="live-pulse"></span><span id="live-badge-text">ПРЯМОЙ ЭФИР</span></span>
           <span class="live-online" id="live-online">онлайн: —</span>
           <span class="live-spacer"></span>
-          <button type="button" class="term-chip" id="live-pause">⏸ пауза</button>
+          <button type="button" class="term-chip" id="live-pause">пауза</button>
           <button type="button" class="term-chip" id="live-clear">очистить</button>
         </div>
         <div class="term-chips">
@@ -1425,9 +1433,9 @@
         <div class="section-label">Приложения</div>
         <div class="admin-empty" style="text-align:left; padding:0 0 12px;">Та же панель, без входа заново — на любом устройстве. Desktop-версия (Windows/Linux) обновляется сама, без переустановки.</div>
         <div style="display:flex; flex-direction:column; gap:8px;">
-          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/latest" style="text-align:left;">🖥️ Desktop (Windows .exe / Linux AppImage-.deb-.tar.gz)</button>
-          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">📱 Android (.apk)</button>
-          <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">🌐 Открыть на сайте</button>
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/latest" style="text-align:left;">Desktop (Windows .exe / Linux AppImage-.deb-.tar.gz)</button>
+          <button class="btn btn-line" data-app-link="https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest" style="text-align:left;">Android (.apk)</button>
+          <button class="btn btn-line" data-app-link="https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html" style="text-align:left;">Открыть на сайте</button>
         </div>
       </div>
 
@@ -1550,7 +1558,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
       <div id="backups-section-restore" style="display:none;">
         <div class="warn-banner">
-          ⚠️ Восстановление — необратимое действие. Восстановление базы данных <b>полностью заменяет</b> текущую базу содержимым снимка. Восстановление кода <b>полностью заменяет</b> файлы репозитория состоянием на момент бэкапа — всё, что было добавлено после снимка, будет потеряно в этом репозитории. Дважды проверь дату перед подтверждением.
+          Восстановление — необратимое действие. Восстановление базы данных <b>полностью заменяет</b> текущую базу содержимым снимка. Восстановление кода <b>полностью заменяет</b> файлы репозитория состоянием на момент бэкапа — всё, что было добавлено после снимка, будет потеряно в этом репозитории. Дважды проверь дату перед подтверждением.
         </div>
 
         <div class="admin-card">
@@ -1810,8 +1818,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         (document.body || document.documentElement).appendChild(banner);
       }
       banner.textContent = collapsed
-        ? `⚠ JS-ошибок: ${errors.length} (тапни, чтобы развернуть)`
-        : `⚠ JS-ошибок: ${errors.length} (тапни, чтобы свернуть)\n\n` + errors.join('\n———\n');
+        ? `JS-ошибок: ${errors.length} (тапни, чтобы развернуть)`
+        : `JS-ошибок: ${errors.length} (тапни, чтобы свернуть)\n\n` + errors.join('\n———\n');
     }
     window.addEventListener('error', (e) => {
       errors.push((e.message || 'Ошибка') + (e.filename ? ` @ ${e.filename}:${e.lineno}:${e.colno}` : '') + (e.error && e.error.stack ? '\n' + e.error.stack : ''));
@@ -2111,24 +2119,24 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // Совместимость: у админа, которому приложения ещё ни разу не выбирали, считается
   // «Тролль-Баттл» включён, «ВидеоЧат» выключен — как было до появления видеочата.
   const APP_DEFS = [
-    { id: 'troll', label: 'Тролль-Баттл', perm: 'app_troll', icon: '🎮', sub: 'Игра и игроки' },
-    { id: 'videochat', label: 'ВидеоЧат', perm: 'app_videochat', icon: '📹', sub: 'Комнаты и чаты' },
+    { id: 'troll', label: 'Тролль-Баттл', perm: 'app_troll', icon: 'ТБ', sub: 'Игра и игроки' },
+    { id: 'videochat', label: 'ВидеоЧат', perm: 'app_videochat', icon: 'ВЧ', sub: 'Комнаты и чаты' },
     // v5.34: «Сообщения в лаунчере» — ошибки и предложения из Ghost Shell Launcher. Только Супердоступ, не делегируется
     // (в PERMISSION_DEFS его нет): сообщения содержат сведения об аккаунтах и скриншоты людей.
-    { id: 'launcher', label: 'Лаунчер', perm: 'app_launcher', icon: '🚀', sub: 'Сообщения людей' },
+    { id: 'launcher', label: 'Лаунчер', perm: 'app_launcher', icon: 'ЛН', sub: 'Сообщения людей' },
     // v5.36: «VPN» — отдельное приложение: аккаунты плагина Gateway Plus (личный VPN в Ghost Shell Launcher) и их блокировка.
     // Так же только Супердоступ и не делегируется (в PERMISSION_DEFS его нет).
-    { id: 'gateway', label: 'VPN', perm: 'app_gateway', icon: '🛡️', sub: 'Личный VPN, аккаунты' },
+    { id: 'gateway', label: 'VPN', perm: 'app_gateway', icon: 'VPN', sub: 'Личный VPN, аккаунты' },
     // v5.37: «Чаты» — админ-бот Telegram-чатов: статистика входов, настройки, бан/мут. Только Супердоступ, не делегируется:
     // тут имена и входы людей из чатов (см. блок «Чаты» ниже).
-    { id: 'chats', label: 'Чаты', perm: 'app_chats', icon: '👥', sub: 'Статистика и модерация' },
+    { id: 'chats', label: 'Чаты', perm: 'app_chats', icon: 'ЧТ', sub: 'Статистика и модерация' },
     // v5.26: «Моя комната» — суб-админ/админ/минер одной комнаты ВидеоЧата. Это не переключаемое право:
     // оно появляется само, если у человека есть users/<uid>/vcCommunities (ставится при назначении на
     // должность), и только если нет права app_videochat (у админа видеочата те же вкладки лежат внутри него).
-    { id: 'community', label: 'Моя комната', perm: 'app_community', icon: '💬', sub: 'Ваша комната' },
+    { id: 'community', label: 'Моя комната', perm: 'app_community', icon: 'КМ', sub: 'Ваша комната' },
     // v5.29: «Мой аккаунт» — окно для всех, у кого нет прав управлять платформой: кто вы, где подключены, как всё
     // работает, наши продукты. Не переключаемое право: включается само, когда нет ни одного другого приложения.
-    { id: 'me', label: 'Мой аккаунт', perm: 'app_me', icon: '👤', sub: 'Ваш аккаунт' }
+    { id: 'me', label: 'Мой аккаунт', perm: 'app_me', icon: 'АК', sub: 'Ваш аккаунт' }
   ];
   const PERMISSION_DEFS = [
     { id: 'app_troll', label: 'Администрирует приложение «Тролль-Баттл»' },
@@ -2771,7 +2779,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         status: 'pending',
       });
       const reqPath = 'deviceTrustRequests/' + reqRef.key;
-      statusEl.textContent = '⏳ Запрос отправлен — жди подтверждения от любого Супердоступа («Администрация» → «Запросы на устройства»).';
+      statusEl.textContent = 'Запрос отправлен — жди подтверждения от любого Супердоступа («Администрация» → «Запросы на устройства»).';
       statusEl.style.display = 'block';
       btn.textContent = 'Ждём подтверждения…';
       deviceTrustReqPath = reqPath;
@@ -2781,7 +2789,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (val.status === 'approved') {
           db.ref(reqPath).remove();
           stopWaitingForDeviceTrust();
-          statusEl.textContent = '✅ Устройство одобрено, открываем панель…';
+          statusEl.textContent = 'Устройство одобрено, открываем панель…';
           loadAccountAndShowApp(pendingDeviceTrustUid);
         } else if (val.status === 'denied') {
           db.ref(reqPath).remove();
@@ -2937,7 +2945,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // Отклонить (role-gateway → /login-notify); если не вышло — заявку
       // всё равно можно подтвердить в игре или во вкладке «Аккаунт»
       fetch(ROLE_GATEWAY_URL.replace('/grant-role', '/login-notify'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telegramId: targetTelegramId, requestId: reqRef.key }) }).catch(() => {});
-      statusEl.textContent = '⏳ Заявка отправлена — подтверди её кнопкой «Разрешить» в сообщении Telegram-бота, в игре (Сообщество → Запросы) или в самой панели (вкладка «Аккаунт») на устройстве с настоящим Telegram-аккаунтом.';
+      statusEl.textContent = 'Заявка отправлена — подтверди её кнопкой «Разрешить» в сообщении Telegram-бота, в игре (Сообщество → Запросы) или в самой панели (вкладка «Аккаунт») на устройстве с настоящим Telegram-аккаунтом.';
       statusEl.style.display = 'block';
       btn.textContent = 'Ждём подтверждения…';
       activeLoginRequestPath = reqPath;
@@ -2947,7 +2955,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (val.status === 'approved') {
           db.ref(reqPath).remove();
           window.localStorage.setItem('battleTelegramId', targetTelegramId);
-          statusEl.textContent = '✅ Вход разрешён, открываем панель…';
+          statusEl.textContent = 'Вход разрешён, открываем панель…';
           stopWaitingForLoginApproval();
           loadAccountAndShowApp(targetTelegramId);
         } else if (val.status === 'denied') {
@@ -3291,7 +3299,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       return `
       <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-top:8px;">
         <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
+          <div style="font-size:13px; font-weight:600;">${escapeHtml(d.label || 'Устройство')}</div>
           <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${d.sig ? formatExpiry(d.expiresAt) : '<span style="color:var(--live);">старый формат — не действует, одобрить заново</span>'}</div>
         </div>
         <button type="button" class="admin-revoke-trusted-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
@@ -3644,6 +3652,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     // v5.43: «Баны везде» и «Рассылки» — только владелец проекта; создателю чата и админу с «Чаты» их не показываем
     ['ch-bans', 'ch-mail'].forEach((k) => { const el = document.querySelector('.tab[data-tab="' + k + '"]'); if (el && !canManageRoles()) el.style.display = 'none'; });
     syncTabGroups();
+    setAdminZone(document.body.classList.contains('zone-admin'), true);
   }
 
   // ===== «Сообщения в лаунчере» (v5.34) — ошибки и предложения из Ghost Shell Launcher =====
@@ -4170,6 +4179,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         chRenderOverview();
       } else if (chTab === 'ch-events') {
         await chLoadEvents();
+        if (canManageRoles()) { try { await chLoadBans(); } catch (e) { /* без списка кнопка просто не знает, кто уже забанен */ } }
         chRenderEvents();
       } else if (chTab === 'ch-people') {
         const users = await adminDbRead('chatAdmin/' + chSel + '/users', false);
@@ -4275,7 +4285,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const yn = (v) => (v ? 'да' : 'нет');
       out.textContent = ['Бот получает входы и выходы людей: ' + (r.webhook && r.webhook.chatMemberUpdates ? 'да' : 'нет (вебхук обновлён' + (r.reapplied ? ' только что — подождите минуту и проверьте ещё раз' : ', но Telegram пока не подтвердил') + ')'),
         'Бот в чате: ' + (c.botStatus || '—') + (c.error ? ' (' + c.error + ')' : ''), 'Права бота: удалять сообщения — ' + yn(c.canDelete) + ', блокировать — ' + yn(c.canRestrict) + ', приглашать — ' + yn(c.canInvite),
-        'Участников в чате: ' + (c.memberCount != null ? c.memberCount : '—'), c.botStatus && c.botStatus !== 'administrator' && c.botStatus !== 'creator' ? '⚠ Сделайте бота администратором чата — без этого входы не видны.' : ''].filter(Boolean).join('\n');
+        'Участников в чате: ' + (c.memberCount != null ? c.memberCount : '—'), c.botStatus && c.botStatus !== 'administrator' && c.botStatus !== 'creator' ? 'Сделайте бота администратором чата — без этого входы не видны.' : ''].filter(Boolean).join('\n');
       out.style.whiteSpace = 'pre-line';
     });
     mk(meta.enabled ? 'Выключить для этого чата' : 'Включить для этого чата', meta.enabled ? 'btn-live' : 'btn-gold', async () => {
@@ -4404,6 +4414,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       else if (e.by && e.by.name) more = 'кто: ' + e.by.name;
       else if (e.details) more = e.details;
       row.appendChild(lfSet(lfEl('div', 'l-time'), lfWhen(e.at) + (more ? ' · ' + more : '') + (e.id && e.t !== 'mod' ? ' · id ' + e.id : '')));
+      // кнопка прямо у входа: забанить человека сразу во всех проектах (чаты, игра, ВидеоЧат) — только владелец проекта
+      if (e.t === 'join' && canManageRoles() && CH_GBAN_ID_RE.test(String(e.id || ''))) {
+        const gm = lfEl('div');
+        const gb = lfSet(lfEl('button', 'btn btn-line'), chBans[String(e.id)] ? 'Уже забанен во всех проектах' : 'Забанить во всех проектах');
+        gb.style.cssText = 'padding:6px 12px; font-size:11.5px; margin-top:6px; color:var(--live);';
+        if (chBans[String(e.id)]) gb.disabled = true;
+        else gb.addEventListener('click', () => chGbanForm(gm, { id: String(e.id), name: e.name || '', username: e.username || '' }, () => { gb.textContent = 'Уже забанен во всех проектах'; gb.disabled = true; }));
+        row.append(gb, gm);
+      }
       list.appendChild(row);
     });
     const moreBtn = document.getElementById('ch-ev-more');
@@ -4584,7 +4603,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     mlData.bots.forEach((b) => {
       const row = lfEl('div', 'log-row'); row.style.marginBottom = '8px';
       row.appendChild(lfSet(lfEl('div', 'l-title'), '@' + b.username + (b.main ? ' · главный бот «Терминал»' : ' · ' + b.name)));
-      if (b.off) row.appendChild(lfSet(lfEl('div', 'l-time'), '⚠ отключён в ' + b.off + ' чат(ах) после ошибок — проверьте, что бот в чате и может писать'));
+      if (b.off) row.appendChild(lfSet(lfEl('div', 'l-time'), 'отключён в ' + b.off + ' чат(ах) после ошибок — проверьте, что бот в чате и может писать'));
       if (!b.main) {
         const rm = lfSet(lfEl('button', 'btn btn-line'), 'Убрать бота'); rm.style.cssText = 'padding:6px 12px; font-size:11.5px; margin-top:8px;';
         rm.addEventListener('click', async () => { if (!confirm('Убрать бота @' + b.username + '? Токен удалится из базы, из рассылок он тоже уберётся.')) return; rm.disabled = true; try { await mlAct({ action: 'bot-remove', id: b.id }, 'mailer_bot_remove', b.username); await mlLoad(); mlRender(); } catch (err) { alert('Не получилось: ' + (err.message || err)); rm.disabled = false; } });
@@ -4624,7 +4643,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const out = lfEl('div', 'status-line');
     c.chats.forEach((ch) => {
       const line = lfEl('div', 'l-time'); line.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:4px;';
-      line.appendChild(lfSet(lfEl('span'), '• ' + (ch.title || ch.id) + ' — ' + (ch.at ? 'последнее: ' + lfWhen(ch.at) : 'ещё не отправляли') + (ch.n ? ' · сегодня ' + ch.n : '') + (ch.off ? ' · ⚠ бот отключён после ошибок' : '')));
+      line.appendChild(lfSet(lfEl('span'), '• ' + (ch.title || ch.id) + ' — ' + (ch.at ? 'последнее: ' + lfWhen(ch.at) : 'ещё не отправляли') + (ch.n ? ' · сегодня ' + ch.n : '') + (ch.off ? ' · бот отключён после ошибок' : '')));
       const now = lfSet(lfEl('button', 'btn btn-line'), 'отправить сейчас'); now.style.cssText = 'padding:3px 8px; font-size:11px;';
       now.addEventListener('click', async () => {
         if (!confirm('Отправить одно сообщение прямо сейчас в «' + (ch.title || ch.id) + '»?')) return;
@@ -4855,10 +4874,36 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     if (box) box.classList.remove('open');
   });
   // если открытая вкладка принадлежит другому приложению (или скрыта) — открываем первую подходящую
+
+  // ===== зона «Админ» (кнопка внизу меню): общие разделы отдельно от разделов проектов =====
+  function adminZoneTabs() { return Array.from(document.querySelectorAll('#app-tabs .tab[data-zone="admin"]')).filter((t) => t.style.display !== 'none'); }
+  function setAdminZone(on, silent) {
+    const forced = currentApp === 'me';
+    on = !!on || forced;
+    document.body.classList.toggle('zone-admin', on);
+    const btn = document.getElementById('zone-btn');
+    if (btn) {
+      btn.textContent = on ? (forced ? 'Админ' : 'К проектам') : 'Админ';
+      btn.style.display = forced ? 'none' : '';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    try { window.localStorage.setItem('battlePanelZone', on ? 'admin' : ''); } catch (e) {}
+    if (silent) return;
+    const pool = on ? adminZoneTabs() : Array.from(document.querySelectorAll('#app-tabs .tab:not([data-zone])')).filter((t) => t.style.display !== 'none' && tabInApp(t, currentApp));
+    const act = document.querySelector('#app-tabs .tab.active');
+    if (pool.length && !(act && pool.includes(act))) pool[0].click();
+  }
+  (function () {
+    const btn = document.getElementById('zone-btn');
+    if (!btn) return;
+    btn.addEventListener('click', (e) => { e.stopPropagation(); setAdminZone(!document.body.classList.contains('zone-admin')); });
+  })();
   function fixActiveTab() {
     const active = document.querySelector('#app-tabs .tab.active');
-    if (active && active.style.display !== 'none') return;
-    const tabs = Array.from(document.querySelectorAll('#app-tabs .tab')).filter((t) => t.style.display !== 'none');
+    const zoneOn = document.body.classList.contains('zone-admin');
+    const inZone = (t) => zoneOn === (t.dataset.zone === 'admin');
+    if (active && active.style.display !== 'none' && inZone(active)) return;
+    const tabs = Array.from(document.querySelectorAll('#app-tabs .tab')).filter((t) => t.style.display !== 'none' && inZone(t));
     const target = tabs.find((t) => tabInApp(t, currentApp)) || (currentApp === 'me' ? tabs.find((t) => t.dataset.tab === 'account') : null) || tabs[0];
     if (target) target.click();
   }
@@ -4867,6 +4912,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     currentApp = id;
     try { window.localStorage.setItem(APP_STORAGE_KEY, id); } catch (e) {}
     document.body.dataset.app = id;
+    document.body.classList.remove('zone-admin');
     renderAppSwitch();
     applyRoleUI();
     fixActiveTab();
@@ -4884,15 +4930,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
   // Новый проект = одна запись в PRODUCTS (ссылки — только https, рисуются как <a target=_blank>). Тот же список, коротко,
   // присылает бот в /start и /apps (ecosystemMessage в Worker) — держите их в согласии.
   const PRODUCTS = [
-    { emoji: '🎮', name: 'Тролль-Баттл', desc: 'Голосовые баттлы: соперник, судья, зрители, рейтинг, кланы и ивенты. Играть можно в Телеграме, в браузере и в приложении для компьютера и телефона.',
+    { emoji: '', name: 'Тролль-Баттл', desc: 'Голосовые баттлы: соперник, судья, зрители, рейтинг, кланы и ивенты. Играть можно в Телеграме, в браузере и в приложении для компьютера и телефона.',
       links: [['Открыть в Телеграме', 'https://t.me/troll_battle_bot'], ['Играть в браузере', 'https://botsystemtioxsit.github.io/index.html/'], ['Для компьютера', 'https://github.com/botsystemtioxsit/index.html/releases/latest'], ['Android (.apk)', 'https://github.com/botsystemtioxsit/index.html/releases/tag/android-latest']] },
-    { emoji: '📹', name: 'ВидеоЧат', desc: 'Видеокомнаты для Telegram-чатов: стабильные звонки без лагов, свои админы у каждого чата, мут голосованием участников.',
+    { emoji: '', name: 'ВидеоЧат', desc: 'Видеокомнаты для Telegram-чатов: стабильные звонки без лагов, свои админы у каждого чата, мут голосованием участников.',
       links: [['Открыть в Телеграме', 'https://t.me/TIOXSITvoice_chat_bot'], ['Открыть в браузере', 'https://botsystemtioxsit.github.io/videochat/'], ['Для компьютера', 'https://github.com/botsystemtioxsit/videochat/releases/latest']] },
-    { emoji: '🚀', name: 'Ghost Shell Launcher', desc: 'Программа для Windows: вход в аккаунт, установка, обновление и запуск наших приложений в одном месте.',
+    { emoji: '', name: 'Ghost Shell Launcher', desc: 'Программа для Windows: вход в аккаунт, установка, обновление и запуск наших приложений в одном месте.',
       links: [['Скачать', 'https://github.com/botsystemtioxsit/launcher/releases/latest']] },
-    { emoji: '🛠', name: 'Ghost Shell Terminal', desc: 'Управление проектом для команды: игроки, заявки, журнал, ВидеоЧат. Для остальных — окно аккаунта и подсказки.',
+    { emoji: '', name: 'Ghost Shell Terminal', desc: 'Управление проектом для команды: игроки, заявки, журнал, ВидеоЧат. Для остальных — окно аккаунта и подсказки.',
       links: [['Открыть', 'https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html'], ['Для компьютера', 'https://github.com/botsystemtioxsit/battle-admin-bot/releases/latest'], ['Android (.apk)', 'https://github.com/botsystemtioxsit/battle-admin-bot/releases/tag/android-latest']] },
-    { emoji: '🤖', name: 'Терминал (бот)', desc: 'Единый вход во все проекты: подтверждает входы, открывает панель и ВидеоЧат, подключает Telegram-чаты. Нажмите Start.',
+    { emoji: '', name: 'Терминал (бот)', desc: 'Единый вход во все проекты: подтверждает входы, открывает панель и ВидеоЧат, подключает Telegram-чаты. Нажмите Start.',
       links: [['Открыть бота', 'https://t.me/troll_battle_Terminal_bot']] },
   ];
   function renderProducts() {
@@ -4904,7 +4950,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       card.className = 'admin-card';
       const head = document.createElement('div');
       head.className = 'section-label';
-      head.textContent = p.emoji + ' ' + p.name;
+      head.textContent = p.name;
       const desc = document.createElement('div');
       desc.className = 'admin-empty';
       desc.style.cssText = 'text-align:left; padding:0 0 12px; line-height:1.55;';
@@ -4954,7 +5000,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       row.className = 'log-row';
       const t = document.createElement('div');
       t.className = 'l-title';
-      t.textContent = (ok ? '✅ ' : '⚪ ') + label;
+      t.textContent = (ok ? '' : '') + label;
       const b = document.createElement('div');
       b.className = 'l-body';
       b.textContent = value;
@@ -4986,7 +5032,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     const noTelegramNoteEl = document.getElementById('account-no-telegram-note');
     if (!statusEl) return;
 
-    statusEl.textContent = user.attachedEmail ? ('привязан ✅ — ' + user.attachedEmail) : 'ещё не привязан';
+    statusEl.textContent = user.attachedEmail ? ('привязан — ' + user.attachedEmail) : 'ещё не привязан';
 
     const isFromTelegram = !!tg?.initDataUnsafe?.user;
     formEl.style.display = isFromTelegram ? 'block' : 'none';
@@ -5018,9 +5064,9 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       await db.ref('emailLogins/' + emailKey).set(myTelegramId);
       await db.ref('users/' + myTelegramId).update({ attachedEmail: email });
       resultEl.style.color = 'var(--gold)';
-      resultEl.textContent = '✅ Привязано — теперь с другого устройства можно запросить вход по этому email.';
+      resultEl.textContent = 'Привязано — теперь с другого устройства можно запросить вход по этому email.';
       document.getElementById('account-email-input').value = '';
-      document.getElementById('account-email-status').textContent = 'привязан ✅ — ' + email;
+      document.getElementById('account-email-status').textContent = 'привязан — ' + email;
       accountUserCache = { ...accountUserCache, attachedEmail: email };
       renderAccountStatus(accountUserCache);
     } catch (err) {
@@ -5121,7 +5167,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         renderAccountLoginRequests();
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
-          newKeys.forEach((key) => liveEmit('requests', '🔐 заявка на вход' + (loginTargetLabel(latestLoginRequests[key]) ? ' ' + loginTargetLabel(latestLoginRequests[key]) : '') + ': ' + termClean(latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — подтвердить: вкладка «Аккаунт»'));
+          newKeys.forEach((key) => liveEmit('requests', 'заявка на вход' + (loginTargetLabel(latestLoginRequests[key]) ? ' ' + loginTargetLabel(latestLoginRequests[key]) : '') + ': ' + termClean(latestLoginRequests[key]?.device || 'неизвестное устройство') + ' — подтвердить: вкладка «Аккаунт»'));
         }
         firstSnapshot = false;
       }, (err) => console.error('Заявки на вход', err));
@@ -5143,7 +5189,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         if (newKeys.length && !firstSnapshot) {
           tg?.HapticFeedback?.notificationOccurred?.('warning');
           latestPendingDeviceRequests.filter(([key]) => newKeys.includes(key))
-            .forEach(([, r]) => liveEmit('requests', '📱 запрос устройства: ' + termClean(r.device || 'неизвестное устройство') + ' — ' + termClean(r.firstName || 'Игрок', 40) + ' — подтвердить: «Супердоступ» → «Администрация»'));
+            .forEach(([, r]) => liveEmit('requests', 'запрос устройства: ' + termClean(r.device || 'неизвестное устройство') + ' — ' + termClean(r.firstName || 'Игрок', 40) + ' — подтвердить: «Супердоступ» → «Администрация»'));
         }
         firstSnapshot = false;
       }, (err) => console.error('Запросы на устройства', err));
@@ -5171,7 +5217,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     emptyEl.style.display = 'none';
     listEl.innerHTML = pending.map((key) => `
       <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-        <div style="flex:1; min-width:0; font-size:13px; font-weight:600;">🔐 ${escapeHtml((loginTargetLabel(requests[key]) ? 'Вход ' + loginTargetLabel(requests[key]) + ' · ' : '') + (requests[key].device || 'неизвестное устройство'))}</div>
+        <div style="flex:1; min-width:0; font-size:13px; font-weight:600;">${escapeHtml((loginTargetLabel(requests[key]) ? 'Вход ' + loginTargetLabel(requests[key]) + ' · ' : '') + (requests[key].device || 'неизвестное устройство'))}</div>
         <button type="button" class="account-approve-login" data-key="${escapeHtml(key)}" style="background:var(--gold); border:none; color:#0B0B0D; border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">✓ Разрешить</button>
         <button type="button" class="account-deny-login" data-key="${escapeHtml(key)}" style="background:none; border:1px solid var(--line); color:var(--muted); border-radius:100px; width:30px; height:30px; font-size:14px; cursor:pointer; flex-shrink:0;">✕</button>
       </div>
@@ -5226,7 +5272,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
           logAction('device_paired', myTelegramId, null, null, `Подключено устройство: ${data.device || 'без названия'}`);
           input.value = '';
           resultEl.style.color = 'var(--gold)';
-          resultEl.textContent = '✅ Устройство подключено.';
+          resultEl.textContent = 'Устройство подключено.';
           loadTrustedDevicesList();
         });
     }).catch((err) => {
@@ -5256,7 +5302,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         return `
         <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px;">
           <div style="flex:1; min-width:0;">
-            <div style="font-size:13px; font-weight:600;">📱 ${escapeHtml(d.label || 'Устройство')}</div>
+            <div style="font-size:13px; font-weight:600;">${escapeHtml(d.label || 'Устройство')}</div>
             <div style="font-size:11px; color:var(--muted);">Подключено: ${dateStr} · ${d.sig ? formatExpiry(d.expiresAt) : '<span style="color:var(--live);">старый формат — не действует, подключи заново</span>'}</div>
           </div>
           <button type="button" class="account-revoke-device" data-device-id="${escapeHtml(deviceId)}" style="background:none; border:1px solid var(--line); color:var(--live); border-radius:100px; padding:7px 12px; font-size:12px; font-weight:700; cursor:pointer; flex-shrink:0;">Отозвать</button>
@@ -5457,8 +5503,8 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     stats_change: 'Изменение статистики', ban_temp: 'Временный бан', ban_forever: 'Бан навсегда', unban: 'Снятие бана',
     badge_given: 'Выдан значок', badge_revoked: 'Снят значок', badge_created: 'Создан новый значок',
     event_published: 'Опубликован ивент', event_removed: 'Ивент снят с главного экрана',
-    full_reset: '⚠️ Полный сброс перед бета-тестом',
-    chat_admin_toggle: 'Чаты: включено/выключено', chat_admin_gban: '🚫 Бан везде', mailer_bot_add: 'Рассылки: бот добавлен', mailer_bot_remove: 'Рассылки: бот убран', mailer_save: 'Рассылки: рассылка сохранена', mailer_status: 'Рассылки: запуск/пауза', mailer_delete: 'Рассылки: рассылка удалена', mailer_send_now: 'Рассылки: отправлено вручную', chat_admin_ungban: 'Бан везде снят', chat_admin_set: 'Чаты: настройка', chat_admin_mod: 'Чаты: модерация',
+    full_reset: 'Полный сброс перед бета-тестом',
+    chat_admin_toggle: 'Чаты: включено/выключено', chat_admin_gban: 'Бан везде', mailer_bot_add: 'Рассылки: бот добавлен', mailer_bot_remove: 'Рассылки: бот убран', mailer_save: 'Рассылки: рассылка сохранена', mailer_status: 'Рассылки: запуск/пауза', mailer_delete: 'Рассылки: рассылка удалена', mailer_send_now: 'Рассылки: отправлено вручную', chat_admin_ungban: 'Бан везде снят', chat_admin_set: 'Чаты: настройка', chat_admin_mod: 'Чаты: модерация',
     reset_secret_changed: 'Пароль сброса задан/изменён',
     badge_mass_given: 'Значок выдан всем игрокам',
     guests_deleted: 'Удалены все гостевые аккаунты',
@@ -5900,7 +5946,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
         <div class="ea-dot"></div>
         <div class="ea-info">
           <div class="ea-title">${ev.title || 'Без названия'}</div>
-          <div class="ea-sub">${live ? 'Активен сейчас' : 'Не активен'}${ev.badgeId ? ' · со значком' : ''}${ev.multiplier ? ' · билет x' + ev.multiplier : ''}${ev.shopFrame ? ' · рамка за ' + ev.shopFrame.price + '⭐' : ''}</div>
+          <div class="ea-sub">${live ? 'Активен сейчас' : 'Не активен'}${ev.badgeId ? ' · со значком' : ''}${ev.multiplier ? ' · билет x' + ev.multiplier : ''}${ev.shopFrame ? ' · рамка за ' + ev.shopFrame.price + '' : ''}</div>
         </div>
       </div>`;
     }).join('');
@@ -6388,7 +6434,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     listEl.innerHTML = pending.map(([key, r]) => `
       <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
         <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:600;">🔐 ${escapeHtml(r.firstName || 'Игрок')} (${escapeHtml(r.playerId || r.uid)})</div>
+          <div style="font-size:13px; font-weight:600;">${escapeHtml(r.firstName || 'Игрок')} (${escapeHtml(r.playerId || r.uid)})</div>
           <div style="font-size:11px; color:var(--muted);">${escapeHtml(r.device || 'Неизвестное устройство')} · ${new Date(r.requestedAt || 0).toLocaleString('ru-RU')}</div>
         </div>
         <select class="device-trust-duration field-input" data-key="${escapeHtml(key)}" style="width:auto; padding:6px 8px; font-size:12px;">
@@ -6903,7 +6949,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const key = await vcResolveUser(document.getElementById('vc-ban-id').value);
       await vcBanUser(key, document.getElementById('vc-ban-hours').value.trim(), document.getElementById('vc-ban-reason').value);
       ['vc-ban-id', 'vc-ban-hours', 'vc-ban-reason'].forEach((i) => { document.getElementById(i).value = ''; });
-      msg.textContent = '✅ Заблокирован во всём ВидеоЧате — вылетит из комнаты сразу.';
+      msg.textContent = 'Заблокирован во всём ВидеоЧате — вылетит из комнаты сразу.';
     } catch (err) {
       msg.textContent = 'Не удалось: ' + (err.message || err);
     }
@@ -7079,14 +7125,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const muted = vcBanActive(cmMutes[uid]);
       const row = document.createElement('div');
       row.className = 'log-row';
-      row.innerHTML = `<div class="l-title">${escapeHtml(String(o.name || uid).slice(0, 40))}${rk ? ' · ' + escapeHtml(VC_RANK_NAMES[rk]) : ''}${muted ? ' · 🔇 мут' : ''}</div><div class="l-body"><span data-vc-user="${escapeHtml(uid)}">${escapeHtml(uid)}</span></div>`;
+      row.innerHTML = `<div class="l-title">${escapeHtml(String(o.name || uid).slice(0, 40))}${rk ? ' · ' + escapeHtml(VC_RANK_NAMES[rk]) : ''}${muted ? ' · мут' : ''}</div><div class="l-body"><span data-vc-user="${escapeHtml(uid)}">${escapeHtml(uid)}</span></div>`;
       const act = document.createElement('div');
       act.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin-top:7px;';
       if (muted) { if (cmCanAct(uid, 1)) act.appendChild(cmBtn('Снять мут', () => cmUnmute(uid))); }
       else if (cmCanAct(uid, 1)) {
-        act.appendChild(cmBtn('🔇 10 мин', () => cmMute(uid, 10 * 60000)));
-        act.appendChild(cmBtn('🔇 30 мин', () => cmMute(uid, 30 * 60000)));
-        if (my >= 2) { act.appendChild(cmBtn('🔇 1 час', () => cmMute(uid, 3600000))); act.appendChild(cmBtn('🔇 навсегда', () => cmMute(uid, 0))); }
+        act.appendChild(cmBtn('10 мин', () => cmMute(uid, 10 * 60000)));
+        act.appendChild(cmBtn('30 мин', () => cmMute(uid, 30 * 60000)));
+        if (my >= 2) { act.appendChild(cmBtn('1 час', () => cmMute(uid, 3600000))); act.appendChild(cmBtn('навсегда', () => cmMute(uid, 0))); }
       }
       if (cmCanAct(uid, 2)) {
         act.appendChild(cmBtn('Выгнать на час', () => cmBan(uid, 3600000), 'btn-live'));
@@ -7159,7 +7205,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const key = await vcResolveUser(document.getElementById('cm-add-id').value);
       await cmAppoint(key, document.getElementById('cm-add-rank').value);
       document.getElementById('cm-add-id').value = '';
-      msg.textContent = '✅ Назначено.';
+      msg.textContent = 'Назначено.';
     } catch (err) { msg.textContent = 'Не удалось: ' + (err.message || err); }
     msg.style.display = 'block';
     btn.disabled = false;
@@ -7300,7 +7346,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       .sort((a, b) => (b[1].points || 0) - (a[1].points || 0))
       .slice(0, 10);
     document.getElementById('stats-top-players').innerHTML = topPlayers.length
-      ? topPlayers.map(([, u], i) => `<div class="list-row"><span>${i + 1}. ${escapeHtml(u.firstName || 'Без имени')}</span><span class="meta">${(u.points ?? 0).toLocaleString('ru-RU')} 🏆</span></div>`).join('')
+      ? topPlayers.map(([, u], i) => `<div class="list-row"><span>${i + 1}. ${escapeHtml(u.firstName || 'Без имени')}</span><span class="meta">${(u.points ?? 0).toLocaleString('ru-RU')} </span></div>`).join('')
       : '<div class="admin-empty">Нет данных</div>';
 
     // экономика
@@ -7344,7 +7390,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       if (ev.badgeId) participants = userEntries.filter(([, u]) => u.badges && u.badges[ev.badgeId]).length;
       const ticketHolders = userEntries.filter(([, u]) => Object.values(u.multiplierTickets || {}).some((t) => t && t.value === ev.multiplier)).length;
       const approxParticipants = Math.max(participants, ev.multiplier ? ticketHolders : 0);
-      return `<div class="list-row"><span>${live ? '🟢' : '⚪'} ${escapeHtml(ev.title || 'Без названия')}</span><span class="meta">≈${approxParticipants} участв.</span></div>`;
+      return `<div class="list-row"><span>${live ? '' : ''} ${escapeHtml(ev.title || 'Без названия')}</span><span class="meta">≈${approxParticipants} участв.</span></div>`;
     }).join('') : '<div class="admin-empty">Ивентов пока нет</div>';
   }
 
@@ -7629,7 +7675,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       const preview = names.slice(0, 5).join('\n') + (names.length > 5 ? `\n…и ещё ${names.length - 5}` : '');
       const wipesAll = names.length === items.length;
       if (!confirm(`Удалить ${names.length} ${pluralRu(names.length, 'снимок', 'снимка', 'снимков')} безвозвратно?\n\n${preview}` +
-        (wipesAll ? '\n\n⚠️ Это ВСЕ снимки в этом списке — копий не останется.' : ''))) return;
+        (wipesAll ? '\n\nЭто ВСЕ снимки в этом списке — копий не останется.' : ''))) return;
       el.querySelectorAll('button, input').forEach((c) => { c.disabled = true; });
       say('Удаляю…', false);
       let removed = [];
@@ -8497,11 +8543,11 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     };
     pendingLoginKeys().forEach((key) => {
       const r = latestLoginRequests[key];
-      add({ kind: 'login', key }, '🔐 вход' + (loginTargetLabel(r) ? ' ' + loginTargetLabel(r) : '') + ' · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('login', key, r) ? '' : ' (давняя)'));
+      add({ kind: 'login', key }, 'вход' + (loginTargetLabel(r) ? ' ' + loginTargetLabel(r) : '') + ' · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('login', key, r) ? '' : ' (давняя)'));
     });
     if (canManageRoles()) {
       latestPendingDeviceRequests.forEach(([key, r]) => {
-        add({ kind: 'device', key, uid: r.uid, deviceKey: r.deviceKey }, '📱 устройство · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || r.uid || '—', 40) + ') · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('device', key, r) ? '' : ' (давняя)'));
+        add({ kind: 'device', key, uid: r.uid, deviceKey: r.deviceKey }, 'устройство · ' + termClean(r.device || 'неизвестное устройство') + ' · ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || r.uid || '—', 40) + ') · ' + termAgo(r.requestedAt) + (isFreshPendingRequest('device', key, r) ? '' : ' (давняя)'));
       });
     }
     if (!lines.length) { termPrint('Заявок нет.', 'dim'); return; }
@@ -8721,7 +8767,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     termPrint('Пакет из ' + lines.length + ' команд:\n' + lines.map((line, i) => ' ' + (i + 1) + ') ' + line).join('\n'));
     const changing = [...new Set(lines.map((line) => (termTokenize(line)[0] || '').toLowerCase()).filter((name) => TERM_CHANGING.has(name)))];
     if (changing.length) {
-      termPrint('⚠ В пакете есть изменяющие команды (' + changing.join(', ') + '). Внутри пакета они НЕ переспрашиваются — проверь список выше.', 'warn');
+      termPrint('В пакете есть изменяющие команды (' + changing.join(', ') + '). Внутри пакета они НЕ переспрашиваются — проверь список выше.', 'warn');
     }
     termPending = { batch: true, run: () => termExecBatch(lines) };
     termPrint('Выполнить все ' + lines.length + ' по очереди? [y/N]', 'warn');
@@ -8729,7 +8775,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
   async function termExecBatch(lines) {
     for (let i = 0; i < lines.length; i++) {
-      termPrint('▶ ' + (i + 1) + '/' + lines.length + ': ' + lines[i], 'cmd');
+      termPrint('' + (i + 1) + '/' + lines.length + ': ' + lines[i], 'cmd');
       try {
         // у каждой строки свой контекст: auto=true только для неё, а если она
         // зависла — её cancelled не даст ей ожить посреди следующих строк
@@ -8904,7 +8950,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     }
   }
   function livePauseLabel() {
-    livePauseEl.textContent = livePaused ? '▶ продолжить' + (livePausedQueue.length ? ' (' + livePausedQueue.length + ')' : '') : '⏸ пауза';
+    livePauseEl.textContent = livePaused ? 'продолжить' + (livePausedQueue.length ? ' (' + livePausedQueue.length + ')' : '') : 'пауза';
   }
   // kind: actions | requests | errors | players | matches | system
   function liveEmit(kind, text, tone) {
@@ -8982,15 +9028,15 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       // проверить не удалось (нет связи?) — это не "индекса нет"; один повтор через
       // минуту с ТЕМ ЖЕ sinceMs, чтобы не потерять события, пришедшие за это время
       if (!attempt) {
-        liveEmit('system', 'ℹ️ «' + label + '»: не удалось проверить индекс ' + path + '.' + field + ' — попробую ещё раз через минуту.');
+        liveEmit('system', 'ℹ «' + label + '»: не удалось проверить индекс ' + path + '.' + field + ' — попробую ещё раз через минуту.');
         setTimeout(() => liveWatchNewByTime(path, field, label, sinceMs, onChild, 1), 60000);
       } else {
-        liveEmit('system', 'ℹ️ «' + label + '» в эфире отключены: индекс ' + path + '.' + field + ' так и не удалось проверить — обновите страницу.');
+        liveEmit('system', 'ℹ «' + label + '» в эфире отключены: индекс ' + path + '.' + field + ' так и не удалось проверить — обновите страницу.');
       }
       return;
     }
     if (!exists) {
-      liveEmit('system', 'ℹ️ «' + label + '» в эфире не показываются: в базе нет индекса ' + path + '.' + field + ' (нужно выложить правила базы).');
+      liveEmit('system', 'ℹ «' + label + '» в эфире не показываются: в базе нет индекса ' + path + '.' + field + ' (нужно выложить правила базы).');
       return;
     }
     db.ref(path).orderByChild(field).startAt(sinceMs).on('child_added', (snap) => {
@@ -9011,12 +9057,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
 
     liveWatchNewByKey('logs', (key, e) => {
       if (!e || !e.timestamp) return;
-      liveEmit('actions', '📜 ' + termLogBody(e) + (ownLogKeys.has(key) ? ' · вы' : ''));
+      liveEmit('actions', '' + termLogBody(e) + (ownLogKeys.has(key) ? ' · вы' : ''));
     });
     liveWatchNewByKey('errorReports', (key, r) => {
       if (!r) return;
       const lastLine = String(r.log || '').trim().split('\n').pop();
-      liveEmit('errors', '🐞 ошибка клиента · ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || '—', 40) + ') · ' + termClean(lastLine, 160));
+      liveEmit('errors', 'ошибка клиента · ' + termClean(r.firstName || 'Игрок', 40) + ' (' + termClean(r.playerId || '—', 40) + ') · ' + termClean(lastLine, 160));
     });
 
     // режимы: по одному слушателю на каждый известный флаг. Весь узел config
@@ -9026,7 +9072,7 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       let prev = null; // null — ещё не видели первое значение
       db.ref('config/' + flag).on('value', (snap) => {
         const now = !!snap.val();
-        if (prev !== null && now !== prev) liveEmit('actions', '⚙️ ' + LIVE_CONFIG_FLAGS[flag] + ': ' + (now ? 'ВКЛЮЧЁН' : 'выключен'), now ? 'warn' : 'ok');
+        if (prev !== null && now !== prev) liveEmit('actions', '' + LIVE_CONFIG_FLAGS[flag] + ': ' + (now ? 'ВКЛЮЧЁН' : 'выключен'), now ? 'warn' : 'ok');
         prev = now;
       }, (err) => console.error('Эфир: config/' + flag, err));
     });
@@ -9041,12 +9087,12 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
       document.getElementById('live-badge').classList.toggle('offline', !connected);
       document.getElementById('live-badge-text').textContent = connected ? 'ПРЯМОЙ ЭФИР' : (everConnected ? 'НЕТ СВЯЗИ' : 'ПОДКЛЮЧЕНИЕ…');
       if (connected) {
-        if (lostReported) liveEmit('system', '🟢 связь с базой восстановлена', 'ok');
+        if (lostReported) liveEmit('system', 'связь с базой восстановлена', 'ok');
         lostReported = false;
         everConnected = true;
       } else if (everConnected && !lostReported) {
         lostReported = true;
-        liveEmit('system', '🔴 связь с базой потеряна — новые события не приходят', 'err');
+        liveEmit('system', 'связь с базой потеряна — новые события не приходят', 'err');
       }
     });
 
@@ -9057,14 +9103,14 @@ sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64</code></
     liveWatchNewByTime('users', 'createdAt', 'новые игроки', since, (key, u) => {
       if (!u) return;
       // ключ users/token_<токен> содержит сам токен доступа — его не показываем
-      if (key.startsWith('token_')) { liveEmit('players', '🔑 вход по токену доступа: ' + termClean(u.firstName || '—', 40), 'dim'); return; }
+      if (key.startsWith('token_')) { liveEmit('players', 'вход по токену доступа: ' + termClean(u.firstName || '—', 40), 'dim'); return; }
       const guest = key.startsWith('guest_');
-      liveEmit('players', (guest ? '👤 новый гость' : '🆕 новый игрок') + ': ' + termClean(u.firstName || '—', 40) + ' (' + termClean(u.playerId || key, 40) + ')', guest ? 'dim' : 'ok');
+      liveEmit('players', (guest ? 'новый гость' : 'новый игрок') + ': ' + termClean(u.firstName || '—', 40) + ' (' + termClean(u.playerId || key, 40) + ')', guest ? 'dim' : 'ok');
     });
     liveWatchNewByTime('matches', 'finishedAt', 'завершённые бои', since, (key, m) => {
       if (!m || !m.finishedAt) return;
       const pa = m.pointsAwarded || {};
-      liveEmit('matches', '⚔️ бой завершён: ' + termClean(m.winnerId || '—', 40) + ' победил ' + termClean(m.loserId || '—', 40) + ' (' + liveSigned(pa[m.winnerId]) + ' / ' + liveSigned(pa[m.loserId]) + ')');
+      liveEmit('matches', 'бой завершён: ' + termClean(m.winnerId || '—', 40) + ' победил ' + termClean(m.loserId || '—', 40) + ' (' + liveSigned(pa[m.winnerId]) + ' / ' + liveSigned(pa[m.loserId]) + ')');
     });
   }
 </script>

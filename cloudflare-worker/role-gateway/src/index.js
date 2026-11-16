@@ -1081,6 +1081,7 @@ const BOT_COMMANDS_GROUP_ADMIN = [
   { command: 'del', description: 'Удалить сообщение (ответом)' },
   { command: 'pin', description: 'Закрепить сообщение (ответом)' },
   { command: 'settings', description: 'Настройки админ-бота' },
+  { command: 'all', description: 'Позвать всех в видеочат (раз в 5 минут)' },
   { command: 'pause', description: 'Выключить бота на время: /pause 30, 2h, 1d' },
   { command: 'resume', description: 'Включить бота после паузы' },
   { command: 'reload', description: 'Перезагрузить настройки бота' },
@@ -1207,6 +1208,7 @@ async function getChatAdmin(env, origin) {
   if (chatAdminHolder.key === key && chatAdminHolder.inst && chatAdminHolder.botId === (info && info.id)) return chatAdminHolder.inst;
   const inst = createChatAdmin({
     tg: (method, payload) => tgApi(env, method, payload),
+    videoRoom: async (key) => { const c = await dbReadPublic(`/videochat/communities/${encodeURIComponent(key)}`); return c && c.status === 'active' ? videochatRoomUrl(env, key) : null; }, // кнопка комнаты ВидеоЧата в «позвать всех»
     later: (promise) => { if (chatAdminCtx && chatAdminCtx.waitUntil) chatAdminCtx.waitUntil(promise); }, // отложенное удаление служебных сообщений
     dbGet: async (path, o) => {
       if (!CHAT_DB_PATH_RE.test(path)) throw new Error('недопустимый путь');

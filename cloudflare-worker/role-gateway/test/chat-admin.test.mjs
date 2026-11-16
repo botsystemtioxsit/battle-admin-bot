@@ -116,6 +116,17 @@ t('запись входа: счётчики дня, способ, ссылки,
   t('выключение: статистика остаётся', r === true && e.db.root.chatAdmin[KEY].meta.enabled === false && e.sent().at(-1).includes('выключены'));
 }
 
+// ---------- имя и @ник запоминаются при любом событии (поиск по участникам) ----------
+{
+  const e = await enabled({});
+  const leave = (id, name, username) => ({ chat_member: { ...cm().chat_member, from: { id: Number(id), first_name: name }, old_chat_member: { status: 'member', user: { id: Number(id) } }, new_chat_member: { status: 'left', user: { id: Number(id), first_name: name, username } } } });
+  await e.ca.onChatMember(leave(7, 'Вася', 'vasya_x'));
+  const u = e.db.root.chatAdmin[KEY].users['7'];
+  t('выход: имя и @ник запомнены (человека можно найти после ухода)', u && u.name === 'Вася' && u.username === 'vasya_x' && u.status === 'left', u);
+  const ev = Object.values(Object.values(e.db.root.chatAdmin[KEY].events)[0])[0];
+  t('событие выхода хранит id и @ник', ev.id === '7' && ev.username === 'vasya_x', ev);
+}
+
 // ---------- обычная работа в включённом чате ----------
 async function enabled(extraMeta = {}, envOpts) {
   const e = makeEnv(envOpts);

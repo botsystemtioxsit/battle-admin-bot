@@ -676,6 +676,7 @@ export function createChatAdmin(deps) {
     '/ban, /unban, /kick, /mute [мин|2h|1d], /unmute — ответом на сообщение (или по числовому id)',
     '/warn, /unwarn — предупреждения · /del — удалить сообщение · /pin, /unpin',
     '/settings, /set, /setwelcome, /setrules — настройки · /rules — правила',
+    '/all [текст] — позвать всех в видеочат (уведомление придёт каждому; раз в 5 минут)',
     '/pause [мин|2h|1d] — выключить бота в чате на время (по умолчанию час) · /resume — вернуть сразу · /reload — перезагрузить настройки бота',
     'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 3–600 (секунд на нажатие кнопки)',
     'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
@@ -739,6 +740,53 @@ export function createChatAdmin(deps) {
     const isAdm = botSt === 'administrator' || botSt === 'creator';
     return `Перезагружено: настройки перечитаны. Бот ${isAdm ? 'администратор чата — всё в порядке' : 'НЕ администратор: сделайте меня администратором (удаление сообщений, блокировка участников)'}. `
       + (meta && meta.enabled ? 'Админ-функции включены' : 'Админ-функции выключены') + (isPaused(meta) ? ', бот на паузе.' : '.') + hook;
+  }
+  // «Позвать всех»: сообщение, где у каждого человека скрыто упоминание за значком — Telegram присылает им уведомление, даже если чат
+  // отключён (так делают многие боты). Бот не умеет получить список всех участников чата (Bot API такого не даёт), поэтому зовёт тех, кого знает:
+  // администраторов и всех, кто писал или заходил в чат после включения бота. До 100 упоминаний в сообщении (предел Telegram), до 8 сообщений.
+  const CALL_COOLDOWN_MS = 5 * 60_000;
+  const CALL_PER_MESSAGE = 100;
+  const CALL_MAX_MESSAGES = 8;
+  async function callEveryone(chat, chatKey, meta, msg, cmd, fromId, tmp) {
+    const wait = CALL_COOLDOWN_MS - (now() - (Number(meta.lastAllAt) || 0));
+    if (wait > 0) { await tmp(`Звать всех можно раз в 5 минут. Подождите ещё ${Math.ceil(wait / 60000)} мин.`); return true; }
+    const known = await deps.dbGet(`chatAdmin/${chatKey}/users`).catch(() => null);
+    const people = new Map(); // id → lastSeen
+    for (const [id, u] of Object.entries(known && typeof known === 'object' ? known : {})) {
+      if (!/^\d{5,15}$/.test(id) || !u || typeof u !== 'object') continue;
+      if (u.status === 'left' || u.status === 'banned' || u.status === 'kicked' || u.status === 'removed') continue;
+      people.set(id, Number(u.lastSeen || u.joinedAt) || 0);
+    }
+    const adm = await deps.tg('getChatAdministrators', { chat_id: chat.id }).catch(() => null);
+    if (adm && adm.ok && Array.isArray(adm.result)) for (const a of adm.result) {
+      const u = a && a.user; if (!u || u.is_bot || !/^\d{5,15}$/.test(String(u.id))) continue;
+      if (!people.has(String(u.id))) people.set(String(u.id), 0);
+    }
+    people.delete(String(fromId)); people.delete(String(deps.botId));
+    const ids = [...people.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+    if (!ids.length) { await tmp('Пока некого звать: я знаю только администраторов и тех, кто писал в чате или заходил после включения бота.'); return true; }
+    await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/lastAllAt`]: now() }).catch(() => {});
+    metaCache.delete(chatKey);
+    const shown = ids.slice(0, CALL_PER_MESSAGE * CALL_MAX_MESSAGES);
+    const header = cleanText(cmd.args, 200) || 'Зовём всех в видеочат!';
+    let room = null;
+    if (deps.videoRoom) { try { room = await deps.videoRoom(chatKey); } catch { room = null; } }
+    const buttons = [];
+    if (room) buttons.push({ text: 'Войти в ВидеоЧат', url: room });
+    if (chat.username && /^[A-Za-z0-9_]{4,32}$/.test(chat.username)) buttons.push({ text: 'Видеочат Telegram', url: `https://t.me/${chat.username}?videochat` });
+    let sent = 0;
+    for (let i = 0; i < shown.length; i += CALL_PER_MESSAGE) {
+      const batch = shown.slice(i, i + CALL_PER_MESSAGE);
+      const prefix = i === 0 ? header + '\n' : '';
+      const text = prefix + '🔔'.repeat(batch.length);
+      const entities = batch.map((id, k) => ({ type: 'text_mention', offset: prefix.length + k * 2, length: 2, user: { id: Number(id) } }));
+      const extra = { entities };
+      if (i === 0 && buttons.length) extra.reply_markup = { inline_keyboard: [buttons] };
+      const r = await deps.tg('sendMessage', { chat_id: chat.id, text, ...extra });
+      if (r && r.ok) sent += batch.length;
+    }
+    await tmp(`Позвал: ${sent}${ids.length > sent ? ' из ' + ids.length + ' известных' : ''}.`);
+    return true;
   }
   async function disable(chatKey) {
     await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/enabled`]: false, [`${GLOBAL}/chats/${chatKey}`]: null, [`${GLOBAL}/tenants/${chatKey}`]: null });
@@ -881,7 +929,7 @@ export function createChatAdmin(deps) {
 
     if (!cmd) return false;
     const publicCmds = ['rules', 'help'];
-    const adminCmds = ['gban', 'ungban', 'stats', 'top', 'joins', 'ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'del', 'pin', 'unpin', 'settings', 'set', 'setwelcome', 'setrules'];
+    const adminCmds = ['gban', 'ungban', 'stats', 'top', 'joins', 'ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'del', 'pin', 'unpin', 'settings', 'set', 'setwelcome', 'setrules', 'all', 'everyone', 'tagall'];
     if (!publicCmds.includes(cmd.name) && !adminCmds.includes(cmd.name)) return false; // чужая команда (например /call) — дальше по цепочке
     if (cmd.name === 'rules') { await say(chat.id, cfg.rules ? '📜 Правила чата\n' + cfg.rules : 'Правила чата ещё не заданы (админ: /setrules текст).'); return true; }
     if (cmd.name === 'help') { await say(chat.id, HELP); return true; }
@@ -897,6 +945,7 @@ export function createChatAdmin(deps) {
       return true;
     }
 
+    if (cmd.name === 'all' || cmd.name === 'everyone' || cmd.name === 'tagall') return callEveryone(chat, chatKey, meta, msg, cmd, fromId, tmp);
     if (cmd.name === 'stats') { await say(chat.id, await statsText(chat.id, chatKey, chat.title, cfg.tz)); return true; }
     if (cmd.name === 'top') { await say(chat.id, await topText(chatKey)); return true; }
     if (cmd.name === 'joins') { await say(chat.id, await joinsText(chatKey, cfg.tz)); return true; }

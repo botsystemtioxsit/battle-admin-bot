@@ -122,6 +122,8 @@ export function eventWrites(chatKey, ev, linkId) {
   if (ev.link) rec.link = { id: linkId, name: ev.link.name || '', creator: ev.link.creator || '' };
   if (ev.by) rec.by = ev.by;
   w[`${base}/events/${day}/${eventId(ev.at)}`] = rec;
+  // имя и @ник запоминаем при любом событии (вход, выход, бан…), чтобы человека можно было найти по ним и после ухода
+  if (ev.kind !== 'join') { w[`${base}/users/${uid}/name`] = rec.name; w[`${base}/users/${uid}/username`] = rec.username || null; }
   if (ev.kind === 'join') {
     w[`${base}/daily/${day}/joins`] = inc();
     w[`${base}/daily/${day}/how_${ev.how}`] = inc();

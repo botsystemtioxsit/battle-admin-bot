@@ -1,0 +1,39 @@
+name: Keep Telegram video chat
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keep-videochat
+  cancel-in-progress: false
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check secrets
+        id: gate
+        env:
+          S: ${{ secrets.TG_SESSION }}
+        run: |
+          if [ -z "$S" ]; then echo "TG_SESSION не задан — пропускаю (см. tools/videochat-keeper)"; echo "go=0" >> "$GITHUB_OUTPUT"; else echo "go=1" >> "$GITHUB_OUTPUT"; fi
+      - name: Install Telethon
+        if: steps.gate.outputs.go == '1'
+        run: pip install telethon==1.36.0
+      - name: Keep video chat on
+        if: steps.gate.outputs.go == '1'
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_SESSION: ${{ secrets.TG_SESSION }}
+          TG_CHATS: ${{ secrets.TG_CHATS }}
+          TG_RECORD: ${{ vars.TG_RECORD }}
+          TG_TITLE: ${{ vars.TG_TITLE }}
+        run: python tools/videochat-keeper/keeper.py

@@ -571,6 +571,15 @@ t('капча: по умолчанию ВКЛЮЧЕНА (настройка не
   await e.ca.onMessage(msg(ADMIN, '/set captchaSec 30'));
   await e.ca.onMessage(msg(ADMIN, '/set captchaSec 2'));
   t('/set captchaSec 50 — отказ', e.db.root.chatAdmin[KEY].meta.cfg.captchaSec === 30 && e.sent().at(-1).includes('от 3 до 600'));
+  await e.ca.onMessage(msg(ADMIN, '/set callChannel мусор'));
+  t('/set callChannel: плохой адрес — отказ', !e.db.root.chatAdmin[KEY].meta.cfg.callChannel && e.sent().at(-1).includes('Нужен номер канала'));
+  await e.ca.onMessage(msg(ADMIN, '/set callChannel -1009876543210'));
+  t('/set callChannel: бот админ канала — сохраняется', e.db.root.chatAdmin[KEY].meta.cfg.callChannel === '-1009876543210');
+  const nb = await enabledCap({}, { tgOverrides: { getChatMember: (pl) => (String(pl.chat_id) === '-1009876543210' ? { ok: true, result: { status: 'member' } } : { ok: true, result: { status: Number(pl.user_id) === Number(ADMIN) ? 'administrator' : 'administrator' } }) } });
+  await nb.ca.onMessage(msg(ADMIN, '/set callChannel -1009876543210'));
+  t('/set callChannel: бот не админ канала — отказ без записи', !nb.db.root.chatAdmin[KEY].meta.cfg.callChannel && nb.sent().at(-1).includes('не администратор'));
+  await e.ca.onMessage(msg(ADMIN, '/set callChannel off'));
+  t('/set callChannel off — принимается', e.db.root.chatAdmin[KEY].meta.cfg.callChannel === '');
   await e.ca.onMessage(msg(ADMIN, '/settings'));
   t('/settings показывает проверку «я не бот»', e.sent().at(-1).includes('captcha') && e.sent().at(-1).includes('captchaSec'));
 }

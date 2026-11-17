@@ -23,8 +23,8 @@ import { createIris, IRIS_CFG_DEFAULTS, IRIS_CFG_KEYS, IRIS_COMMANDS, IRIS_PUBLI
 const GLOBAL = 'chatAdmin/_global';
 const EVENTS_KEEP_DAYS = 120;
 const DAILY_KEEP_DAYS = 800;
-const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', captcha: true, captchaSec: 10, ...IRIS_CFG_DEFAULTS });
-export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', captcha: 'bool', maxWarns: 'num', captchaSec: 'num', tz: 'tz', welcomeText: 'text', rules: 'text', ...IRIS_CFG_KEYS });
+const CFG_DEFAULTS = Object.freeze({ welcome: false, welcomeText: '', rules: '', links: false, cleanup: false, count: true, maxWarns: 3, tz: 'Europe/Berlin', captcha: true, captchaSec: 10, callChannel: '', ...IRIS_CFG_DEFAULTS });
+export const CFG_KEYS = Object.freeze({ welcome: 'bool', links: 'bool', cleanup: 'bool', count: 'bool', captcha: 'bool', maxWarns: 'num', captchaSec: 'num', tz: 'tz', welcomeText: 'text', rules: 'text', callChannel: 'text', ...IRIS_CFG_KEYS });
 const MEMBER_STATUSES = new Set(['creator', 'administrator', 'member']);
 const HOW_LABELS = { invite: 'по пригласительной ссылке', added: 'добавил участник', request: 'по заявке', folder: 'по папке чатов', direct: 'сам (поиск или публичная ссылка)' };
 
@@ -697,7 +697,7 @@ export function createChatAdmin(deps) {
     '/pause [мин|2h|1d] — выключить бота в чате на время (по умолчанию час) · /resume — вернуть сразу · /reload — перезагрузить настройки бота',
     'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 3–600 (секунд на нажатие кнопки)',
     'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
-    'Видеозвонки: /call, /connect',
+    'Видеозвонки: /call, /connect; объявлять комнату в канале: /set callChannel -100… (бот — админ канала)',
   ].join('\n');
 
   async function setCfg(chatKey, meta, key, value) {
@@ -714,6 +714,15 @@ export function createChatAdmin(deps) {
       if (['on', 'вкл', '1', 'true', 'да'].includes(t)) v = true; else if (['off', 'выкл', '0', 'false', 'нет'].includes(t)) v = false; else return { ok: false, text: 'Нужно on или off.' };
     } else if (kind === 'text') {
       v = cleanText(raw, key === 'rules' || key === 'words' ? 1500 : 500);
+      if (key === 'callChannel') {
+        const a = String(raw).trim();
+        if (a === '' || a.toLowerCase() === 'off') v = '';
+        else if (/^-100\d{5,14}$/.test(a) || /^@[A-Za-z][A-Za-z0-9_]{4,31}$/.test(a)) {
+          const st = await memberStatus(a, deps.botId);
+          if (st !== 'administrator' && st !== 'creator') return { ok: false, text: 'Бот не администратор этого канала. Добавьте его в канал администратором (право «Публикация сообщений») и повторите.' };
+          v = a;
+        } else return { ok: false, text: 'Нужен номер канала вида -100… или @имя канала. Выключить: off.' };
+      }
       if (key === 'night') { const a = String(raw).trim().toLowerCase(); if (a === 'off' || a === '') v = ''; else if (parseNight(a)) v = a; else return { ok: false, text: 'Нужно время вида 23:00-07:00 или off.' }; }
     } else if (kind === 'num') {
       v = Number(raw);

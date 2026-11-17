@@ -956,6 +956,26 @@ async function commandForMe(env, text) {
   return m[1].toLowerCase();
 }
 
+// Объявление о видеокомнате в отдельный канал (настройка чата `/set callChannel <номер|@канал>`): бот сам пишет туда
+// кнопку входа. Не чаще раза в 10 минут на чат, чтобы /call не засорял канал.
+async function announceCallToChannel(env, key, community, title) {
+  const r = await dbReadAdmin(env, `/chatAdmin/${encodeURIComponent(key)}/meta`);
+  if (!r.ok) return;
+  const meta = await r.json();
+  const ch = meta && meta.cfg && typeof meta.cfg.callChannel === 'string' ? meta.cfg.callChannel : '';
+  if (!ch || !(/^-100\d{5,14}$/.test(ch) || /^@[A-Za-z][A-Za-z0-9_]{4,31}$/.test(ch))) return;
+  const last = Number(meta.callPostedAt) || 0;
+  if (Date.now() - last < 600_000) return;
+  const sent = await tgApi(env, 'sendMessage', {
+    chat_id: ch,
+    text: `📹 Видеокомната «${String(community.title || title).slice(0, 60)}» открыта\nКод комнаты: ${String(community.joinCode || '—')}`,
+    reply_markup: { inline_keyboard: [[{ text: '📹 Войти в комнату', url: videochatRoomUrl(env, key) }]] },
+  });
+  if (sent && sent.ok) {
+    await dbWrite(env, '/.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [`chatAdmin/${key}/meta/callPostedAt`]: Date.now() }) });
+  }
+}
+
 async function handleGroupMessage(env, message) {
   const chat = message.chat;
   if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup') || typeof message.text !== 'string') return;
@@ -982,6 +1002,7 @@ async function handleGroupMessage(env, message) {
     await say(`📹 Видеокомната «${String(community.title || title).slice(0, 60)}»\nКод комнаты: ${String(community.joinCode || '—')}`, {
       reply_markup: { inline_keyboard: [[{ text: '📹 Войти в комнату', url: videochatRoomUrl(env, key) }]] },
     });
+    await announceCallToChannel(env, key, community, title).catch((e) => console.log('call channel announce: ' + (e && e.message)));
     return;
   }
 

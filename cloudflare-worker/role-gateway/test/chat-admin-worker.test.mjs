@@ -222,6 +222,16 @@ t('/chat-admin: плохой chatId — 400', r.status === 400, r);
   r = await panel({ initData: initData(700), action: 'status', chatId: CHAT2 });
   t('/chat-admin: status своего чата доступен', r.status === 200 && r.json.chat, r);
 
+  r = await panel({ initData: initData(700), action: 'keeper-add', chatId: '-1001112223334' });
+  t('хранитель видеочата: чужой создатель чата — 403', r.status === 403, r);
+  r = await panel({ initData: initData(100), action: 'keeper-add', chatId: 'мусор' });
+  t('хранитель видеочата: плохой номер — отказ', r.status === 400, r);
+  r = await panel({ initData: initData(100), action: 'keeper-add', chatId: '-1001112223334' });
+  t('хранитель видеочата: владелец добавил группу', r.json?.ok === true && r.json.chats.includes('-1001112223334') && db.videochatKeeper?.chats?.['-1001112223334'], r);
+  r = await panel({ initData: initData(100), action: 'keeper-off' });
+  t('хранитель видеочата: выключен', r.json?.enabled === false && db.videochatKeeper.enabled === false, r);
+  r = await panel({ initData: initData(100), action: 'keeper-remove', chatId: '-1001112223334' });
+  t('хранитель видеочата: группа убрана', r.json?.ok === true && r.json.chats.length === 0 && !db.videochatKeeper.chats?.['-1001112223334'], r);
   r = await post('/admin-read', { initData: initData(700), path: 'chatAdmin', shallow: true });
   t('/admin-read: создателю виден только его чат в списке', r.status === 200 && Object.keys(r.json.data).join() === KEY2, r);
   r = await post('/admin-read', { initData: initData(700), path: 'chatAdmin/' + KEY2 + '/daily' });

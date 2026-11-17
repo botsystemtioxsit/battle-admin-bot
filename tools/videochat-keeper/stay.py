@@ -26,10 +26,7 @@ async def main():
     from pytgcalls import PyTgCalls
     from pytgcalls.types import MediaStream
 
-    chats = keeper.parse_chats(os.environ.get('TG_CHATS'))
-    if not chats:
-        print('TG_CHATS пуст')
-        return 1
+    secret_chats = keeper.parse_chats(os.environ.get('TG_CHATS'))
     make_silence()
     client = TelegramClient(StringSession(os.environ['TG_SESSION']), int(os.environ['TG_API_ID']), os.environ['TG_API_HASH'])
     await client.connect()
@@ -43,6 +40,20 @@ async def main():
     deadline = time.time() + int(os.environ.get('RUN_SECONDS', str(5 * 3600 + 40 * 60)))
     inside = set()
     while time.time() < deadline:
+        cfg = keeper.fetch_config()
+        if cfg is None:
+            cfg = {'enabled': True, 'chats': []}  # база не ответила — держим то, что задано секретом
+        chats = list(dict.fromkeys(cfg['chats'] + secret_chats))
+        if not cfg['enabled'] or not chats:
+            for cid in list(inside):  # выключили из Терминала (или список пуст) — выходим из видеочатов
+                try:
+                    await calls.leave_call(cid)
+                except Exception:
+                    pass
+            inside.clear()
+            print('хранитель выключен или список групп пуст — жду')
+            await asyncio.sleep(60)
+            continue
         for i, ref in enumerate(chats, 1):
             try:
                 ent = await client.get_entity(ref)

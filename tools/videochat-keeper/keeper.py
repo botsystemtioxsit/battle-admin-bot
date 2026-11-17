@@ -41,6 +41,19 @@ async def ensure_chat(client, ref, R, record=True, title=''):
     return ('видеочат создан' if created else 'видеочат идёт') + (', запись идёт' if recording else '')
 
 
+def fetch_config(url='https://zolotaya-kletka-default-rtdb.firebaseio.com/videochatKeeper.json'):
+    """Список групп и выключатель, которыми управляет Терминал панели (команда videochat). None — база недоступна."""
+    import json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            d = json.load(r) or {}
+    except Exception:
+        return None
+    chats = [int(k) for k in (d.get('chats') or {}) if k.lstrip('-').isdigit()]
+    return {'enabled': d.get('enabled') is not False, 'chats': chats}
+
+
 def parse_chats(raw):
     out = []
     for part in (raw or '').replace('\n', ',').split(','):

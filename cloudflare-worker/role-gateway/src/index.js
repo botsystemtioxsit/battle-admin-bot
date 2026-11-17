@@ -2119,6 +2119,24 @@ export default {
           }
           return jsonResponse(out);
         }
+        // Хранитель видеочата Telegram (tools/videochat-keeper): список групп и выключатель. Только владелец проекта (выше отсечены остальные).
+        if (action === 'keeper-list' || action === 'keeper-add' || action === 'keeper-remove' || action === 'keeper-on' || action === 'keeper-off') {
+          const upd = {};
+          if (action === 'keeper-add' || action === 'keeper-remove') {
+            const ck = String(body.chatId === undefined ? '' : body.chatId).trim();
+            if (!/^-100\d{5,14}$/.test(ck)) return jsonResponse({ error: 'нужен номер группы вида -100…' }, 400);
+            upd[`videochatKeeper/chats/${ck}`] = action === 'keeper-add' ? { at: Date.now(), by: String(verified.userId) } : null;
+          }
+          if (action === 'keeper-on') upd['videochatKeeper/enabled'] = true;
+          if (action === 'keeper-off') upd['videochatKeeper/enabled'] = false;
+          if (Object.keys(upd).length) {
+            const w = await dbWrite(env, '/.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(upd) });
+            if (!w.ok) return jsonResponse({ error: 'база не приняла запись (' + w.status + ')' }, 502);
+          }
+          const rr = await dbReadAdmin(env, '/videochatKeeper');
+          const cur = rr.ok ? ((await rr.json()) || {}) : {};
+          return jsonResponse({ ok: true, enabled: cur.enabled !== false, chats: Object.keys(cur.chats || {}).filter((k) => /^-100\d{5,14}$/.test(k)) });
+        }
         if (action === 'gban' || action === 'ungban') {
           const uid = userKeyOf(body.userId);
           if (!uid) return jsonResponse({ error: 'нужен userId (цифры)' }, 400);

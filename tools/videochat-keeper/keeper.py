@@ -51,6 +51,20 @@ def parse_chats(raw):
     return out
 
 
+def telethon_requests():
+    from telethon.tl.functions.channels import GetFullChannelRequest
+    from telethon.tl.functions.messages import GetFullChatRequest
+    from telethon.tl.functions.phone import CreateGroupCallRequest, GetGroupCallRequest, ToggleGroupCallRecordRequest
+
+    class R:
+        GetFullChannel = GetFullChannelRequest
+        GetFullChat = GetFullChatRequest
+        CreateGroupCall = CreateGroupCallRequest
+        GetGroupCall = GetGroupCallRequest
+        ToggleGroupCallRecord = ToggleGroupCallRecordRequest
+    return R
+
+
 async def main():
     from telethon import TelegramClient
     from telethon.sessions import StringSession

@@ -2,17 +2,21 @@ name: Keep Telegram video chat
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/15 * * * *'   # страховка: если цепочка прервалась, через ≤15 минут стартует новая
   workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
 
 concurrency:
   group: keep-videochat
   cancel-in-progress: false
 
 jobs:
-  keep:
+  stay:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,10 +28,12 @@ jobs:
           S: ${{ secrets.TG_SESSION }}
         run: |
           if [ -z "$S" ]; then echo "TG_SESSION не задан — пропускаю (см. tools/videochat-keeper)"; echo "go=0" >> "$GITHUB_OUTPUT"; else echo "go=1" >> "$GITHUB_OUTPUT"; fi
-      - name: Install Telethon
+      - name: Remember start
+        run: echo "T0=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Install
         if: steps.gate.outputs.go == '1'
-        run: pip install telethon==1.36.0
-      - name: Keep video chat on
+        run: pip install telethon==1.36.0 "py-tgcalls>=2,<3"
+      - name: Stay in the video chat
         if: steps.gate.outputs.go == '1'
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
@@ -36,4 +42,12 @@ jobs:
           TG_CHATS: ${{ secrets.TG_CHATS }}
           TG_RECORD: ${{ vars.TG_RECORD }}
           TG_TITLE: ${{ vars.TG_TITLE }}
-        run: python tools/videochat-keeper/keeper.py
+        run: python tools/videochat-keeper/stay.py
+      - name: Start the next run
+        if: always() && steps.gate.outputs.go == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # если проход упал почти сразу (ошибка, а не «отработал свои часы») — цепочку не продолжаем, чтобы не крутить пустые запуски
+          if [ $(( $(date +%s) - T0 )) -lt 900 ]; then echo "проход был короче 15 минут — следующий по расписанию"; exit 0; fi
+          gh workflow run keep-videochat.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" || true

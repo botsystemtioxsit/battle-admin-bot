@@ -18,6 +18,7 @@
 // его добавил участник, заявка, папка чатов или сам (поиск / публичная ссылка).
 
 export const DAY_MS = 86_400_000;
+import { createWarns } from './chat-warns.mjs';
 import { createIris, IRIS_CFG_DEFAULTS, IRIS_CFG_KEYS, IRIS_COMMANDS, IRIS_PUBLIC, parseNight } from './chat-iris.mjs';
 
 const GLOBAL = 'chatAdmin/_global';
@@ -207,6 +208,12 @@ export function createChatAdmin(deps) {
     deps, now, inc, cleanText, displayName, ALL_FALSE, dayKey, HOW_LABELS,
     act: (...a) => act(...a), logMod: (...a) => logMod(...a), resolveTarget: (...a) => resolveTarget(...a), defaultPerms: (...a) => defaultPerms(...a),
     forgetMeta: (k) => metaCache.delete(k),
+  });
+
+  // Система предупреждений администрации (Warn System) — отдельный модуль chat-warns.mjs
+  const warns = createWarns({
+    deps, now, say, cleanText, displayName, userKeyOf, eventId, owners,
+    memberStatus: (...a) => memberStatus(...a), isChatAdmin: (...a) => isChatAdmin(...a), resolveTarget: (...a) => resolveTarget(...a),
   });
 
   async function getMeta(chatKey, fresh = false) {
@@ -436,6 +443,7 @@ export function createChatAdmin(deps) {
   // Раз в минуту (cron Worker'а): пройтись по включённым чатам. Возвращает, сколько человек выгнано.
   async function sweepAll() {
     let total = 0;
+    await warns.sweep().catch(() => 0); // истёкшие предупреждения администрации: пометить и уведомить (не зависит от списка чатов)
     const all = [...(await listEnabledChats()), ...(await listTenantChats())];
     const PER_RUN = 20; // лимит подзапросов на одно обращение: чатов больше — каждую минуту берём следующую порцию
     const start = all.length > PER_RUN ? (Math.floor(now() / 60000) * PER_RUN) % all.length : 0;
@@ -697,6 +705,7 @@ export function createChatAdmin(deps) {
     '/pause [мин|2h|1d] — выключить бота в чате на время (по умолчанию час) · /resume — вернуть сразу · /reload — перезагрузить настройки бота',
     'Проверка «я не бот» для новичков: /set captcha on|off, /set captchaSec 3–600 (секунд на нажатие кнопки)',
     'Только владелец проекта: /gban и /ungban — забанить или разбанить человека везде (все чаты, игра, ВидеоЧат)',
+    'Предупреждения администрации: /awarn причина (ответом на сообщение админа; старшие) · /awarns [id] · /awhistory [id] · /awlog · /awcancel № причина и /awdel № (руководство) · /senior add|del|list',
     'Видеозвонки: /call, /connect; объявлять комнату в канале: /set callChannel -100… (бот — админ канала)',
   ].join('\n');
 
@@ -972,6 +981,7 @@ export function createChatAdmin(deps) {
     if (!cmd) return false;
     const publicCmds = ['rules', 'help'];
     const adminCmds = ['gban', 'ungban', 'stats', 'top', 'joins', 'ban', 'unban', 'kick', 'mute', 'unmute', 'warn', 'unwarn', 'del', 'pin', 'unpin', 'settings', 'set', 'setwelcome', 'setrules', 'all', 'everyone', 'tagall'];
+    if (warns.handles(cmd.name)) return warns.onCommand(irisCtx);
     if (iris.handles(cmd.name)) return iris.onCommand(irisCtx);
     if (!publicCmds.includes(cmd.name) && !adminCmds.includes(cmd.name)) return false; // чужая команда (например /call) — дальше по цепочке
     if (cmd.name === 'rules') { await say(chat.id, cfg.rules ? '📜 Правила чата\n' + cfg.rules : 'Правила чата ещё не заданы (админ: /setrules текст).'); return true; }

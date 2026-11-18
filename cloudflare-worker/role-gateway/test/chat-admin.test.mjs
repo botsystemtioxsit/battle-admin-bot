@@ -862,5 +862,111 @@ const rmsg = (from, text, to) => msg(from, text, reply(to));
   t('/settings показывает новые настройки', e.sent().at(-1).includes('flood') && e.sent().at(-1).includes('night'));
 }
 
+// ---------- Warn System: предупреждения администрации ----------
+{
+  const S1 = '201', A2 = '202', A3 = '203', NOADM = '310';
+  const DAY = 86_400_000;
+  const e = makeEnv({ statuses: { [S1]: 'administrator', [A2]: 'administrator', [A3]: 'administrator', [NOADM]: 'member' } });
+  e.db.root.chatAdmin = { [KEY]: { meta: { enabled: true, title: 'Наш чат', enabledBy: OWNER } } };
+  const dmTo = (id) => e.calls.filter((c) => c.method === 'sendMessage' && Number(c.payload.chat_id) === Number(id)).map((c) => c.payload.text);
+  const noPunish = () => !e.calls.some((c) => ['restrictChatMember', 'banChatMember', 'promoteChatMember', 'setChatAdministratorCustomTitle'].includes(c.method) && Number(c.payload.user_id) === Number(A2));
+  const W = () => e.db.root.chatAdmin[KEY].wn || {};
+  const LOG = () => Object.values(e.db.root.chatAdmin[KEY].wnlog || {});
+
+  await e.ca.onMessage(msg(S1, '/awarn нарушил правила', reply(A2)));
+  t('Warn: администратор без статуса «старший» не может выдать', Object.keys(W()).length === 0 && e.sent().at(-1).includes('старшие администраторы'));
+  await e.ca.onMessage(msg(USER, '/awarn причина', reply(A2)));
+  t('Warn: обычный участник не может выдать', Object.keys(W()).length === 0);
+
+  await e.ca.onMessage(msg(S1, '/senior add', reply(S1)));
+  t('Warn: старшего назначает только руководство', !(e.db.root.chatAdmin[KEY].wnSeniors));
+  await e.ca.onMessage(msg(OWNER, '/senior add', reply(S1)));
+  t('Warn: руководство назначило старшего', e.db.root.chatAdmin[KEY].wnSeniors?.[S1]?.name && LOG().some((x) => x.t === 'senior_add'));
+
+  e.clock.t = NOW;
+  await e.ca.onMessage(msg(S1, '/awarn оскорбил участника', reply(A2)));
+  const w1 = W().w1;
+  t('Warn: выдано, записано в базу', !!w1 && w1.to === A2 && w1.by === S1 && w1.reason === 'оскорбил участника' && w1.status === 'active', W());
+  t('Warn: срок ровно 20 суток в UTC', w1.until === NOW + 20 * DAY && w1.at === NOW);
+  t('Warn: срок поставлен в очередь истечения', e.db.root.chatAdmin._global?.wnPending?.[KEY + '_w1'] === NOW + 20 * DAY);
+  t('Warn: администратору ушло личное уведомление', dmTo(A2).length === 1 && dmTo(A2)[0].includes('№1') && dmTo(A2)[0].includes('оскорбил'));
+  t('Warn: в чате публично и с упоминанием', e.calls.some((c) => c.method === 'sendMessage' && c.payload.chat_id === CHAT && (c.payload.entities || []).some((x) => x.type === 'text_mention' && x.user.id === Number(A2))));
+  t('Warn: в журнале запись о выдаче', LOG().some((x) => x.t === 'issue' && x.actor === S1 && x.to === A2 && x.reason === 'оскорбил участника' && x.until === NOW + 20 * DAY));
+
+  // запреты
+  await e.ca.onMessage(msg(S1, '/awarn причина', reply(S1)));
+  t('Warn: себе нельзя', Object.keys(W()).length === 1);
+  await e.ca.onMessage(msg(S1, '/awarn причина', reply(OWNER)));
+  t('Warn: руководству нельзя', Object.keys(W()).length === 1);
+  await e.ca.onMessage(msg(S1, '/awarn причина', reply(NOADM)));
+  t('Warn: только администраторам чата', Object.keys(W()).length === 1 && e.sent().at(-1).includes('не администратор'));
+  await e.ca.onMessage(msg(S1, '/awarn', reply(A2)));
+  t('Warn: без причины нельзя', Object.keys(W()).length === 1);
+
+  // накопление: 2-е, потом 3-е
+  e.clock.t = NOW + 2 * DAY;
+  await e.ca.onMessage(msg(S1, '/awarn повторное нарушение', reply(A2)));
+  t('Warn: второе — «повторное нарушение», порога нет', e.sent().some((x) => x.includes('повторное нарушение') && x.includes('Действующих: 2')) && !e.sent().some((x) => x.includes('критический порог')));
+  const before = dmTo(OWNER).length;
+  e.clock.t = NOW + 3 * DAY;
+  await e.ca.onMessage(msg(S1, '/awarn третье нарушение', reply(A2)));
+  t('Warn: третье — руководству ушло уведомление о пороге', dmTo(OWNER).length === before + 1 && dmTo(OWNER).at(-1).includes('критический порог'));
+  t('Warn: старшему администратору тоже ушло уведомление', dmTo(S1).some((x) => x.includes('критический порог')));
+  t('Warn: администратору — уведомление о пороге', dmTo(A2).some((x) => x.includes('критический порог')));
+  t('Warn: бот никого не снимает и не ограничивает', noPunish());
+  t('Warn: порог записан в журнал', LOG().some((x) => x.t === 'threshold'));
+
+  // просмотр
+  e.clock.t = NOW + 4 * DAY;
+  await e.ca.onMessage(msg(S1, '/awarns', {}));
+  t('Warn: /awarns — сводка по чату', e.sent().at(-1).includes('202') && e.sent().at(-1).includes('3 (критический порог)'));
+  await e.ca.onMessage(msg(S1, '/awhistory', reply(A2)));
+  const hist = e.sent().at(-1);
+  t('Warn: /awhistory — всего, действующих, причины, даты, статус', hist.includes('Всего выдано: 3') && hist.includes('действующих: 3') && hist.includes('оскорбил участника') && hist.includes('действует до') && hist.includes('активно'));
+  await e.ca.onMessage(msg(A3, '/awhistory', reply(A2)));
+  t('Warn: обычный админ чужую историю не видит', e.sent().at(-1).includes('только старшие'));
+  await e.ca.onMessage(msg(A2, '/awhistory', {}));
+  t('Warn: свою историю админ видит', e.sent().at(-1).includes('Всего выдано: 3'));
+
+  // отмена и удаление — только руководство
+  await e.ca.onMessage(msg(S1, '/awcancel 2 ошибочно', {}));
+  t('Warn: старший не может отменить', W().w2.status === 'active' && e.sent().at(-1).includes('только руководство'));
+  await e.ca.onMessage(msg(OWNER, '/awcancel 2', {}));
+  t('Warn: отмена без причины не принимается', W().w2.status === 'active');
+  e.clock.t = NOW + 5 * DAY;
+  await e.ca.onMessage(msg(OWNER, '/awcancel 2 выдано ошибочно', {}));
+  t('Warn: руководство отменило досрочно', W().w2.status === 'cancelled' && W().w2.cancelBy === OWNER && W().w2.cancelAt === NOW + 5 * DAY && W().w2.cancelReason === 'выдано ошибочно');
+  t('Warn: отмена в журнале (кто, когда, причина)', LOG().some((x) => x.t === 'cancel' && x.n === 2 && x.actor === OWNER && x.reason === 'выдано ошибочно'));
+  t('Warn: отменённое снято с очереди истечения', e.db.root.chatAdmin._global.wnPending[KEY + '_w2'] === undefined);
+  await e.ca.onMessage(msg(S1, '/awarns', reply(A2)));
+  t('Warn: после отмены действующих 2', e.sent().at(-1).includes('— 2 из 3'));
+
+  // истечение срока: w1 выдано в NOW → истекает в NOW+20д
+  e.clock.t = NOW + 20 * DAY + 1000;
+  await e.ca.onMessage(msg(S1, '/awarns', reply(A2)));
+  t('Warn: истёкшее не считается активным даже до проверки cron', e.sent().at(-1).includes('— 1 из 3'));
+  const dmBefore = dmTo(A2).length;
+  const done = await e.ca.sweepAll();
+  t('Warn: cron пометил истёкшее', W().w1.status === 'expired' && W().w1.expiredAt === NOW + 20 * DAY + 1000 && e.db.root.chatAdmin._global.wnPending[KEY + '_w1'] === undefined, W().w1);
+  t('Warn: администратору ушло уведомление об истечении', dmTo(A2).length === dmBefore + 1 && dmTo(A2).at(-1).includes('Срок предупреждения №1 истёк'));
+  t('Warn: истечение записано в журнал', LOG().some((x) => x.t === 'expire' && x.n === 1));
+  await e.ca.sweepAll();
+  t('Warn: повторный проход не дублирует уведомление', dmTo(A2).length === dmBefore + 1);
+
+  // удаление: запись пропадает, журнал помнит
+  await e.ca.onMessage(msg(OWNER, '/awdel 2 дубликат', {}));
+  t('Warn: удаление руководством', W().w2 === undefined && LOG().some((x) => x.t === 'delete' && x.n === 2 && x.details.includes('третье') === false && x.reason === 'дубликат'));
+
+  // перезапуск бота: новый экземпляр видит всё из базы
+  const e2 = createChatAdmin({ ...e.deps });
+  await e2.onMessage(msg(S1, '/awhistory', reply(A2)));
+  t('Warn: после «перезапуска» данные на месте', e.sent().at(-1).includes('Всего выдано: 2'));
+
+  // повреждённая очередь не ломает cron
+  e.db.root.chatAdmin._global.wnPending['мусор'] = 1; e.db.root.chatAdmin._global.wnPending[KEY + '_w999'] = 1;
+  let ok = true; try { await e.ca.sweepAll(); } catch { ok = false; }
+  t('Warn: мусор в очереди не ломает проход, чистится', ok && e.db.root.chatAdmin._global.wnPending['мусор'] === undefined);
+}
+
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

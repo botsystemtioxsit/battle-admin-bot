@@ -1271,6 +1271,25 @@ async function getChatAdmin(env, origin) {
       if (!res.ok) throw new Error('Firebase PUT ' + res.status);
     },
     videochatUnban: async (uid) => { await dbWrite(env, `/videochat/bans/${encodeURIComponent(uid)}.json`, { method: 'DELETE' }); },
+    // бан по устройству: метки устройств человека (deviceTags/<id>, читает только Worker) → bannedDevices/<метка> (клиенты читают по точному ключу)
+    banDevices: async (uid, reason) => {
+      if (!/^\d{5,15}$/.test(String(uid))) return [];
+      const res = await dbReadAdmin(env, `/deviceTags/${uid}.json`, true);
+      const tags = Object.keys((res.ok && (await res.json())) || {}).filter((t) => /^[a-f0-9]{24}$/.test(t)).slice(0, 50);
+      if (!tags.length) return [];
+      const rec = { at: Date.now(), uid: String(uid), reason: chatCleanText(reason, 200) || 'Бан везде' };
+      const body = {}; for (const t of tags) body[t] = rec;
+      const w = await dbWrite(env, '/bannedDevices.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!w.ok) throw new Error('Firebase PATCH ' + w.status);
+      return tags;
+    },
+    unbanDevices: async (uid, tags) => {
+      const body = {};
+      for (const t of (tags || []).slice(0, 50)) if (/^[a-f0-9]{24}$/.test(String(t))) body[t] = null;
+      if (!Object.keys(body).length) return;
+      const w = await dbWrite(env, '/bannedDevices.json', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!w.ok) throw new Error('Firebase PATCH ' + w.status);
+    },
     owners: ownerIds(env),
     botId: info && info.id ? String(info.id) : null,
     botUsername: info && info.username ? info.username : null,

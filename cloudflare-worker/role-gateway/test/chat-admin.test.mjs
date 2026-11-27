@@ -35,7 +35,7 @@ const NOW = Date.parse('2026-11-11T12:00:00Z');
 function makeEnv({ owners = [OWNER], statuses = {}, tgOverrides = {}, roles = {}, gameState = 'banned' } = {}) {
   const db = makeDb();
   const calls = [];
-  const side = { gameBan: [], gameUnban: [], vcBan: [], vcUnban: [] };
+  const side = { gameBan: [], gameUnban: [], vcBan: [], vcUnban: [], devBan: [], devUnban: [] };
   const clock = { t: NOW };
   const sent = () => calls.filter((c) => c.method === 'sendMessage').map((c) => c.payload.text);
   const st = { [OWNER]: 'creator', [ADMIN]: 'administrator', [USER]: 'member', [VICTIM]: 'member', [BOT]: 'administrator', ...statuses };
@@ -54,6 +54,7 @@ function makeEnv({ owners = [OWNER], statuses = {}, tgOverrides = {}, roles = {}
     roleOf: async (uid) => roles[uid] || null,
     gameBan: async (uid) => { side.gameBan.push(uid); return gameState; }, gameUnban: async (uid) => { side.gameUnban.push(uid); },
     videochatBan: async (uid, reason, by) => { side.vcBan.push({ uid, reason, by }); }, videochatUnban: async (uid) => { side.vcUnban.push(uid); },
+    banDevices: async (uid) => { side.devBan.push(uid); return ['a'.repeat(24), 'b'.repeat(24)]; }, unbanDevices: async (uid, tags) => { side.devUnban.push({ uid, tags }); },
   };
   return { db, calls, sent, side, deps, clock, ca: createChatAdmin(deps) };
 }
@@ -1008,6 +1009,17 @@ const rmsg = (from, text, to) => msg(from, text, reply(to));
   await e.ca.onMyChatMember({ my_chat_member: { chat: chan, from: { id: Number(OWNER) }, new_chat_member: { status: 'administrator', user: { id: Number(BOT) } } } });
   const banned = e.calls.filter((c) => c.method === 'banChatMember' && c.payload.chat_id === CH).map((c) => c.payload.user_id).sort();
   t('канал: новый канал владельца сразу получает чёрный список', banned.join() === '111111111,222222222', banned);
+}
+
+// ---------- бан по устройству ----------
+{
+  const e = makeEnv();
+  const r = await e.ca.globalBan({ id: '400400400', name: 'V' }, { reason: 'спам' }, { id: OWNER, name: 'Владелец' });
+  t('устройства: метки забаненного попали в список устройств', r.ok && e.side.devBan[0] === '400400400' && /устройств заблокировано 2/.test(r.text), r);
+  const rec = e.db.root.chatAdmin._global.bans['400400400'];
+  t('устройства: метки сохранены в записи бана', Array.isArray(rec.devices) && rec.devices.length === 2, rec);
+  await e.ca.globalUnban({ id: '400400400' }, { id: OWNER, name: 'Владелец' });
+  t('устройства: при разбане метки снимаются', e.side.devUnban.length === 1 && e.side.devUnban[0].tags.length === 2, e.side.devUnban);
 }
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

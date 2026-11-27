@@ -297,11 +297,14 @@ export function createChatAdmin(deps) {
     if (deps.gameBan) { try { game = await deps.gameBan(uid); } catch { game = 'error'; } }
     let videochat = false;
     if (deps.videochatBan) { try { await deps.videochatBan(uid, reason, actor.name); videochat = true; } catch { videochat = false; } }
+    // устройства: все метки, которые этот человек оставил в игре и ВидеоЧате, попадают в список заблокированных устройств
+    let devices = [];
+    if (deps.banDevices) { try { devices = await deps.banDevices(uid, reason); } catch { devices = []; } }
     const existing = await deps.dbGet(`${GLOBAL}/bans/${uid}`).catch(() => null);
     const at = now();
     const okN = results.filter((r) => r.ok).length;
     const rec = { at: existing && existing.at ? existing.at : at, by: actor.id ? String(actor.id) : null, byName: cleanText(actor.name, 60), reason, name,
-      game: existing && existing.game === 'banned' ? 'banned' : game, videochat, chats: { ok: okN, fail: results.length - okN } };
+      game: existing && existing.game === 'banned' ? 'banned' : game, videochat, devices: [...new Set([...((existing && Array.isArray(existing.devices)) ? existing.devices : []), ...devices])].slice(0, 50), chats: { ok: okN, fail: results.length - okN } };
     if (username) rec.username = username;
     const w = { [`${GLOBAL}/bans/${uid}`]: rec };
     for (const r of results.filter((x) => x.ok)) { const [p, v] = globalEvent(r.chat, at, 'gban', actor, { id: uid, name }, reason); w[p] = v; }
@@ -310,7 +313,7 @@ export function createChatAdmin(deps) {
     const gameText = { banned: 'в игре заблокирован', already: 'в игре уже был заблокирован', none: 'в игре его нет (профиля не найдено)', error: 'в игре не получилось' }[rec.game] || '';
     const failed = results.filter((r) => !r.ok);
     return { ok: true, chats: results, game: rec.game, videochat,
-      text: `🚫 ${name} заблокирован везде: чатов ${okN} из ${results.length}, ${gameText}, ВидеоЧат ${videochat ? 'закрыт' : 'не получилось'}.` + (failed.length ? '\n⚠️ В ' + failed.length + ' чат(ах) не вышло: ' + [...new Set(failed.map((f) => f.error))].join('; ') : '') + (results.length === 0 ? '\nВключённых чатов пока нет — бан действует только в игре и ВидеоЧате.' : '') };
+      text: `🚫 ${name} заблокирован везде: чатов ${okN} из ${results.length}, ${gameText}, ВидеоЧат ${videochat ? 'закрыт' : 'не получилось'}, устройств заблокировано ${devices.length}.` + (failed.length ? '\n⚠️ В ' + failed.length + ' чат(ах) не вышло: ' + [...new Set(failed.map((f) => f.error))].join('; ') : '') + (results.length === 0 ? '\nВключённых чатов пока нет — бан действует только в игре и ВидеоЧате.' : '') };
   }
   async function globalUnban(target, actor = { id: null, name: 'панель' }) {
     const uid = userKeyOf(target && target.id);
@@ -325,6 +328,7 @@ export function createChatAdmin(deps) {
     // в игре снимаем бан, только если его ставили мы (а не он был забанен за другое до этого)
     if (rec.game === 'banned' && deps.gameUnban) { try { await deps.gameUnban(uid); } catch { /* останется — снимут вручную */ } }
     if (deps.videochatUnban) { try { await deps.videochatUnban(uid); } catch { /* то же */ } }
+    if (deps.unbanDevices && Array.isArray(rec.devices)) { try { await deps.unbanDevices(uid, rec.devices); } catch { /* то же */ } }
     const at = now();
     const name = cleanText(rec.name, 60) || uid;
     const w = { [`${GLOBAL}/bans/${uid}`]: null };

@@ -665,7 +665,7 @@ async function restoreDatabase(env, snapshot) {
 const TELEGRAM_WEBHOOK_PATH = '/telegram-webhook';
 // chat_member / my_chat_member нужны админ-боту чатов (кто и как зашёл, бот добавлен/сделан админом); Telegram присылает их, только
 // если бот — администратор группы И эти виды перечислены здесь.
-const TELEGRAM_ALLOWED_UPDATES = ['message', 'callback_query', 'chat_member', 'my_chat_member'];
+const TELEGRAM_ALLOWED_UPDATES = ['message', 'callback_query', 'chat_member', 'my_chat_member', 'channel_post'];
 // Кнопка «Открыть админ-панель» в /start и /admin (тот же адрес, что и в
 // telegram-serverless/handlers/message.js)
 const ADMIN_PANEL_URL = 'https://botsystemtioxsit.github.io/battle-admin-bot/public/admin.html';
@@ -772,7 +772,7 @@ async function getWebhookSummary(env, origin) {
     ours: info.url === origin + TELEGRAM_WEBHOOK_PATH,
     host,
     pending: info.pending_update_count || 0,
-    chatMemberUpdates: Array.isArray(info.allowed_updates) ? info.allowed_updates.includes('chat_member') : null,
+    chatMemberUpdates: Array.isArray(info.allowed_updates) ? (info.allowed_updates.includes('chat_member') && info.allowed_updates.includes('channel_post')) : null,
     lastError: info.last_error_message ? String(info.last_error_message).slice(0, 120) : null,
   };
 }
@@ -1346,6 +1346,9 @@ async function handleTelegramUpdate(env, update, origin, ctx) {
         ctx.waitUntil((async () => { await new Promise((res) => setTimeout(res, r.sweepInMs)); await ca.sweepCaptcha(r.sweepChat, true); })().catch((err) => console.error('captcha timer:', err && err.message)));
       }
     } catch (err) { console.error('chat_member:', err && err.message); }
+  } else if (update && update.channel_post) {
+    // публикации в канале: админ-бот считает их в статистике (канал должен быть включён)
+    try { await (await getChatAdmin(env, origin)).onChannelPost(update.channel_post); } catch (err) { console.error('channel_post:', err && err.message); }
   } else if (update && update.my_chat_member) {
     try { await (await getChatAdmin(env, origin)).onMyChatMember(update); } catch (err) { console.error('my_chat_member:', err && err.message); }
   } else if (update && update.callback_query && /^cap:\d{1,15}$/.test(String(update.callback_query.data || ''))) {

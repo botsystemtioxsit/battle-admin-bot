@@ -884,7 +884,17 @@ export function createChatAdmin(deps) {
       [`${owners.has(String(from.id)) ? `${GLOBAL}/chats` : `${GLOBAL}/tenants`}/${chatKey}`]: { title: meta.title },
       [`chatAdmin/_owners/${from.id}/${chatKey}`]: { title: meta.title } });
     metaCache.delete(chatKey);
+    if (owners.has(String(from.id))) await applyBlacklist(chat.id).catch(() => {});   // новый чат или канал владельца сразу получает весь чёрный список
     return botSt === 'administrator' || botSt === 'creator';
+  }
+  // Весь список «бан везде» — в один (только что подключённый) чат или канал. До 40 человек за раз (лимит запросов Worker'а).
+  async function applyBlacklist(chatId) {
+    const chatKey = chatKeyOf(chatId);
+    if (!chatKey) return 0;
+    const bans = await deps.dbGet(`${GLOBAL}/bans`).catch(() => null);
+    const ids = Object.keys(bans && typeof bans === 'object' ? bans : {}).filter((id) => userKeyOf(id) && id.length >= 5).slice(0, 40);
+    const res = await eachChat(ids, async (id) => { const r = await deps.tg('banChatMember', { chat_id: Number(chatId), user_id: Number(id) }); return r && r.ok; });
+    return res.filter(Boolean).length;
   }
 
   // Главный вход: сообщение в группе. true — сообщение обработано здесь (дальше по цепочке не идёт).
@@ -1072,5 +1082,5 @@ export function createChatAdmin(deps) {
     return true;
   }
 
-  return { onMessage, onChannelPost, onChatMember, onMyChatMember, onCallback, sweepCaptcha, sweepAll, act, applySetting, enable, disable, globalBan, globalUnban, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
+  return { applyBlacklist, onMessage, onChannelPost, onChatMember, onMyChatMember, onCallback, sweepCaptcha, sweepAll, act, applySetting, enable, disable, globalBan, globalUnban, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
 }

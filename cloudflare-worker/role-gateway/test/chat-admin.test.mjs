@@ -999,5 +999,15 @@ const rmsg = (from, text, to) => msg(from, text, reply(to));
   await e.ca.onChatMember({ chat_member: { chat: chan, from: { id: Number(VICTIM) }, date: NOW / 1000, old_chat_member: { status: 'left', user: { id: Number(VICTIM), first_name: 'V' } }, new_chat_member: { status: 'member', user: { id: Number(VICTIM), first_name: 'V' } } } });
   t('канал: вход подписчика учтён без «я не бот»', e.db.root.chatAdmin[CK].daily[day].joins === 1 && !e.calls.some((c) => c.method === 'restrictChatMember'), e.db.root.chatAdmin[CK]);
 }
+
+// ---------- чёрный список в новом канале ----------
+{
+  const CH = -1005550001111, chan = { id: CH, type: 'channel', title: 'Новый канал' };
+  const e = makeEnv();
+  e.db.root.chatAdmin = { _global: { bans: { 111111111: { name: 'A' }, 222222222: { name: 'B' } } } };
+  await e.ca.onMyChatMember({ my_chat_member: { chat: chan, from: { id: Number(OWNER) }, new_chat_member: { status: 'administrator', user: { id: Number(BOT) } } } });
+  const banned = e.calls.filter((c) => c.method === 'banChatMember' && c.payload.chat_id === CH).map((c) => c.payload.user_id).sort();
+  t('канал: новый канал владельца сразу получает чёрный список', banned.join() === '111111111,222222222', banned);
+}
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

@@ -506,7 +506,7 @@ export function createChatAdmin(deps) {
       }
     }
     await recordEvent(chatKey, ev);
-    if (ev.kind === 'join' && !ev.user.is_bot) {
+    if (ev.kind === 'join' && !ev.user.is_bot && chat.type !== 'channel') {   // в каналах нет ни проверки «я не бот», ни приветствия: подписчика нельзя ограничить и писать ему некуда
       let challenged = false;
       if (cfg.captcha) { try { challenged = await startCaptcha(chat, ev.user, ev, cfg); } catch { challenged = false; } }
       if (!challenged) await sendWelcome(chat, ev.user, cfg); // с проверкой приветствие будет после неё
@@ -518,7 +518,8 @@ export function createChatAdmin(deps) {
   async function onMyChatMember(update) {
     const u = update.my_chat_member;
     const chat = u && u.chat;
-    if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup')) return;
+    if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup' && chat.type !== 'channel')) return;
+    const isChannel = chat.type === 'channel';
     const chatKey = chatKeyOf(chat.id);
     if (!chatKey || !u.new_chat_member) return;
     const status = u.new_chat_member.status;
@@ -527,8 +528,42 @@ export function createChatAdmin(deps) {
       await deps.dbUpdate({ [`chatAdmin/${chatKey}/meta/botStatus`]: status, [`chatAdmin/${chatKey}/meta/title`]: cleanText(chat.title, 80) });
       metaCache.delete(chatKey);
     } else if (status === 'administrator' && u.from) {
-      await say(chat.id, '✅ Теперь я администратор этого чата. Чтобы включить статистику входов и модерацию, отправьте /admin_on (это может сделать создатель чата).');
+      if (isChannel) {
+        // в канале команд не напишешь: включаем сразу, если бота админом сделал владелец проекта или создатель канала (личность проверил Telegram: u.from)
+        const fid = userKeyOf(u.from.id);
+        if (!fid) return;
+        const isOwner = owners.has(fid);
+        if (!isOwner && (await memberStatus(chat.id, fid)) !== 'creator') return;
+        if (!isOwner) {
+          const mine = await deps.dbGet(`chatAdmin/_owners/${fid}`, { shallow: true }).catch(() => null);
+          const keys = Object.keys(mine && typeof mine === 'object' ? mine : {}).filter((k) => k !== chatKey);
+          if (keys.length >= MAX_TENANT_CHATS) return;
+        }
+        await enable(chat, u.from);
+        if (deps.onEnabled) { try { await deps.onEnabled(); } catch { /* вебхук проверит /health */ } }
+        await deps.tg('sendMessage', { chat_id: Number(fid), text: `✅ Канал «${cleanText(chat.title, 60)}» подключён: считаю подписчиков (кто и как пришёл, кто ушёл), публикации и «бан везде». Статистика и настройки — в панели (/admin).` }).catch(() => {});
+      } else {
+        await say(chat.id, '✅ Теперь я администратор этого чата. Чтобы включить статистику входов и модерацию, отправьте /admin_on (это может сделать создатель чата).');
+      }
     }
+  }
+
+  // ----- публикации в канале (channel_post): только счётчики, текст не сохраняется -----
+  async function onChannelPost(post) {
+    const chat = post && post.chat;
+    if (!chat || chat.type !== 'channel') return false;
+    const chatKey = chatKeyOf(chat.id);
+    if (!chatKey) return false;
+    const meta = await getMeta(chatKey);
+    if (!meta || !meta.enabled || isPaused(meta)) return false;
+    if (cfgOf(meta).count === false) return true;
+    const at = now(); const day = dayKey(at);
+    await deps.dbUpdate({
+      [`chatAdmin/${chatKey}/daily/${day}/posts`]: inc(),
+      [`chatAdmin/${chatKey}/daily/${day}/hr/${String(new Date(at).getUTCHours()).padStart(2, '0')}`]: inc(),
+    }).catch(() => {});
+    await maybePrune(chatKey, meta);
+    return true;
   }
 
   // ----- сообщения -----
@@ -1037,5 +1072,5 @@ export function createChatAdmin(deps) {
     return true;
   }
 
-  return { onMessage, onChatMember, onMyChatMember, onCallback, sweepCaptcha, sweepAll, act, applySetting, enable, disable, globalBan, globalUnban, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
+  return { onMessage, onChannelPost, onChatMember, onMyChatMember, onCallback, sweepCaptcha, sweepAll, act, applySetting, enable, disable, globalBan, globalUnban, getMeta, cfgOf, memberStatus, invalidate: (k) => metaCache.delete(k) };
 }

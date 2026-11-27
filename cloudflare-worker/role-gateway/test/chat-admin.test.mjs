@@ -968,5 +968,36 @@ const rmsg = (from, text, to) => msg(from, text, reply(to));
   t('Warn: мусор в очереди не ломает проход, чистится', ok && e.db.root.chatAdmin._global.wnPending['мусор'] === undefined);
 }
 
+
+// ---------- каналы ----------
+{
+  const CH = -1009876543210, CK = String(CH);
+  const chan = { id: CH, type: 'channel', title: 'Мой канал' };
+  const mcm = (from, status) => ({ my_chat_member: { chat: chan, from: { id: Number(from), first_name: 'X' }, new_chat_member: { status, user: { id: Number(BOT) } } } });
+  // владелец проекта сделал бота админом канала → включается сам
+  let e = makeEnv();
+  await e.ca.onMyChatMember(mcm(OWNER, 'administrator'));
+  t('канал: владелец проекта добавил бота админом — включено само', e.db.root.chatAdmin && e.db.root.chatAdmin[CK] && e.db.root.chatAdmin[CK].meta.enabled === true && e.db.root.chatAdmin[CK].meta.type === 'channel', e.db.root);
+  t('канал: владельцу пришло личное сообщение', e.calls.some((c) => c.method === 'sendMessage' && c.payload.chat_id === Number(OWNER)));
+  // чужой администратор канала — тишина и ни одной записи
+  e = makeEnv({ statuses: { [ADMIN]: 'administrator' } });
+  await e.ca.onMyChatMember(mcm(ADMIN, 'administrator'));
+  t('канал: чужой администратор не включает бота', !e.db.root.chatAdmin && e.db.writes.length === 0, e.db.root);
+  // публикации считаются
+  e = makeEnv();
+  await e.ca.onMyChatMember(mcm(OWNER, 'administrator'));
+  await e.ca.onChannelPost({ message_id: 5, chat: chan, sender_chat: chan, date: NOW / 1000, text: 'секретный текст' });
+  const day = dayKey(NOW);
+  t('канал: публикация попала в счётчик, текста нет', e.db.root.chatAdmin[CK].daily[day].posts === 1 && !JSON.stringify(e.db.root).includes('секретный текст'), e.db.root);
+  // не включённый канал не пишется
+  e = makeEnv();
+  await e.ca.onChannelPost({ message_id: 5, chat: chan, date: NOW / 1000, text: 'x' });
+  t('канал: не включённый — ни одной записи', e.db.writes.length === 0);
+  // вход подписчика: статистика есть, проверки «я не бот» и приветствия нет
+  e = makeEnv();
+  await e.ca.onMyChatMember(mcm(OWNER, 'administrator'));
+  await e.ca.onChatMember({ chat_member: { chat: chan, from: { id: Number(VICTIM) }, date: NOW / 1000, old_chat_member: { status: 'left', user: { id: Number(VICTIM), first_name: 'V' } }, new_chat_member: { status: 'member', user: { id: Number(VICTIM), first_name: 'V' } } } });
+  t('канал: вход подписчика учтён без «я не бот»', e.db.root.chatAdmin[CK].daily[day].joins === 1 && !e.calls.some((c) => c.method === 'restrictChatMember'), e.db.root.chatAdmin[CK]);
+}
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);
